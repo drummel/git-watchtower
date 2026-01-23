@@ -1,6 +1,12 @@
 # Git Watchtower
 
-A terminal-based Git branch monitor with activity sparklines and flexible dev server support.
+A real-time terminal dashboard for monitoring git branch activity.
+
+- **Live branch monitoring** - Continuously watches your remote for new commits, branches, and deletions
+- **Instant notifications** - Visual and audio alerts when any branch is updated
+- **Auto-pull** - Automatically pulls when your current branch has remote changes
+- **Branch preview** - See commits and changed files before switching, with undo support
+- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js, Vite, etc.)
 
 ![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
@@ -103,7 +109,7 @@ Features:
 Branch monitoring only, no server. Perfect for:
 - Backend projects
 - When you have your own dev server running separately
-- CI/CD monitoring
+- Monitoring multiple AI coding agents (Claude Code, Cursor, etc.) working in parallel worktrees
 
 ## Configuration
 
