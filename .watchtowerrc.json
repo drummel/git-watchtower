@@ -1,0 +1,14 @@
+{
+  "server": {
+    "mode": "none",
+    "staticDir": "public",
+    "command": "",
+    "port": 3000,
+    "restartOnSwitch": true
+  },
+  "remoteName": "origin",
+  "autoPull": true,
+  "gitPollInterval": 5000,
+  "soundEnabled": true,
+  "visibleBranches": 7
+}
