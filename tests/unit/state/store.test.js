@@ -449,3 +449,129 @@ describe('getInitialState', () => {
     assert.notStrictEqual(state1, state2); // Should be different objects
   });
 });
+
+describe('Store input validation', () => {
+  let store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  describe('setBranches validation', () => {
+    it('should reject null input', () => {
+      store.setBranches([{ name: 'main' }]);
+      store.setBranches(null);
+      // Should not update state with invalid input
+      assert.strictEqual(store.get('branches').length, 1);
+    });
+
+    it('should reject undefined input', () => {
+      store.setBranches([{ name: 'main' }]);
+      store.setBranches(undefined);
+      assert.strictEqual(store.get('branches').length, 1);
+    });
+
+    it('should reject non-array input', () => {
+      store.setBranches([{ name: 'main' }]);
+      store.setBranches({ name: 'main' });
+      assert.strictEqual(store.get('branches').length, 1);
+    });
+
+    it('should accept empty array', () => {
+      store.setBranches([{ name: 'main' }]);
+      store.setBranches([]);
+      assert.strictEqual(store.get('branches').length, 0);
+      assert.strictEqual(store.get('selectedIndex'), 0);
+    });
+  });
+
+  describe('setSelectedIndex validation', () => {
+    beforeEach(() => {
+      store.setBranches([
+        { name: 'main' },
+        { name: 'feature' },
+        { name: 'develop' },
+      ]);
+    });
+
+    it('should reject NaN input', () => {
+      store.setSelectedIndex(1);
+      store.setSelectedIndex(NaN);
+      // Should not change from valid index
+      assert.strictEqual(store.get('selectedIndex'), 1);
+    });
+
+    it('should handle string numbers', () => {
+      store.setSelectedIndex('2');
+      assert.strictEqual(store.get('selectedIndex'), 2);
+    });
+
+    it('should floor decimal numbers', () => {
+      store.setSelectedIndex(1.9);
+      assert.strictEqual(store.get('selectedIndex'), 1);
+    });
+
+    it('should handle empty branches array', () => {
+      store.setBranches([]);
+      store.setSelectedIndex(5);
+      assert.strictEqual(store.get('selectedIndex'), 0);
+      assert.strictEqual(store.get('selectedBranchName'), null);
+    });
+  });
+});
+
+describe('Store listener error isolation', () => {
+  let store;
+
+  beforeEach(() => {
+    store = new Store();
+  });
+
+  it('should continue notifying listeners even if one throws', () => {
+    let listener1Called = false;
+    let listener2Called = false;
+    let listener3Called = false;
+
+    store.subscribe(() => {
+      listener1Called = true;
+    });
+
+    store.subscribe(() => {
+      listener2Called = true;
+      throw new Error('Listener 2 error');
+    });
+
+    store.subscribe(() => {
+      listener3Called = true;
+    });
+
+    // Suppress console.error for this test
+    const originalError = console.error;
+    console.error = () => {};
+
+    store.setState({ currentBranch: 'main' });
+
+    console.error = originalError;
+
+    // All listeners should have been called despite the error in listener 2
+    assert.strictEqual(listener1Called, true);
+    assert.strictEqual(listener2Called, true);
+    assert.strictEqual(listener3Called, true);
+  });
+
+  it('should not corrupt state when listener throws', () => {
+    store.subscribe(() => {
+      throw new Error('Listener error');
+    });
+
+    const originalError = console.error;
+    console.error = () => {};
+
+    store.setState({ currentBranch: 'main' });
+
+    console.error = originalError;
+
+    // State should still be updated correctly
+    assert.strictEqual(store.get('currentBranch'), 'main');
+  });
+});

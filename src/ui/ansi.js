@@ -193,6 +193,54 @@ const sparkline = {
 };
 
 /**
+ * Generate a sparkline visualization from data points
+ * @param {number[]} dataPoints - Array of numeric values
+ * @param {Object} [options] - Generation options
+ * @param {number} [options.min] - Minimum value (defaults to data min)
+ * @param {number} [options.max] - Maximum value (defaults to data max)
+ * @param {string} [options.emptyChar=' '] - Character for zero/empty values
+ * @returns {string} Sparkline string
+ */
+function generateSparkline(dataPoints, options = {}) {
+  if (!Array.isArray(dataPoints) || dataPoints.length === 0) {
+    return '';
+  }
+
+  const { emptyChar = sparkline.empty } = options;
+  const chars = sparkline.chars;
+  const levels = chars.length;
+
+  // Filter to valid numbers
+  const validPoints = dataPoints.map((p) => (typeof p === 'number' && !isNaN(p) ? p : 0));
+
+  // Determine range
+  const dataMin = Math.min(...validPoints);
+  const dataMax = Math.max(...validPoints);
+  const min = options.min !== undefined ? options.min : dataMin;
+  const max = options.max !== undefined ? options.max : dataMax;
+
+  // Handle edge case where all values are the same
+  const range = max - min;
+  if (range === 0) {
+    // All same value - if all zeros, show empty; otherwise show middle level
+    return validPoints.map((p) => (p === 0 ? emptyChar : chars[Math.floor(levels / 2)])).join('');
+  }
+
+  // Map each point to a character
+  return validPoints
+    .map((value) => {
+      if (value === 0) {
+        return emptyChar;
+      }
+      // Normalize to 0-1 range, then map to character index
+      const normalized = (value - min) / range;
+      const index = Math.min(Math.floor(normalized * levels), levels - 1);
+      return chars[index];
+    })
+    .join('');
+}
+
+/**
  * Status indicator characters
  */
 const indicators = {
@@ -342,6 +390,7 @@ module.exports = {
   ansi,
   box,
   sparkline,
+  generateSparkline,
   indicators,
   stripAnsi,
   visibleLength,

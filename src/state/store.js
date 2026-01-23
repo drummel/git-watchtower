@@ -345,6 +345,12 @@ class Store {
    * @param {Branch[]} branches - New branch list
    */
   setBranches(branches) {
+    // Validate input
+    if (!Array.isArray(branches)) {
+      console.error('Store.setBranches: expected array, got', typeof branches);
+      return;
+    }
+
     const { selectedBranchName, selectedIndex } = this.state;
 
     // Try to maintain selection by name
@@ -356,8 +362,12 @@ class Store {
       }
     }
 
-    // Clamp to valid range
-    newSelectedIndex = Math.max(0, Math.min(newSelectedIndex, branches.length - 1));
+    // Clamp to valid range (handle empty array case)
+    if (branches.length === 0) {
+      newSelectedIndex = 0;
+    } else {
+      newSelectedIndex = Math.max(0, Math.min(newSelectedIndex, branches.length - 1));
+    }
 
     this.setState({
       branches,
@@ -371,8 +381,24 @@ class Store {
    * @param {number} index - New index
    */
   setSelectedIndex(index) {
+    // Validate input - convert to number and check for NaN
+    const numIndex = Number(index);
+    if (Number.isNaN(numIndex)) {
+      console.error('Store.setSelectedIndex: expected number, got', typeof index);
+      return;
+    }
+
     const { branches } = this.state;
-    const clampedIndex = Math.max(0, Math.min(index, branches.length - 1));
+    // Handle empty branches array
+    if (branches.length === 0) {
+      this.setState({
+        selectedIndex: 0,
+        selectedBranchName: null,
+      });
+      return;
+    }
+
+    const clampedIndex = Math.max(0, Math.min(Math.floor(numIndex), branches.length - 1));
     this.setState({
       selectedIndex: clampedIndex,
       selectedBranchName: branches[clampedIndex]?.name || null,

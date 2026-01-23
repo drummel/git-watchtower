@@ -262,13 +262,28 @@ describe('ProcessManager', () => {
     it('should restart the process', async () => {
       manager.start('node -e "setTimeout(() => {}, 10000)"');
       const originalPid = manager.getPid();
+      assert.ok(typeof originalPid === 'number');
 
       const result = await manager.restart();
       assert.strictEqual(result.success, true);
 
       const newPid = manager.getPid();
-      // PIDs might be the same or different depending on OS
       assert.ok(typeof newPid === 'number');
+      assert.ok(newPid > 0);
+      // New process should have a different PID
+      assert.notStrictEqual(originalPid, newPid, 'Restart should create a new process with different PID');
+
+      manager.stop();
+    });
+
+    it('should preserve the command on restart', async () => {
+      const command = 'node -e "setTimeout(() => {}, 10000)"';
+      manager.start(command);
+
+      await manager.restart();
+
+      // Process should still be running after restart
+      assert.strictEqual(manager.isRunning(), true);
 
       manager.stop();
     });
