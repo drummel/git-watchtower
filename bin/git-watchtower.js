@@ -2040,8 +2040,8 @@ async function pollGitChanges() {
         hasMergeConflict = false;
         // Update the stored commit to the new one
         const newCommit = await execAsync('git rev-parse --short HEAD');
-        currentInfo.commit = newCommit.stdout;
-        previousBranchStates.set(currentBranch, newCommit.stdout);
+        currentInfo.commit = newCommit.stdout.trim();
+        previousBranchStates.set(currentBranch, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
       } catch (e) {
