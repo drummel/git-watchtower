@@ -747,6 +747,10 @@ const activityLog = [];
 let flashMessage = null;
 let flashTimeout = null;
 
+// Error toast state (more prominent than activity log)
+let errorToast = null;
+let errorToastTimeout = null;
+
 // Preview pane state
 let previewMode = false;
 let previewData = null;
@@ -1321,6 +1325,82 @@ function renderFlash() {
   write(ansi.gray + 'Press any key to dismiss' + ansi.reset);
 }
 
+function renderErrorToast() {
+  if (!errorToast) return;
+
+  const width = Math.min(60, terminalWidth - 4);
+  const col = Math.floor((terminalWidth - width) / 2);
+  const row = 2; // Near the top, below header
+
+  // Calculate height based on content
+  const lines = [];
+  lines.push(errorToast.title || 'Git Error');
+  lines.push('');
+
+  // Word wrap the message
+  const msgWords = errorToast.message.split(' ');
+  let currentLine = '';
+  for (const word of msgWords) {
+    if ((currentLine + ' ' + word).length > width - 6) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += (currentLine ? ' ' : '') + word;
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  if (errorToast.hint) {
+    lines.push('');
+    lines.push(errorToast.hint);
+  }
+  lines.push('');
+  lines.push('Press any key to dismiss');
+
+  const height = lines.length + 2;
+
+  // Draw red error box
+  write(ansi.moveTo(row, col));
+  write(ansi.red + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(ansi.red + box.dVertical + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 2) + ansi.reset + ansi.red + box.dVertical + ansi.reset);
+  }
+
+  write(ansi.moveTo(row + height - 1, col));
+  write(ansi.red + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Render content
+  let contentRow = row + 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    write(ansi.moveTo(contentRow, col + 2));
+    write(ansi.bgRed + ansi.white);
+
+    if (i === 0) {
+      // Title line - centered and bold
+      const titlePadding = Math.floor((width - 4 - line.length) / 2);
+      write(' '.repeat(titlePadding) + ansi.bold + line + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 4 - titlePadding - line.length));
+    } else if (line === 'Press any key to dismiss') {
+      // Instruction line - centered and dimmer
+      const padding = Math.floor((width - 4 - line.length) / 2);
+      write(ansi.reset + ansi.bgRed + ansi.gray + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
+    } else if (errorToast.hint && line === errorToast.hint) {
+      // Hint line - yellow on red
+      const padding = Math.floor((width - 4 - line.length) / 2);
+      write(ansi.reset + ansi.bgRed + ansi.yellow + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
+    } else {
+      // Regular content
+      write(padRight(line, width - 4));
+    }
+    write(ansi.reset);
+    contentRow++;
+  }
+}
+
 function renderPreview() {
   if (!previewMode || !previewData) return;
 
@@ -1615,6 +1695,11 @@ function render() {
   if (logViewMode) {
     renderLogView();
   }
+
+  // Error toast renders on top of everything for maximum visibility
+  if (errorToast) {
+    renderErrorToast();
+  }
 }
 
 function showFlash(message) {
@@ -1636,6 +1721,30 @@ function hideFlash() {
   }
   if (flashMessage) {
     flashMessage = null;
+    render();
+  }
+}
+
+function showErrorToast(title, message, hint = null, duration = 8000) {
+  if (errorToastTimeout) clearTimeout(errorToastTimeout);
+
+  errorToast = { title, message, hint };
+  playSound(); // Alert sound for errors
+  render();
+
+  errorToastTimeout = setTimeout(() => {
+    errorToast = null;
+    render();
+  }, duration);
+}
+
+function hideErrorToast() {
+  if (errorToastTimeout) {
+    clearTimeout(errorToastTimeout);
+    errorToastTimeout = null;
+  }
+  if (errorToast) {
+    errorToast = null;
     render();
   }
 }
@@ -1805,6 +1914,11 @@ async function switchToBranch(branchName, recordHistory = true) {
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
       addLog(`Commit or stash your changes first`, 'warning');
+      showErrorToast(
+        'Cannot Switch Branch',
+        'You have uncommitted changes in your working directory that would be lost.',
+        'Run: git stash or git commit'
+      );
       return { success: false, reason: 'dirty' };
     }
 
@@ -1850,11 +1964,26 @@ async function switchToBranch(branchName, recordHistory = true) {
     const errMsg = e.stderr || e.message || String(e);
     if (errMsg.includes('Invalid branch name')) {
       addLog(`Invalid branch name: ${branchName}`, 'error');
+      showErrorToast(
+        'Invalid Branch Name',
+        `The branch name "${branchName}" is not valid.`,
+        'Check for special characters or typos'
+      );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
       addLog(`Commit or stash your changes first`, 'warning');
+      showErrorToast(
+        'Cannot Switch Branch',
+        'Your local changes would be overwritten by checkout.',
+        'Run: git stash or git commit'
+      );
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
+      showErrorToast(
+        'Branch Switch Failed',
+        truncate(errMsg, 100),
+        'Check the activity log for details'
+      );
     }
     return { success: false };
   }
@@ -1882,12 +2011,14 @@ async function pullCurrentBranch() {
     const branch = await getCurrentBranch();
     if (!branch) {
       addLog('Not in a git repository', 'error');
+      showErrorToast('Pull Failed', 'Not in a git repository.');
       return { success: false };
     }
 
     // Validate branch name
     if (!isValidBranchName(branch) && !branch.startsWith('HEAD@')) {
       addLog('Cannot pull: invalid branch name', 'error');
+      showErrorToast('Pull Failed', 'Cannot pull: invalid branch name.');
       return { success: false };
     }
 
@@ -1899,7 +2030,35 @@ async function pullCurrentBranch() {
     notifyClients();
     return { success: true };
   } catch (e) {
-    addLog(`Pull failed: ${e.stderr || e.message || e}`, 'error');
+    const errMsg = e.stderr || e.message || String(e);
+    addLog(`Pull failed: ${errMsg}`, 'error');
+
+    if (isMergeConflict(errMsg)) {
+      hasMergeConflict = true;
+      showErrorToast(
+        'Merge Conflict!',
+        'Git pull resulted in merge conflicts that need manual resolution.',
+        'Run: git status to see conflicts'
+      );
+    } else if (isAuthError(errMsg)) {
+      showErrorToast(
+        'Authentication Failed',
+        'Could not authenticate with the remote repository.',
+        'Check your Git credentials'
+      );
+    } else if (isNetworkError(errMsg)) {
+      showErrorToast(
+        'Network Error',
+        'Could not connect to the remote repository.',
+        'Check your internet connection'
+      );
+    } else {
+      showErrorToast(
+        'Pull Failed',
+        truncate(errMsg, 100),
+        'Check the activity log for details'
+      );
+    }
     return { success: false };
   }
 }
@@ -2078,13 +2237,26 @@ async function pollGitChanges() {
           hasMergeConflict = true;
           addLog(`MERGE CONFLICT detected!`, 'error');
           addLog(`Resolve conflicts manually, then commit`, 'warning');
-          showFlash('Merge conflict! Resolve manually');
-          playSound();
+          showErrorToast(
+            'Merge Conflict!',
+            'Auto-pull resulted in merge conflicts that need manual resolution.',
+            'Run: git status to see conflicts'
+          );
         } else if (isAuthError(errMsg)) {
           addLog(`Authentication failed during pull`, 'error');
           addLog(`Check your Git credentials`, 'warning');
+          showErrorToast(
+            'Authentication Failed',
+            'Could not authenticate with the remote during auto-pull.',
+            'Check your Git credentials'
+          );
         } else {
           addLog(`Auto-pull failed: ${errMsg}`, 'error');
+          showErrorToast(
+            'Auto-Pull Failed',
+            truncate(errMsg, 100),
+            'Try pulling manually with [p]'
+          );
         }
       }
     }
@@ -2099,11 +2271,21 @@ async function pollGitChanges() {
       if (consecutiveNetworkFailures >= 3 && !isOffline) {
         isOffline = true;
         addLog(`Network unavailable (${consecutiveNetworkFailures} failures)`, 'error');
+        showErrorToast(
+          'Network Unavailable',
+          'Cannot connect to the remote repository. Git operations will fail until connection is restored.',
+          'Check your internet connection'
+        );
       }
       pollingStatus = 'error';
     } else if (isAuthError(errMsg)) {
       addLog(`Authentication error - check credentials`, 'error');
       addLog(`Try: git config credential.helper store`, 'warning');
+      showErrorToast(
+        'Git Authentication Error',
+        'Failed to authenticate with the remote repository.',
+        'Run: git config credential.helper store'
+      );
       pollingStatus = 'error';
     } else {
       pollingStatus = 'error';
@@ -2345,6 +2527,14 @@ function setupKeyboardInput() {
     // Dismiss flash on any key
     if (flashMessage) {
       hideFlash();
+      if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
+        return;
+      }
+    }
+
+    // Dismiss error toast on any key
+    if (errorToast) {
+      hideErrorToast();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
