@@ -1034,47 +1034,75 @@ function renderHeader() {
   }
 
   const soundIcon = soundEnabled ? ansi.green + '🔔' : ansi.gray + '🔕';
+  const projectName = path.basename(PROJECT_ROOT);
 
   write(ansi.moveTo(1, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
-  write(' 🏰 Git Watchtower');
 
-  // Show warning badges
+  // Left side: Title + separator + project name
+  const leftContent = ` 🏰 Git Watchtower ${ansi.dim}│${ansi.bold} ${projectName}`;
+  const leftVisibleLen = 21 + projectName.length; // " 🏰 Git Watchtower │ " + projectName
+
+  write(leftContent);
+
+  // Warning badges (center area)
   let badges = '';
-  if (SERVER_MODE === 'none') {
-    badges += ansi.bgMagenta + ansi.white + ' NO-SERVER ' + ansi.bgBlue;
-  }
+  let badgesVisibleLen = 0;
   if (SERVER_MODE === 'command' && serverCrashed) {
-    badges += ansi.bgRed + ansi.white + ' SERVER CRASHED ' + ansi.bgBlue;
+    const label = ' CRASHED ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isOffline) {
-    badges += ansi.bgRed + ansi.white + ' OFFLINE ' + ansi.bgBlue;
+    const label = ' OFFLINE ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isDetachedHead) {
-    badges += ansi.bgYellow + ansi.black + ' DETACHED HEAD ' + ansi.bgBlue;
+    const label = ' DETACHED HEAD ';
+    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (hasMergeConflict) {
-    badges += ansi.bgRed + ansi.white + ' MERGE CONFLICT ' + ansi.bgBlue;
+    const label = ' MERGE CONFLICT ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
 
   write(badges);
 
-  // Right side: Server info based on mode
-  let rightSide;
-  let serverInfo;
-  if (SERVER_MODE === 'none') {
-    serverInfo = 'Branch Monitor Only';
+  // Right side: Server mode + URL + status icons
+  let modeLabel = '';
+  let modeBadge = '';
+  if (SERVER_MODE === 'static') {
+    modeLabel = ' STATIC ';
+    modeBadge = ansi.bgCyan + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
   } else if (SERVER_MODE === 'command') {
-    const cmdStatus = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
-    serverInfo = `${cmdStatus}${ansi.bgBlue} http://localhost:${PORT}`;
+    modeLabel = ' COMMAND ';
+    modeBadge = ansi.bgGreen + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
   } else {
-    serverInfo = `Dev Server: http://localhost:${PORT}`;
+    modeLabel = ' MONITOR ';
+    modeBadge = ansi.bgMagenta + ansi.white + modeLabel + ansi.bgBlue + ansi.white;
   }
-  rightSide = `${serverInfo}  ${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
 
-  const usedSpace = 19 + (badges.length > 0 ? 30 : 0);
-  write(' '.repeat(Math.max(0, width - usedSpace - serverInfo.length - 10)));
-  write(rightSide);
+  let serverInfo = '';
+  let serverInfoVisible = '';
+  if (SERVER_MODE === 'none') {
+    serverInfoVisible = '';
+  } else {
+    const statusDot = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
+    serverInfoVisible = `localhost:${PORT} `;
+    serverInfo = statusDot + ansi.white + ` localhost:${PORT} `;
+  }
+
+  const rightContent = `${modeBadge} ${serverInfo}${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
+  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisible.length + 5; // mode + space + serverInfo + "● 🔔 "
+
+  // Calculate padding to fill full width
+  const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
+  const padding = Math.max(1, width - usedSpace);
+  write(' '.repeat(padding));
+  write(rightContent);
   write(ansi.reset);
 }
 
