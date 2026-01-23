@@ -504,7 +504,8 @@ let serverProcess = null;
 let serverLogBuffer = [];         // In-memory log buffer
 let serverRunning = false;
 let serverCrashed = false;
-let logViewMode = false;          // Viewing server logs
+let logViewMode = false;          // Viewing logs modal
+let logViewTab = 'server';        // 'activity' or 'server'
 let logScrollOffset = 0;          // Scroll position in log view
 
 function applyConfig(config) {
@@ -1247,10 +1248,12 @@ function renderFooter() {
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
 
   // Mode-specific keys
+  if (!NO_SERVER) {
+    write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
+  }
   if (SERVER_MODE === 'static') {
     write(ansi.gray + '[r]' + ansi.reset + ansi.bgBlack + ' Reload  ');
   } else if (SERVER_MODE === 'command') {
-    write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
     write(ansi.gray + '[R]' + ansi.reset + ansi.bgBlack + ' Restart  ');
   }
 
@@ -1428,6 +1431,10 @@ function renderLogView() {
   const col = Math.floor((terminalWidth - width) / 2);
   const row = Math.floor((terminalHeight - height) / 2);
 
+  // Determine which log to display
+  const isServerTab = logViewTab === 'server';
+  const logData = isServerTab ? serverLogBuffer : activityLog;
+
   // Draw box
   write(ansi.moveTo(row, col));
   write(ansi.yellow + ansi.bold);
@@ -1442,29 +1449,45 @@ function renderLogView() {
   write(ansi.yellow + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
   write(ansi.reset);
 
-  // Title
-  const statusText = serverRunning ? ansi.green + 'RUNNING' : (serverCrashed ? ansi.red + 'CRASHED' : ansi.gray + 'STOPPED');
+  // Title with tabs
+  const activityTab = logViewTab === 'activity'
+    ? ansi.bgWhite + ansi.black + ' 1:Activity ' + ansi.reset + ansi.yellow
+    : ansi.gray + ' 1:Activity ' + ansi.yellow;
+  const serverTab = logViewTab === 'server'
+    ? ansi.bgWhite + ansi.black + ' 2:Server ' + ansi.reset + ansi.yellow
+    : ansi.gray + ' 2:Server ' + ansi.yellow;
+
+  // Server status (only show on server tab)
+  let statusIndicator = '';
+  if (isServerTab && SERVER_MODE === 'command') {
+    const statusText = serverRunning ? ansi.green + 'RUNNING' : (serverCrashed ? ansi.red + 'CRASHED' : ansi.gray + 'STOPPED');
+    statusIndicator = ` [${statusText}${ansi.yellow}]`;
+  } else if (isServerTab && SERVER_MODE === 'static') {
+    statusIndicator = ansi.green + ' [STATIC]' + ansi.yellow;
+  }
+
   write(ansi.moveTo(row, col + 2));
-  write(ansi.yellow + ansi.bold + ` Server Logs [${statusText}${ansi.yellow}] ` + ansi.reset);
+  write(ansi.yellow + ansi.bold + ' ' + activityTab + ' ' + serverTab + statusIndicator + ' ' + ansi.reset);
 
   // Content
   const contentHeight = height - 4;
-  const maxScroll = Math.max(0, serverLogBuffer.length - contentHeight);
+  const maxScroll = Math.max(0, logData.length - contentHeight);
   logScrollOffset = Math.min(logScrollOffset, maxScroll);
   logScrollOffset = Math.max(0, logScrollOffset);
 
-  const startIndex = Math.max(0, serverLogBuffer.length - contentHeight - logScrollOffset);
-  const endIndex = Math.min(serverLogBuffer.length, startIndex + contentHeight);
+  let contentRow = row + 2;
 
-  let contentRow = row + 1;
-  if (serverLogBuffer.length === 0) {
+  if (logData.length === 0) {
     write(ansi.moveTo(contentRow, col + 2));
-    write(ansi.gray + 'No server output yet...' + ansi.reset);
-  } else {
+    write(ansi.gray + (isServerTab ? 'No server output yet...' : 'No activity yet...') + ansi.reset);
+  } else if (isServerTab) {
+    // Server log: newest at bottom, scroll from bottom
+    const startIndex = Math.max(0, serverLogBuffer.length - contentHeight - logScrollOffset);
+    const endIndex = Math.min(serverLogBuffer.length, startIndex + contentHeight);
+
     for (let i = startIndex; i < endIndex; i++) {
       const entry = serverLogBuffer[i];
       write(ansi.moveTo(contentRow, col + 2));
-      // Strip ANSI codes for display width calculation but show colors
       const lineText = truncate(entry.line, width - 4);
       if (entry.isError) {
         write(ansi.red + lineText + ansi.reset);
@@ -1473,18 +1496,34 @@ function renderLogView() {
       }
       contentRow++;
     }
+  } else {
+    // Activity log: newest first, scroll from top
+    const startIndex = logScrollOffset;
+    const endIndex = Math.min(activityLog.length, startIndex + contentHeight);
+
+    for (let i = startIndex; i < endIndex; i++) {
+      const entry = activityLog[i];
+      write(ansi.moveTo(contentRow, col + 2));
+      write(ansi.gray + `[${entry.timestamp}]` + ansi.reset + ' ');
+      write(ansi[entry.color] + entry.icon + ansi.reset + ' ');
+      write(truncate(entry.message, width - 18));
+      contentRow++;
+    }
   }
 
   // Scroll indicator
-  if (serverLogBuffer.length > contentHeight) {
-    const scrollPercent = Math.round((1 - logScrollOffset / maxScroll) * 100);
+  if (logData.length > contentHeight) {
+    const scrollPercent = isServerTab
+      ? Math.round((1 - logScrollOffset / maxScroll) * 100)
+      : Math.round((logScrollOffset / maxScroll) * 100);
     write(ansi.moveTo(row, col + width - 10));
     write(ansi.gray + ` ${scrollPercent}% ` + ansi.reset);
   }
 
   // Instructions
   write(ansi.moveTo(row + height - 2, col + 2));
-  write(ansi.gray + '[↑↓] Scroll  [R] Restart  [l]/[Esc] Close' + ansi.reset);
+  const restartHint = SERVER_MODE === 'command' ? '[R] Restart  ' : '';
+  write(ansi.gray + '[1/2] Switch Tab  [↑↓] Scroll  ' + restartHint + '[l]/[Esc] Close' + ansi.reset);
 }
 
 function renderInfo() {
@@ -2115,10 +2154,16 @@ function handleLiveReload(req, res) {
   });
   res.write('data: connected\n\n');
   clients.add(res);
-  req.on('close', () => clients.delete(res));
+  addServerLog(`Browser connected (${clients.size} active)`);
+  render();
+  req.on('close', () => {
+    clients.delete(res);
+    addServerLog(`Browser disconnected (${clients.size} active)`);
+    render();
+  });
 }
 
-function serveFile(res, filePath) {
+function serveFile(res, filePath, logPath) {
   const ext = path.extname(filePath).toLowerCase();
   const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -2126,6 +2171,7 @@ function serveFile(res, filePath) {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 Not Found</h1>');
+      addServerLog(`GET ${logPath} → 404`, true);
       return;
     }
 
@@ -2140,12 +2186,14 @@ function serveFile(res, filePath) {
       res.writeHead(200, { 'Content-Type': mimeType });
       res.end(data);
     }
+    addServerLog(`GET ${logPath} → 200`);
   });
 }
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   let pathname = url.pathname;
+  const logPath = pathname; // Keep original for logging
 
   if (pathname === '/livereload') {
     handleLiveReload(req, res);
@@ -2165,11 +2213,12 @@ const server = http.createServer((req, res) => {
     } else {
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 Not Found</h1>');
+      addServerLog(`GET ${logPath} → 404`, true);
       return;
     }
   }
 
-  serveFile(res, filePath);
+  serveFile(res, filePath, logPath);
 });
 
 // ============================================================================
@@ -2296,17 +2345,32 @@ function setupKeyboardInput() {
         render();
         return;
       }
-      if (key === '\u001b[A' || key === 'k') { // Up - scroll up (show older)
-        logScrollOffset = Math.min(logScrollOffset + 1, Math.max(0, serverLogBuffer.length - 10));
+      if (key === '1') { // Switch to activity tab
+        logViewTab = 'activity';
+        logScrollOffset = 0;
         render();
         return;
       }
-      if (key === '\u001b[B' || key === 'j') { // Down - scroll down (show newer)
+      if (key === '2') { // Switch to server tab
+        logViewTab = 'server';
+        logScrollOffset = 0;
+        render();
+        return;
+      }
+      // Get current log data for scroll bounds
+      const currentLogData = logViewTab === 'server' ? serverLogBuffer : activityLog;
+      const maxScroll = Math.max(0, currentLogData.length - 10);
+      if (key === '\u001b[A' || key === 'k') { // Up - scroll
+        logScrollOffset = Math.min(logScrollOffset + 1, maxScroll);
+        render();
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down - scroll
         logScrollOffset = Math.max(0, logScrollOffset - 1);
         render();
         return;
       }
-      if (key === 'R') { // Restart server from log view
+      if (key === 'R' && SERVER_MODE === 'command') { // Restart server from log view
         restartServerProcess();
         render();
         return;
@@ -2414,8 +2478,8 @@ function setupKeyboardInput() {
         }
         break;
 
-      case 'l': // View server logs (command mode)
-        if (SERVER_MODE === 'command') {
+      case 'l': // View server logs
+        if (!NO_SERVER) {
           logViewMode = true;
           logScrollOffset = 0;
           render();
@@ -2617,6 +2681,10 @@ async function start() {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
       addLog(`Current branch: ${currentBranch}`, 'info');
+      // Add server log entries for static server
+      addServerLog(`Static server started on http://localhost:${PORT}`);
+      addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
+      addServerLog(`Live reload enabled - waiting for browser connections...`);
       render();
     });
 
@@ -2624,8 +2692,10 @@ async function start() {
       if (err.code === 'EADDRINUSE') {
         addLog(`Port ${PORT} is already in use`, 'error');
         addLog(`Try a different port: git-watchtower -p ${PORT + 1}`, 'warning');
+        addServerLog(`Error: Port ${PORT} is already in use`, true);
       } else {
         addLog(`Server error: ${err.message}`, 'error');
+        addServerLog(`Error: ${err.message}`, true);
       }
       render();
     });
