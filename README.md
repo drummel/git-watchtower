@@ -1,22 +1,18 @@
 # Git Watchtower
 
-A terminal-based Git branch monitor with activity sparklines and flexible dev server support.
+A real-time terminal dashboard for monitoring git branch activity.
+
+- **Live branch monitoring** - Continuously watches your remote for new commits, branches, and deletions
+- **Instant notifications** - Visual and audio alerts when any branch is updated
+- **Auto-pull** - Automatically pulls when your current branch has remote changes
+- **Branch preview** - See commits and changed files before switching, with undo support
+- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js, Vite, etc.)
 
 ![Git Watchtower Screenshot](https://via.placeholder.com/800x400?text=Screenshot+Coming+Soon)
 
 ## Why Git Watchtower?
 
-When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
-
-- Which branches have recent activity
-- When each branch was last updated
-- Visual sparklines showing 7-day commit activity
-- Instant notifications when branches are updated
-
-Plus, it supports **three server modes** to fit your workflow:
-- **Static mode** - Built-in server with live reload for HTML/CSS/JS
-- **Command mode** - Run your own dev server (Next.js, Vite, Nuxt, etc.)
-- **None** - Branch monitoring only
+When working on projects with multiple collaborators, or running multiple AI coding agents in parallel (like Claude Code sessions in separate worktrees), it's easy to lose track of what's changing and where. Git Watchtower gives you a live dashboard showing all branch activity in one place so you never miss an update.
 
 ## Features
 
@@ -103,7 +99,7 @@ Features:
 Branch monitoring only, no server. Perfect for:
 - Backend projects
 - When you have your own dev server running separately
-- CI/CD monitoring
+- Monitoring multiple AI coding agents (Claude Code, Cursor, etc.) working in parallel worktrees
 
 ## Configuration
 
