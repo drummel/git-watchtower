@@ -2,6 +2,8 @@
 
 A terminal-based Git branch monitor with activity sparklines and flexible dev server support.
 
+![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
+
 ## Why Git Watchtower?
 
 When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
