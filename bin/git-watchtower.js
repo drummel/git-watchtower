@@ -1037,44 +1037,75 @@ function renderHeader() {
 
   write(ansi.moveTo(1, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
-  write(' 🏰 Git Watchtower');
 
-  // Show warning badges
-  let badges = '';
-  if (SERVER_MODE === 'none') {
-    badges += ansi.bgMagenta + ansi.white + ' NO-SERVER ' + ansi.bgBlue;
+  // Left side: Title + Server mode + Server info
+  let leftContent = ' 🏰 Git Watchtower';
+  let leftVisibleLen = 19; // " 🏰 Git Watchtower" visible length (emoji counts as 2)
+
+  // Server mode badge
+  let modeLabel = '';
+  let modeBadge = '';
+  if (SERVER_MODE === 'static') {
+    modeLabel = ' STATIC ';
+    modeBadge = ansi.bgCyan + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
+  } else if (SERVER_MODE === 'command') {
+    modeLabel = ' COMMAND ';
+    modeBadge = ansi.bgGreen + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
+  } else {
+    modeLabel = ' MONITOR ';
+    modeBadge = ansi.bgMagenta + ansi.white + modeLabel + ansi.bgBlue + ansi.white;
   }
+
+  // Server URL/info
+  let serverUrl = '';
+  let serverUrlVisible = '';
+  if (SERVER_MODE === 'none') {
+    serverUrlVisible = ' Branch Monitor Only';
+    serverUrl = serverUrlVisible;
+  } else {
+    const statusDot = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
+    serverUrlVisible = ` http://localhost:${PORT}`;
+    serverUrl = ' ' + statusDot + ansi.white + serverUrlVisible.slice(1);
+  }
+
+  write(leftContent + ' ' + modeBadge + serverUrl);
+  leftVisibleLen += 1 + modeLabel.length + serverUrlVisible.length;
+
+  // Warning badges (center area)
+  let badges = '';
+  let badgesVisibleLen = 0;
   if (SERVER_MODE === 'command' && serverCrashed) {
-    badges += ansi.bgRed + ansi.white + ' SERVER CRASHED ' + ansi.bgBlue;
+    const label = ' CRASHED ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isOffline) {
-    badges += ansi.bgRed + ansi.white + ' OFFLINE ' + ansi.bgBlue;
+    const label = ' OFFLINE ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isDetachedHead) {
-    badges += ansi.bgYellow + ansi.black + ' DETACHED HEAD ' + ansi.bgBlue;
+    const label = ' DETACHED HEAD ';
+    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue;
+    badgesVisibleLen += 1 + label.length;
   }
   if (hasMergeConflict) {
-    badges += ansi.bgRed + ansi.white + ' MERGE CONFLICT ' + ansi.bgBlue;
+    const label = ' MERGE CONFLICT ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
+    badgesVisibleLen += 1 + label.length;
   }
 
   write(badges);
 
-  // Right side: Server info based on mode
-  let rightSide;
-  let serverInfo;
-  if (SERVER_MODE === 'none') {
-    serverInfo = 'Branch Monitor Only';
-  } else if (SERVER_MODE === 'command') {
-    const cmdStatus = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
-    serverInfo = `${cmdStatus}${ansi.bgBlue} http://localhost:${PORT}`;
-  } else {
-    serverInfo = `Dev Server: http://localhost:${PORT}`;
-  }
-  rightSide = `${serverInfo}  ${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
+  // Right side: Status icons
+  const rightContent = `${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
+  const rightVisibleLen = 5; // "● 🔔 " (dot + space + bell emoji + space)
 
-  const usedSpace = 19 + (badges.length > 0 ? 30 : 0);
-  write(' '.repeat(Math.max(0, width - usedSpace - serverInfo.length - 10)));
-  write(rightSide);
+  // Calculate padding to fill full width
+  const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
+  const padding = Math.max(1, width - usedSpace);
+  write(' '.repeat(padding));
+  write(rightContent);
   write(ansi.reset);
 }
 
