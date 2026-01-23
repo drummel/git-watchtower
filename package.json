@@ -1,0 +1,42 @@
+{
+  "name": "git-watchtower",
+  "version": "1.0.0",
+  "description": "Terminal-based Git branch monitor with activity sparklines and optional dev server with live reload",
+  "main": "bin/git-watchtower.js",
+  "bin": {
+    "git-watchtower": "bin/git-watchtower.js"
+  },
+  "scripts": {
+    "start": "node bin/git-watchtower.js"
+  },
+  "keywords": [
+    "git",
+    "branch",
+    "monitor",
+    "tui",
+    "terminal",
+    "dev-server",
+    "live-reload",
+    "cli",
+    "dashboard",
+    "sparklines"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drummel/git-watchtower"
+  },
+  "bugs": {
+    "url": "https://github.com/drummel/git-watchtower/issues"
+  },
+  "homepage": "https://github.com/drummel/git-watchtower#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "bin/git-watchtower.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
