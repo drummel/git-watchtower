@@ -7,7 +7,15 @@
     "git-watchtower": "bin/git-watchtower.js"
   },
   "scripts": {
-    "start": "node bin/git-watchtower.js"
+    "start": "node bin/git-watchtower.js",
+    "test": "node --test tests/unit/**/*.test.js",
+    "test:watch": "node --test --watch tests/unit/**/*.test.js",
+    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov node --test tests/unit/**/*.test.js",
+    "test:coverage:text": "c8 --reporter=text node --test tests/unit/**/*.test.js",
+    "test:coverage:html": "c8 --reporter=html node --test tests/unit/**/*.test.js && echo 'Coverage report: coverage/index.html'"
+  },
+  "devDependencies": {
+    "c8": "^10.1.2"
   },
   "keywords": [
     "git",
@@ -32,7 +40,7 @@
   },
   "homepage": "https://github.com/drummel/git-watchtower#readme",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "files": [
     "bin/git-watchtower.js",
