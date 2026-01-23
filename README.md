@@ -2,8 +2,6 @@
 
 A terminal-based Git branch monitor with activity sparklines and flexible dev server support.
 
-![Git Watchtower Screenshot](https://via.placeholder.com/800x400?text=Screenshot+Coming+Soon)
-
 ## Why Git Watchtower?
 
 When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
@@ -263,13 +261,36 @@ Toggle sound with `s` or set `"soundEnabled": false` in config.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! There are several ways to contribute to Git Watchtower:
+
+### Reporting Bugs
+
+If you find a bug, please [open an issue](https://github.com/drummel/git-watchtower/issues/new) on GitHub with:
+- A clear, descriptive title
+- Steps to reproduce the issue
+- Expected vs actual behavior
+- Your environment (OS, Node.js version, terminal)
+- Any relevant error messages or screenshots
+
+### Requesting Features
+
+Have an idea to improve Git Watchtower? [Submit a feature request](https://github.com/drummel/git-watchtower/issues/new) with:
+- A clear description of the feature
+- The problem it would solve or use case it addresses
+- Any implementation ideas (optional)
+
+### Submitting Pull Requests
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+Please ensure your PR:
+- Includes a clear description of the changes
+- Maintains the zero-dependency philosophy (Node.js built-ins only)
+- Works across platforms (macOS, Linux, Windows) when applicable
 
 ## Development
 
