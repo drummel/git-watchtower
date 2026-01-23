@@ -504,7 +504,8 @@ let serverProcess = null;
 let serverLogBuffer = [];         // In-memory log buffer
 let serverRunning = false;
 let serverCrashed = false;
-let logViewMode = false;          // Viewing server logs
+let logViewMode = false;          // Viewing logs modal
+let logViewTab = 'server';        // 'activity' or 'server'
 let logScrollOffset = 0;          // Scroll position in log view
 
 function applyConfig(config) {
@@ -746,6 +747,10 @@ const activityLog = [];
 // Flash state
 let flashMessage = null;
 let flashTimeout = null;
+
+// Error toast state (more prominent than activity log)
+let errorToast = null;
+let errorToastTimeout = null;
 
 // Preview pane state
 let previewMode = false;
@@ -1034,47 +1039,75 @@ function renderHeader() {
   }
 
   const soundIcon = soundEnabled ? ansi.green + '🔔' : ansi.gray + '🔕';
+  const projectName = path.basename(PROJECT_ROOT);
 
   write(ansi.moveTo(1, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
-  write(' 🏰 Git Watchtower');
 
-  // Show warning badges
+  // Left side: Title + separator + project name
+  const leftContent = ` 🏰 Git Watchtower ${ansi.dim}│${ansi.bold} ${projectName}`;
+  const leftVisibleLen = 21 + projectName.length; // " 🏰 Git Watchtower │ " + projectName
+
+  write(leftContent);
+
+  // Warning badges (center area)
   let badges = '';
-  if (SERVER_MODE === 'none') {
-    badges += ansi.bgMagenta + ansi.white + ' NO-SERVER ' + ansi.bgBlue;
-  }
+  let badgesVisibleLen = 0;
   if (SERVER_MODE === 'command' && serverCrashed) {
-    badges += ansi.bgRed + ansi.white + ' SERVER CRASHED ' + ansi.bgBlue;
+    const label = ' CRASHED ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isOffline) {
-    badges += ansi.bgRed + ansi.white + ' OFFLINE ' + ansi.bgBlue;
+    const label = ' OFFLINE ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (isDetachedHead) {
-    badges += ansi.bgYellow + ansi.black + ' DETACHED HEAD ' + ansi.bgBlue;
+    const label = ' DETACHED HEAD ';
+    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
   if (hasMergeConflict) {
-    badges += ansi.bgRed + ansi.white + ' MERGE CONFLICT ' + ansi.bgBlue;
+    const label = ' MERGE CONFLICT ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
   }
 
   write(badges);
 
-  // Right side: Server info based on mode
-  let rightSide;
-  let serverInfo;
-  if (SERVER_MODE === 'none') {
-    serverInfo = 'Branch Monitor Only';
+  // Right side: Server mode + URL + status icons
+  let modeLabel = '';
+  let modeBadge = '';
+  if (SERVER_MODE === 'static') {
+    modeLabel = ' STATIC ';
+    modeBadge = ansi.bgCyan + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
   } else if (SERVER_MODE === 'command') {
-    const cmdStatus = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
-    serverInfo = `${cmdStatus}${ansi.bgBlue} http://localhost:${PORT}`;
+    modeLabel = ' COMMAND ';
+    modeBadge = ansi.bgGreen + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
   } else {
-    serverInfo = `Dev Server: http://localhost:${PORT}`;
+    modeLabel = ' MONITOR ';
+    modeBadge = ansi.bgMagenta + ansi.white + modeLabel + ansi.bgBlue + ansi.white;
   }
-  rightSide = `${serverInfo}  ${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
 
-  const usedSpace = 19 + (badges.length > 0 ? 30 : 0);
-  write(' '.repeat(Math.max(0, width - usedSpace - serverInfo.length - 10)));
-  write(rightSide);
+  let serverInfo = '';
+  let serverInfoVisible = '';
+  if (SERVER_MODE === 'none') {
+    serverInfoVisible = '';
+  } else {
+    const statusDot = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
+    serverInfoVisible = `localhost:${PORT} `;
+    serverInfo = statusDot + ansi.white + ` localhost:${PORT} `;
+  }
+
+  const rightContent = `${modeBadge} ${serverInfo}${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
+  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisible.length + 5; // mode + space + serverInfo + "● 🔔 "
+
+  // Calculate padding to fill full width
+  const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
+  const padding = Math.max(1, width - usedSpace);
+  write(' '.repeat(padding));
+  write(rightContent);
   write(ansi.reset);
 }
 
@@ -1247,10 +1280,12 @@ function renderFooter() {
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
 
   // Mode-specific keys
+  if (!NO_SERVER) {
+    write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
+  }
   if (SERVER_MODE === 'static') {
     write(ansi.gray + '[r]' + ansi.reset + ansi.bgBlack + ' Reload  ');
   } else if (SERVER_MODE === 'command') {
-    write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
     write(ansi.gray + '[R]' + ansi.reset + ansi.bgBlack + ' Restart  ');
   }
 
@@ -1291,6 +1326,82 @@ function renderFlash() {
 
   write(ansi.moveTo(row + 3, col + Math.floor((width - 22) / 2)));
   write(ansi.gray + 'Press any key to dismiss' + ansi.reset);
+}
+
+function renderErrorToast() {
+  if (!errorToast) return;
+
+  const width = Math.min(60, terminalWidth - 4);
+  const col = Math.floor((terminalWidth - width) / 2);
+  const row = 2; // Near the top, below header
+
+  // Calculate height based on content
+  const lines = [];
+  lines.push(errorToast.title || 'Git Error');
+  lines.push('');
+
+  // Word wrap the message
+  const msgWords = errorToast.message.split(' ');
+  let currentLine = '';
+  for (const word of msgWords) {
+    if ((currentLine + ' ' + word).length > width - 6) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += (currentLine ? ' ' : '') + word;
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  if (errorToast.hint) {
+    lines.push('');
+    lines.push(errorToast.hint);
+  }
+  lines.push('');
+  lines.push('Press any key to dismiss');
+
+  const height = lines.length + 2;
+
+  // Draw red error box
+  write(ansi.moveTo(row, col));
+  write(ansi.red + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(ansi.red + box.dVertical + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 2) + ansi.reset + ansi.red + box.dVertical + ansi.reset);
+  }
+
+  write(ansi.moveTo(row + height - 1, col));
+  write(ansi.red + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Render content
+  let contentRow = row + 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    write(ansi.moveTo(contentRow, col + 2));
+    write(ansi.bgRed + ansi.white);
+
+    if (i === 0) {
+      // Title line - centered and bold
+      const titlePadding = Math.floor((width - 4 - line.length) / 2);
+      write(' '.repeat(titlePadding) + ansi.bold + line + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 4 - titlePadding - line.length));
+    } else if (line === 'Press any key to dismiss') {
+      // Instruction line - centered and dimmer
+      const padding = Math.floor((width - 4 - line.length) / 2);
+      write(ansi.reset + ansi.bgRed + ansi.gray + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
+    } else if (errorToast.hint && line === errorToast.hint) {
+      // Hint line - yellow on red
+      const padding = Math.floor((width - 4 - line.length) / 2);
+      write(ansi.reset + ansi.bgRed + ansi.yellow + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
+    } else {
+      // Regular content
+      write(padRight(line, width - 4));
+    }
+    write(ansi.reset);
+    contentRow++;
+  }
 }
 
 function renderPreview() {
@@ -1428,6 +1539,10 @@ function renderLogView() {
   const col = Math.floor((terminalWidth - width) / 2);
   const row = Math.floor((terminalHeight - height) / 2);
 
+  // Determine which log to display
+  const isServerTab = logViewTab === 'server';
+  const logData = isServerTab ? serverLogBuffer : activityLog;
+
   // Draw box
   write(ansi.moveTo(row, col));
   write(ansi.yellow + ansi.bold);
@@ -1442,29 +1557,45 @@ function renderLogView() {
   write(ansi.yellow + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
   write(ansi.reset);
 
-  // Title
-  const statusText = serverRunning ? ansi.green + 'RUNNING' : (serverCrashed ? ansi.red + 'CRASHED' : ansi.gray + 'STOPPED');
+  // Title with tabs
+  const activityTab = logViewTab === 'activity'
+    ? ansi.bgWhite + ansi.black + ' 1:Activity ' + ansi.reset + ansi.yellow
+    : ansi.gray + ' 1:Activity ' + ansi.yellow;
+  const serverTab = logViewTab === 'server'
+    ? ansi.bgWhite + ansi.black + ' 2:Server ' + ansi.reset + ansi.yellow
+    : ansi.gray + ' 2:Server ' + ansi.yellow;
+
+  // Server status (only show on server tab)
+  let statusIndicator = '';
+  if (isServerTab && SERVER_MODE === 'command') {
+    const statusText = serverRunning ? ansi.green + 'RUNNING' : (serverCrashed ? ansi.red + 'CRASHED' : ansi.gray + 'STOPPED');
+    statusIndicator = ` [${statusText}${ansi.yellow}]`;
+  } else if (isServerTab && SERVER_MODE === 'static') {
+    statusIndicator = ansi.green + ' [STATIC]' + ansi.yellow;
+  }
+
   write(ansi.moveTo(row, col + 2));
-  write(ansi.yellow + ansi.bold + ` Server Logs [${statusText}${ansi.yellow}] ` + ansi.reset);
+  write(ansi.yellow + ansi.bold + ' ' + activityTab + ' ' + serverTab + statusIndicator + ' ' + ansi.reset);
 
   // Content
   const contentHeight = height - 4;
-  const maxScroll = Math.max(0, serverLogBuffer.length - contentHeight);
+  const maxScroll = Math.max(0, logData.length - contentHeight);
   logScrollOffset = Math.min(logScrollOffset, maxScroll);
   logScrollOffset = Math.max(0, logScrollOffset);
 
-  const startIndex = Math.max(0, serverLogBuffer.length - contentHeight - logScrollOffset);
-  const endIndex = Math.min(serverLogBuffer.length, startIndex + contentHeight);
+  let contentRow = row + 2;
 
-  let contentRow = row + 1;
-  if (serverLogBuffer.length === 0) {
+  if (logData.length === 0) {
     write(ansi.moveTo(contentRow, col + 2));
-    write(ansi.gray + 'No server output yet...' + ansi.reset);
-  } else {
+    write(ansi.gray + (isServerTab ? 'No server output yet...' : 'No activity yet...') + ansi.reset);
+  } else if (isServerTab) {
+    // Server log: newest at bottom, scroll from bottom
+    const startIndex = Math.max(0, serverLogBuffer.length - contentHeight - logScrollOffset);
+    const endIndex = Math.min(serverLogBuffer.length, startIndex + contentHeight);
+
     for (let i = startIndex; i < endIndex; i++) {
       const entry = serverLogBuffer[i];
       write(ansi.moveTo(contentRow, col + 2));
-      // Strip ANSI codes for display width calculation but show colors
       const lineText = truncate(entry.line, width - 4);
       if (entry.isError) {
         write(ansi.red + lineText + ansi.reset);
@@ -1473,18 +1604,34 @@ function renderLogView() {
       }
       contentRow++;
     }
+  } else {
+    // Activity log: newest first, scroll from top
+    const startIndex = logScrollOffset;
+    const endIndex = Math.min(activityLog.length, startIndex + contentHeight);
+
+    for (let i = startIndex; i < endIndex; i++) {
+      const entry = activityLog[i];
+      write(ansi.moveTo(contentRow, col + 2));
+      write(ansi.gray + `[${entry.timestamp}]` + ansi.reset + ' ');
+      write(ansi[entry.color] + entry.icon + ansi.reset + ' ');
+      write(truncate(entry.message, width - 18));
+      contentRow++;
+    }
   }
 
   // Scroll indicator
-  if (serverLogBuffer.length > contentHeight) {
-    const scrollPercent = Math.round((1 - logScrollOffset / maxScroll) * 100);
+  if (logData.length > contentHeight) {
+    const scrollPercent = isServerTab
+      ? Math.round((1 - logScrollOffset / maxScroll) * 100)
+      : Math.round((logScrollOffset / maxScroll) * 100);
     write(ansi.moveTo(row, col + width - 10));
     write(ansi.gray + ` ${scrollPercent}% ` + ansi.reset);
   }
 
   // Instructions
   write(ansi.moveTo(row + height - 2, col + 2));
-  write(ansi.gray + '[↑↓] Scroll  [R] Restart  [l]/[Esc] Close' + ansi.reset);
+  const restartHint = SERVER_MODE === 'command' ? '[R] Restart  ' : '';
+  write(ansi.gray + '[1/2] Switch Tab  [↑↓] Scroll  ' + restartHint + '[l]/[Esc] Close' + ansi.reset);
 }
 
 function renderInfo() {
@@ -1587,6 +1734,11 @@ function render() {
   if (logViewMode) {
     renderLogView();
   }
+
+  // Error toast renders on top of everything for maximum visibility
+  if (errorToast) {
+    renderErrorToast();
+  }
 }
 
 function showFlash(message) {
@@ -1608,6 +1760,30 @@ function hideFlash() {
   }
   if (flashMessage) {
     flashMessage = null;
+    render();
+  }
+}
+
+function showErrorToast(title, message, hint = null, duration = 8000) {
+  if (errorToastTimeout) clearTimeout(errorToastTimeout);
+
+  errorToast = { title, message, hint };
+  playSound(); // Alert sound for errors
+  render();
+
+  errorToastTimeout = setTimeout(() => {
+    errorToast = null;
+    render();
+  }, duration);
+}
+
+function hideErrorToast() {
+  if (errorToastTimeout) {
+    clearTimeout(errorToastTimeout);
+    errorToastTimeout = null;
+  }
+  if (errorToast) {
+    errorToast = null;
     render();
   }
 }
@@ -1777,6 +1953,11 @@ async function switchToBranch(branchName, recordHistory = true) {
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
       addLog(`Commit or stash your changes first`, 'warning');
+      showErrorToast(
+        'Cannot Switch Branch',
+        'You have uncommitted changes in your working directory that would be lost.',
+        'Run: git stash or git commit'
+      );
       return { success: false, reason: 'dirty' };
     }
 
@@ -1822,11 +2003,26 @@ async function switchToBranch(branchName, recordHistory = true) {
     const errMsg = e.stderr || e.message || String(e);
     if (errMsg.includes('Invalid branch name')) {
       addLog(`Invalid branch name: ${branchName}`, 'error');
+      showErrorToast(
+        'Invalid Branch Name',
+        `The branch name "${branchName}" is not valid.`,
+        'Check for special characters or typos'
+      );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
       addLog(`Commit or stash your changes first`, 'warning');
+      showErrorToast(
+        'Cannot Switch Branch',
+        'Your local changes would be overwritten by checkout.',
+        'Run: git stash or git commit'
+      );
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
+      showErrorToast(
+        'Branch Switch Failed',
+        truncate(errMsg, 100),
+        'Check the activity log for details'
+      );
     }
     return { success: false };
   }
@@ -1854,12 +2050,14 @@ async function pullCurrentBranch() {
     const branch = await getCurrentBranch();
     if (!branch) {
       addLog('Not in a git repository', 'error');
+      showErrorToast('Pull Failed', 'Not in a git repository.');
       return { success: false };
     }
 
     // Validate branch name
     if (!isValidBranchName(branch) && !branch.startsWith('HEAD@')) {
       addLog('Cannot pull: invalid branch name', 'error');
+      showErrorToast('Pull Failed', 'Cannot pull: invalid branch name.');
       return { success: false };
     }
 
@@ -1871,7 +2069,35 @@ async function pullCurrentBranch() {
     notifyClients();
     return { success: true };
   } catch (e) {
-    addLog(`Pull failed: ${e.stderr || e.message || e}`, 'error');
+    const errMsg = e.stderr || e.message || String(e);
+    addLog(`Pull failed: ${errMsg}`, 'error');
+
+    if (isMergeConflict(errMsg)) {
+      hasMergeConflict = true;
+      showErrorToast(
+        'Merge Conflict!',
+        'Git pull resulted in merge conflicts that need manual resolution.',
+        'Run: git status to see conflicts'
+      );
+    } else if (isAuthError(errMsg)) {
+      showErrorToast(
+        'Authentication Failed',
+        'Could not authenticate with the remote repository.',
+        'Check your Git credentials'
+      );
+    } else if (isNetworkError(errMsg)) {
+      showErrorToast(
+        'Network Error',
+        'Could not connect to the remote repository.',
+        'Check your internet connection'
+      );
+    } else {
+      showErrorToast(
+        'Pull Failed',
+        truncate(errMsg, 100),
+        'Check the activity log for details'
+      );
+    }
     return { success: false };
   }
 }
@@ -2040,8 +2266,8 @@ async function pollGitChanges() {
         hasMergeConflict = false;
         // Update the stored commit to the new one
         const newCommit = await execAsync('git rev-parse --short HEAD');
-        currentInfo.commit = newCommit.stdout;
-        previousBranchStates.set(currentBranch, newCommit.stdout);
+        currentInfo.commit = newCommit.stdout.trim();
+        previousBranchStates.set(currentBranch, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
       } catch (e) {
@@ -2050,13 +2276,26 @@ async function pollGitChanges() {
           hasMergeConflict = true;
           addLog(`MERGE CONFLICT detected!`, 'error');
           addLog(`Resolve conflicts manually, then commit`, 'warning');
-          showFlash('Merge conflict! Resolve manually');
-          playSound();
+          showErrorToast(
+            'Merge Conflict!',
+            'Auto-pull resulted in merge conflicts that need manual resolution.',
+            'Run: git status to see conflicts'
+          );
         } else if (isAuthError(errMsg)) {
           addLog(`Authentication failed during pull`, 'error');
           addLog(`Check your Git credentials`, 'warning');
+          showErrorToast(
+            'Authentication Failed',
+            'Could not authenticate with the remote during auto-pull.',
+            'Check your Git credentials'
+          );
         } else {
           addLog(`Auto-pull failed: ${errMsg}`, 'error');
+          showErrorToast(
+            'Auto-Pull Failed',
+            truncate(errMsg, 100),
+            'Try pulling manually with [p]'
+          );
         }
       }
     }
@@ -2071,11 +2310,21 @@ async function pollGitChanges() {
       if (consecutiveNetworkFailures >= 3 && !isOffline) {
         isOffline = true;
         addLog(`Network unavailable (${consecutiveNetworkFailures} failures)`, 'error');
+        showErrorToast(
+          'Network Unavailable',
+          'Cannot connect to the remote repository. Git operations will fail until connection is restored.',
+          'Check your internet connection'
+        );
       }
       pollingStatus = 'error';
     } else if (isAuthError(errMsg)) {
       addLog(`Authentication error - check credentials`, 'error');
       addLog(`Try: git config credential.helper store`, 'warning');
+      showErrorToast(
+        'Git Authentication Error',
+        'Failed to authenticate with the remote repository.',
+        'Run: git config credential.helper store'
+      );
       pollingStatus = 'error';
     } else {
       pollingStatus = 'error';
@@ -2115,10 +2364,16 @@ function handleLiveReload(req, res) {
   });
   res.write('data: connected\n\n');
   clients.add(res);
-  req.on('close', () => clients.delete(res));
+  addServerLog(`Browser connected (${clients.size} active)`);
+  render();
+  req.on('close', () => {
+    clients.delete(res);
+    addServerLog(`Browser disconnected (${clients.size} active)`);
+    render();
+  });
 }
 
-function serveFile(res, filePath) {
+function serveFile(res, filePath, logPath) {
   const ext = path.extname(filePath).toLowerCase();
   const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
 
@@ -2126,6 +2381,7 @@ function serveFile(res, filePath) {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 Not Found</h1>');
+      addServerLog(`GET ${logPath} → 404`, true);
       return;
     }
 
@@ -2140,12 +2396,14 @@ function serveFile(res, filePath) {
       res.writeHead(200, { 'Content-Type': mimeType });
       res.end(data);
     }
+    addServerLog(`GET ${logPath} → 200`);
   });
 }
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   let pathname = url.pathname;
+  const logPath = pathname; // Keep original for logging
 
   if (pathname === '/livereload') {
     handleLiveReload(req, res);
@@ -2165,11 +2423,12 @@ const server = http.createServer((req, res) => {
     } else {
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 Not Found</h1>');
+      addServerLog(`GET ${logPath} → 404`, true);
       return;
     }
   }
 
-  serveFile(res, filePath);
+  serveFile(res, filePath, logPath);
 });
 
 // ============================================================================
@@ -2296,17 +2555,32 @@ function setupKeyboardInput() {
         render();
         return;
       }
-      if (key === '\u001b[A' || key === 'k') { // Up - scroll up (show older)
-        logScrollOffset = Math.min(logScrollOffset + 1, Math.max(0, serverLogBuffer.length - 10));
+      if (key === '1') { // Switch to activity tab
+        logViewTab = 'activity';
+        logScrollOffset = 0;
         render();
         return;
       }
-      if (key === '\u001b[B' || key === 'j') { // Down - scroll down (show newer)
+      if (key === '2') { // Switch to server tab
+        logViewTab = 'server';
+        logScrollOffset = 0;
+        render();
+        return;
+      }
+      // Get current log data for scroll bounds
+      const currentLogData = logViewTab === 'server' ? serverLogBuffer : activityLog;
+      const maxScroll = Math.max(0, currentLogData.length - 10);
+      if (key === '\u001b[A' || key === 'k') { // Up - scroll
+        logScrollOffset = Math.min(logScrollOffset + 1, maxScroll);
+        render();
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down - scroll
         logScrollOffset = Math.max(0, logScrollOffset - 1);
         render();
         return;
       }
-      if (key === 'R') { // Restart server from log view
+      if (key === 'R' && SERVER_MODE === 'command') { // Restart server from log view
         restartServerProcess();
         render();
         return;
@@ -2317,6 +2591,14 @@ function setupKeyboardInput() {
     // Dismiss flash on any key
     if (flashMessage) {
       hideFlash();
+      if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
+        return;
+      }
+    }
+
+    // Dismiss error toast on any key
+    if (errorToast) {
+      hideErrorToast();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
@@ -2414,8 +2696,8 @@ function setupKeyboardInput() {
         }
         break;
 
-      case 'l': // View server logs (command mode)
-        if (SERVER_MODE === 'command') {
+      case 'l': // View server logs
+        if (!NO_SERVER) {
           logViewMode = true;
           logScrollOffset = 0;
           render();
@@ -2617,6 +2899,10 @@ async function start() {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
       addLog(`Current branch: ${currentBranch}`, 'info');
+      // Add server log entries for static server
+      addServerLog(`Static server started on http://localhost:${PORT}`);
+      addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
+      addServerLog(`Live reload enabled - waiting for browser connections...`);
       render();
     });
 
@@ -2624,8 +2910,10 @@ async function start() {
       if (err.code === 'EADDRINUSE') {
         addLog(`Port ${PORT} is already in use`, 'error');
         addLog(`Try a different port: git-watchtower -p ${PORT + 1}`, 'warning');
+        addServerLog(`Error: Port ${PORT} is already in use`, true);
       } else {
         addLog(`Server error: ${err.message}`, 'error');
+        addServerLog(`Error: ${err.message}`, true);
       }
       render();
     });

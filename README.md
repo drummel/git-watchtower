@@ -8,11 +8,21 @@ A real-time terminal dashboard for monitoring git branch activity.
 - **Branch preview** - See commits and changed files before switching, with undo support
 - **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js, Vite, etc.)
 
-![Git Watchtower Screenshot](https://via.placeholder.com/800x400?text=Screenshot+Coming+Soon)
+![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
 ## Why Git Watchtower?
 
-When working on projects with multiple collaborators, or running multiple AI coding agents in parallel (like Claude Code sessions in separate worktrees), it's easy to lose track of what's changing and where. Git Watchtower gives you a live dashboard showing all branch activity in one place so you never miss an update.
+When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
+
+- Which branches have recent activity
+- When each branch was last updated
+- Visual sparklines showing 7-day commit activity
+- Instant notifications when branches are updated
+
+Plus, it supports **three server modes** to fit your workflow:
+- **Static Site Mode** - Built-in server with live reload for HTML/CSS/JS
+- **Custom Server Command Mode** - Run your own dev server (Next.js, Vite, Nuxt, etc.)
+- **No Server Mode** - Branch monitoring only
 
 ## Features
 
@@ -25,9 +35,9 @@ When working on projects with multiple collaborators, or running multiple AI cod
 - **Audio Notifications** - Optional sound alerts (works on macOS, Linux, Windows)
 - **Auto-Pull** - Automatically pulls when your current branch has updates (configurable)
 - **Merge Conflict Detection** - Warns you when auto-pull fails
-- **Flexible Server Modes** - Static server, custom command, or none
-- **Server Log View** - Press `l` to view your dev server output (command mode)
-- **Server Restart** - Press `R` to restart your dev server (command mode)
+- **Flexible Server Modes** - Static site, custom server command, or no server
+- **Server Log View** - Press `l` to view your dev server output (custom server command mode)
+- **Server Restart** - Press `R` to restart your dev server (custom server command mode)
 - **Configurable Remote** - Works with any git remote name (not just `origin`)
 - **Zero Dependencies** - Uses only Node.js built-in modules
 
@@ -77,13 +87,13 @@ git-watchtower --help
 
 ## Server Modes
 
-### Static Mode (Default)
+### Static Site Mode (Default)
 Serves static files with automatic live reload. Perfect for:
 - Static HTML/CSS/JS sites
 - Projects without a build step
 - Quick prototyping
 
-### Command Mode
+### Custom Server Command Mode
 Runs your own dev server command. Perfect for:
 - **Next.js** - `next dev`
 - **Vite/React** - `npm run dev` or `vite`
@@ -95,7 +105,7 @@ Features:
 - Press `R` to restart the server
 - Optional auto-restart on branch switch
 
-### None Mode
+### No Server Mode
 Branch monitoring only, no server. Perfect for:
 - Backend projects
 - When you have your own dev server running separately
@@ -109,8 +119,8 @@ On first run, Git Watchtower prompts you to configure:
 |---------|-------------|---------|
 | Server mode | static, command, or none | static |
 | Port | Server port number | 3000 |
-| Static directory | Directory to serve (static mode) | public |
-| Command | Dev server command (command mode) | npm run dev |
+| Static directory | Directory to serve (static site mode) | public |
+| Command | Dev server command (custom server command mode) | npm run dev |
 | Restart on switch | Restart server on branch switch | true |
 | Auto-pull | Auto-pull when current branch has updates | true |
 | Polling interval | How often to check for git updates | 5 seconds |
@@ -170,9 +180,9 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 ### Server Controls
 | Key | Mode | Action |
 |-----|------|--------|
-| `r` | Static | Force reload all browsers |
-| `l` | Command | View server logs |
-| `R` | Command | Restart dev server |
+| `r` | Static site | Force reload all browsers |
+| `l` | Custom server command | View server logs |
+| `R` | Custom server command | Restart dev server |
 
 ### Display
 | Key | Action |
@@ -197,7 +207,7 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 | `↓ UPDATES` | Remote has new commits to pull |
 | `✗ DELETED` | Branch was deleted from remote |
 | `NO-SERVER` | Running in branch-monitor-only mode |
-| `SERVER CRASHED` | Dev server process crashed (command mode) |
+| `SERVER CRASHED` | Dev server process crashed (custom server command mode) |
 | `OFFLINE` | Network connectivity issues detected |
 | `DETACHED HEAD` | Not on a branch (commit checkout) |
 | `MERGE CONFLICT` | Auto-pull failed due to conflicts |
@@ -215,7 +225,7 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 2. **Detection**: Compares commit hashes to detect new commits, branches, and deletions
 3. **Auto-pull**: When your current branch has remote updates, it pulls automatically (if enabled)
 4. **Server**: Depending on mode, either serves static files, runs your command, or does nothing
-5. **Live Reload**: In static mode, notifies connected browsers via SSE when files change
+5. **Live Reload**: In static site mode, notifies connected browsers via SSE when files change
 
 ## Troubleshooting
 
@@ -252,20 +262,43 @@ Git Watchtower will automatically reduce polling frequency on slow networks. You
 
 Toggle sound with `s` or set `"soundEnabled": false` in config.
 
-### Server crashes immediately (command mode)
+### Server crashes immediately (custom server command mode)
 - Check that your command works when run directly
 - View logs with `l` to see error messages
 - Try restarting with `R`
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! There are several ways to contribute to Git Watchtower:
+
+### Reporting Bugs
+
+If you find a bug, please [open an issue](https://github.com/drummel/git-watchtower/issues/new) on GitHub with:
+- A clear, descriptive title
+- Steps to reproduce the issue
+- Expected vs actual behavior
+- Your environment (OS, Node.js version, terminal)
+- Any relevant error messages or screenshots
+
+### Requesting Features
+
+Have an idea to improve Git Watchtower? [Submit a feature request](https://github.com/drummel/git-watchtower/issues/new) with:
+- A clear description of the feature
+- The problem it would solve or use case it addresses
+- Any implementation ideas (optional)
+
+### Submitting Pull Requests
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+Please ensure your PR:
+- Includes a clear description of the changes
+- Maintains the zero-dependency philosophy (Node.js built-ins only)
+- Works across platforms (macOS, Linux, Windows) when applicable
 
 ## Development
 
