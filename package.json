@@ -7,7 +7,9 @@
     "git-watchtower": "bin/git-watchtower.js"
   },
   "scripts": {
-    "start": "node bin/git-watchtower.js"
+    "start": "node bin/git-watchtower.js",
+    "test": "node --test tests/unit/**/*.test.js",
+    "test:watch": "node --test --watch tests/unit/**/*.test.js"
   },
   "keywords": [
     "git",
@@ -32,7 +34,7 @@
   },
   "homepage": "https://github.com/drummel/git-watchtower#readme",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "files": [
     "bin/git-watchtower.js",
