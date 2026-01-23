@@ -1034,15 +1034,44 @@ function renderHeader() {
   }
 
   const soundIcon = soundEnabled ? ansi.green + '🔔' : ansi.gray + '🔕';
+  const projectName = path.basename(PROJECT_ROOT);
 
   write(ansi.moveTo(1, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
 
-  // Left side: Title + Server mode + Server info
-  let leftContent = ' 🏰 Git Watchtower';
-  let leftVisibleLen = 19; // " 🏰 Git Watchtower" visible length (emoji counts as 2)
+  // Left side: Title + separator + project name
+  const leftContent = ` 🏰 Git Watchtower ${ansi.dim}│${ansi.bold} ${projectName}`;
+  const leftVisibleLen = 21 + projectName.length; // " 🏰 Git Watchtower │ " + projectName
 
-  // Server mode badge
+  write(leftContent);
+
+  // Warning badges (center area)
+  let badges = '';
+  let badgesVisibleLen = 0;
+  if (SERVER_MODE === 'command' && serverCrashed) {
+    const label = ' CRASHED ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
+  if (isOffline) {
+    const label = ' OFFLINE ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
+  if (isDetachedHead) {
+    const label = ' DETACHED HEAD ';
+    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
+  if (hasMergeConflict) {
+    const label = ' MERGE CONFLICT ';
+    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
+
+  write(badges);
+
+  // Right side: Server mode + URL + status icons
   let modeLabel = '';
   let modeBadge = '';
   if (SERVER_MODE === 'static') {
@@ -1056,50 +1085,18 @@ function renderHeader() {
     modeBadge = ansi.bgMagenta + ansi.white + modeLabel + ansi.bgBlue + ansi.white;
   }
 
-  // Server URL/info
-  let serverUrl = '';
-  let serverUrlVisible = '';
+  let serverInfo = '';
+  let serverInfoVisible = '';
   if (SERVER_MODE === 'none') {
-    serverUrlVisible = ' Branch Monitor Only';
-    serverUrl = serverUrlVisible;
+    serverInfoVisible = '';
   } else {
     const statusDot = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
-    serverUrlVisible = ` http://localhost:${PORT}`;
-    serverUrl = ' ' + statusDot + ansi.white + serverUrlVisible.slice(1);
+    serverInfoVisible = `localhost:${PORT} `;
+    serverInfo = statusDot + ansi.white + ` localhost:${PORT} `;
   }
 
-  write(leftContent + ' ' + modeBadge + serverUrl);
-  leftVisibleLen += 1 + modeLabel.length + serverUrlVisible.length;
-
-  // Warning badges (center area)
-  let badges = '';
-  let badgesVisibleLen = 0;
-  if (SERVER_MODE === 'command' && serverCrashed) {
-    const label = ' CRASHED ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (isOffline) {
-    const label = ' OFFLINE ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (isDetachedHead) {
-    const label = ' DETACHED HEAD ';
-    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (hasMergeConflict) {
-    const label = ' MERGE CONFLICT ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue;
-    badgesVisibleLen += 1 + label.length;
-  }
-
-  write(badges);
-
-  // Right side: Status icons
-  const rightContent = `${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
-  const rightVisibleLen = 5; // "● 🔔 " (dot + space + bell emoji + space)
+  const rightContent = `${modeBadge} ${serverInfo}${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
+  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisible.length + 5; // mode + space + serverInfo + "● 🔔 "
 
   // Calculate padding to fill full width
   const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
