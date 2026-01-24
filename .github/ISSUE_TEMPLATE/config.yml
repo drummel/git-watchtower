@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/drummel/git-watchtower#readme
+    about: Check the README for usage instructions and configuration options
+  - name: npm Package
+    url: https://www.npmjs.com/package/git-watchtower
+    about: View the package on npm
