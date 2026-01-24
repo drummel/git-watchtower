@@ -993,6 +993,18 @@ function write(str) {
   process.stdout.write(str);
 }
 
+function setTerminalTitle(title) {
+  // Set terminal tab/window title using ANSI escape sequence
+  // \x1b]0;title\x07 sets both window and tab title (most compatible)
+  process.stdout.write(`\x1b]0;${title}\x07`);
+}
+
+function restoreTerminalTitle() {
+  // Restore default terminal title behavior by clearing it
+  // Some terminals will revert to showing the running process
+  process.stdout.write('\x1b]0;\x07');
+}
+
 function updateTerminalSize() {
   terminalWidth = process.stdout.columns || 80;
   terminalHeight = process.stdout.rows || 24;
@@ -2784,6 +2796,7 @@ async function shutdown() {
   // Restore terminal
   write(ansi.showCursor);
   write(ansi.restoreScreen);
+  restoreTerminalTitle();
 
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(false);
@@ -2813,6 +2826,7 @@ process.on('SIGTERM', shutdown);
 process.on('uncaughtException', (err) => {
   write(ansi.showCursor);
   write(ansi.restoreScreen);
+  restoreTerminalTitle();
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   console.error('Uncaught exception:', err);
   process.exit(1);
@@ -2849,6 +2863,10 @@ async function start() {
   // Save screen and hide cursor
   write(ansi.saveScreen);
   write(ansi.hideCursor);
+
+  // Set terminal tab title to show project name
+  const projectName = path.basename(PROJECT_ROOT);
+  setTerminalTitle(`Git Watchtower - ${projectName}`);
 
   // Check static directory (only needed when static server is running)
   if (SERVER_MODE === 'static' && !fs.existsSync(STATIC_DIR)) {
@@ -2941,6 +2959,7 @@ async function start() {
 start().catch(err => {
   write(ansi.showCursor);
   write(ansi.restoreScreen);
+  restoreTerminalTitle();
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   console.error('Failed to start:', err);
   process.exit(1);
