@@ -1,6 +1,6 @@
 # Git Watchtower
 
-Monitor and switch between git branches in real-time—built for working with web based AI coding agents, like Claude Code Web & Codex.
+Monitor and switch between git branches in real-time. Built for working with web based AI coding agents, like Claude Code Web & Codex.
 
 - **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
 - **Instant notifications** - Visual and audio alerts when any branch is updated
@@ -349,4 +349,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - Built with Node.js built-in modules only (no external dependencies)
-- Inspired by tools like `lazygit`, `tig`, and `gitui`
