@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "node16",
+    "moduleResolution": "node16",
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Start relaxed, tighten incrementally as JSDoc annotations improve
+    // See: https://www.typescriptlang.org/tsconfig for options
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+
+    // Useful even without strict mode
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "coverage"]
+}

@@ -14,10 +14,13 @@
     "test:watch": "node --test --watch tests/unit/**/*.test.js",
     "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov node --test tests/unit/**/*.test.js tests/integration/**/*.test.js",
     "test:coverage:text": "c8 --reporter=text node --test tests/unit/**/*.test.js tests/integration/**/*.test.js",
-    "test:coverage:html": "c8 --reporter=html node --test tests/unit/**/*.test.js tests/integration/**/*.test.js && echo 'Coverage report: coverage/index.html'"
+    "test:coverage:html": "c8 --reporter=html node --test tests/unit/**/*.test.js tests/integration/**/*.test.js && echo 'Coverage report: coverage/index.html'",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "c8": "^10.1.2"
+    "@types/node": "^22.0.0",
+    "c8": "^10.1.2",
+    "typescript": "^5.7.0"
   },
   "keywords": [
     "git",
