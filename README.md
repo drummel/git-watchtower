@@ -1,32 +1,31 @@
 # Git Watchtower
 
-A real-time terminal dashboard for monitoring git branch activity.
+Monitor and switch between git branches in real-time. Built for working with web based AI coding agents, like Claude Code Web & Codex.
 
-- **Live branch monitoring** - Continuously watches your remote for new commits, branches, and deletions
+- **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
 - **Instant notifications** - Visual and audio alerts when any branch is updated
+- **Quick switching** - Preview changes and jump to any branch with a keypress
 - **Auto-pull** - Automatically pulls when your current branch has remote changes
-- **Branch preview** - See commits and changed files before switching, with undo support
-- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js, Vite, etc.)
+- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js. Nuxt.js, Vite, etc)
 
 ![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
 ## Why Git Watchtower?
 
-When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
+When you're using AI coding agents on the web (Claude, OpenAI Codex, etc.) they create branches and push commits while you're not looking. You end up with multiple branches to check on and no easy way to know when they've been updated or what changed.
 
-- Which branches have recent activity
-- When each branch was last updated
-- Visual sparklines showing 7-day commit activity
-- Instant notifications when branches are updated
+Git Watchtower watches your remote and notifies you when branches are updated. Preview what changed, switch with a keypress, undo if needed.
 
-Plus, it supports **three server modes** to fit your workflow:
+Also works for human collaborators, but the primary use case is keeping tabs on AI agents coding on different branches.
+
+Git Watchtower supports **three server modes** to fit your workflow:
 - **Static Site Mode** - Built-in server with live reload for HTML/CSS/JS
 - **Custom Server Command Mode** - Run your own dev server (Next.js, Vite, Nuxt, etc.)
-- **No Server Mode** - Branch monitoring only
+- **No Server Mode** - Branch monitoring only (ideal for watching multiple AI agents)
 
 ## Features
 
-- **Full Terminal UI** - Beautiful dashboard with box drawing and colors
+- **Full Terminal UI** - Clean interface with box drawing and colors
 - **Activity Sparklines** - 7-day commit history visualization for each branch
 - **Branch Search** - Quickly filter branches by name with `/`
 - **Preview Pane** - See recent commits and changed files before switching
@@ -88,28 +87,13 @@ git-watchtower --help
 ## Server Modes
 
 ### Static Site Mode (Default)
-Serves static files with automatic live reload. Perfect for:
-- Static HTML/CSS/JS sites
-- Projects without a build step
-- Quick prototyping
+Serves static files with automatic live reload. Good for static HTML/CSS/JS sites, projects without a build step, quick prototyping.
 
 ### Custom Server Command Mode
-Runs your own dev server command. Perfect for:
-- **Next.js** - `next dev`
-- **Vite/React** - `npm run dev` or `vite`
-- **Nuxt** - `nuxt dev`
-- **Any other framework** with its own dev server
-
-Features:
-- Press `l` to view server logs
-- Press `R` to restart the server
-- Optional auto-restart on branch switch
+Runs your own dev server command (`next dev`, `npm run dev`, `vite`, etc.). Press `l` to view server logs, `R` to restart the server.
 
 ### No Server Mode
-Branch monitoring only, no server. Perfect for:
-- Backend projects
-- When you have your own dev server running separately
-- Monitoring multiple AI coding agents (Claude Code, Cursor, etc.) working in parallel worktrees
+Branch monitoring only. Use this when watching AI agents push to multiple branches, or when you have your own dev server running separately.
 
 ## Configuration
 
@@ -345,4 +329,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - Built with Node.js built-in modules only (no external dependencies)
-- Inspired by tools like `lazygit`, `tig`, and `gitui`
