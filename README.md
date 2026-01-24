@@ -1,12 +1,12 @@
 # Git Watchtower
 
-Monitor and switch between git branches in real-time—built for working with AI coding agents.
+Monitor and switch between git branches in real-time—built for working with web based AI coding agents, like Claude Code Web & Codex.
 
 - **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
 - **Instant notifications** - Visual and audio alerts when any branch is updated
 - **Quick switching** - Preview changes and jump to any branch with a keypress
 - **Auto-pull** - Automatically pulls when your current branch has remote changes
-- **Optional dev server** - Built-in static server with live reload, or run your own command
+- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js. Nuxt.js, Vite, etc)
 
 ![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
