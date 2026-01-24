@@ -1,27 +1,27 @@
 # Git Watchtower
 
-A real-time terminal dashboard for monitoring git branch activity—built for the age of AI coding agents.
+Monitor and switch between git branches in real-time—built for working with AI coding agents.
 
-- **Live branch monitoring** - Continuously watches your remote for new commits, branches, and deletions
+- **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
 - **Instant notifications** - Visual and audio alerts when any branch is updated
+- **Quick switching** - Preview changes and jump to any branch with a keypress
 - **Auto-pull** - Automatically pulls when your current branch has remote changes
-- **Branch preview** - See commits and changed files before switching, with undo support
-- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js, Vite, etc.)
+- **Optional dev server** - Built-in static server with live reload, or run your own command
 
 ![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
 ## Why Git Watchtower?
 
-When you're running multiple AI coding agents—Claude's web interface, OpenAI Codex, or similar tools—they each spin up their own branches and work in parallel threads. You quickly end up with a dozen branches and no easy way to see what's happening across all of them.
+When you're using AI coding agents on the web—Claude's web interface, OpenAI Codex, or similar tools—they create branches and push commits while you're not looking. You end up with multiple branches to check on and no easy way to know when they've been updated or what changed.
 
-Git Watchtower gives you a live dashboard to:
+Git Watchtower lets you:
 
-- **See all agent branches at a glance** - Know which agents are actively pushing commits
-- **Get notified instantly** - Audio and visual alerts when any branch is updated
-- **Preview before switching** - See exactly what an agent changed before checking out
-- **Bounce between branches quickly** - Jump to any branch with a keypress, undo if needed
+- **Monitor all branches** - See which ones have new commits as they happen
+- **Get notified** - Audio and visual alerts when any branch is updated
+- **Preview before switching** - See what changed before you check out
+- **Switch quickly** - Jump to any branch with a keypress, undo if needed
 
-This also works great for human collaborators working across multiple branches—but if you're juggling several AI agents coding in parallel, this is the tool you need.
+Also works for human collaborators—but the primary use case is keeping tabs on AI agents coding on different branches.
 
 Git Watchtower supports **three server modes** to fit your workflow:
 - **Static Site Mode** - Built-in server with live reload for HTML/CSS/JS
@@ -30,7 +30,7 @@ Git Watchtower supports **three server modes** to fit your workflow:
 
 ## Features
 
-- **Full Terminal UI** - Beautiful dashboard with box drawing and colors
+- **Full Terminal UI** - Clean interface with box drawing and colors
 - **Activity Sparklines** - 7-day commit history visualization for each branch
 - **Branch Search** - Quickly filter branches by name with `/`
 - **Preview Pane** - See recent commits and changed files before switching
