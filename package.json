@@ -34,7 +34,7 @@
     "dashboard",
     "sparklines"
   ],
-  "author": "",
+  "author": "drummel <drummel@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
