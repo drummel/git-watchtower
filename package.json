@@ -8,11 +8,13 @@
   },
   "scripts": {
     "start": "node bin/git-watchtower.js",
-    "test": "node --test tests/unit/**/*.test.js",
+    "test": "node --test tests/unit/**/*.test.js tests/integration/**/*.test.js",
+    "test:unit": "node --test tests/unit/**/*.test.js",
+    "test:integration": "node --test tests/integration/**/*.test.js",
     "test:watch": "node --test --watch tests/unit/**/*.test.js",
-    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov node --test tests/unit/**/*.test.js",
-    "test:coverage:text": "c8 --reporter=text node --test tests/unit/**/*.test.js",
-    "test:coverage:html": "c8 --reporter=html node --test tests/unit/**/*.test.js && echo 'Coverage report: coverage/index.html'"
+    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov node --test tests/unit/**/*.test.js tests/integration/**/*.test.js",
+    "test:coverage:text": "c8 --reporter=text node --test tests/unit/**/*.test.js tests/integration/**/*.test.js",
+    "test:coverage:html": "c8 --reporter=html node --test tests/unit/**/*.test.js tests/integration/**/*.test.js && echo 'Coverage report: coverage/index.html'"
   },
   "devDependencies": {
     "c8": "^10.1.2"
