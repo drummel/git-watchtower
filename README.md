@@ -1,6 +1,6 @@
 # Git Watchtower
 
-A real-time terminal dashboard for monitoring git branch activity.
+A real-time terminal dashboard for monitoring git branch activity—built for the age of AI coding agents.
 
 - **Live branch monitoring** - Continuously watches your remote for new commits, branches, and deletions
 - **Instant notifications** - Visual and audio alerts when any branch is updated
@@ -12,17 +12,21 @@ A real-time terminal dashboard for monitoring git branch activity.
 
 ## Why Git Watchtower?
 
-When working on projects with multiple collaborators or across several branches, it's easy to lose track of what's happening. Git Watchtower gives you a live dashboard showing:
+When you're running multiple AI coding agents—Claude's web interface, OpenAI Codex, or similar tools—they each spin up their own branches and work in parallel threads. You quickly end up with a dozen branches and no easy way to see what's happening across all of them.
 
-- Which branches have recent activity
-- When each branch was last updated
-- Visual sparklines showing 7-day commit activity
-- Instant notifications when branches are updated
+Git Watchtower gives you a live dashboard to:
 
-Plus, it supports **three server modes** to fit your workflow:
+- **See all agent branches at a glance** - Know which agents are actively pushing commits
+- **Get notified instantly** - Audio and visual alerts when any branch is updated
+- **Preview before switching** - See exactly what an agent changed before checking out
+- **Bounce between branches quickly** - Jump to any branch with a keypress, undo if needed
+
+This also works great for human collaborators working across multiple branches—but if you're juggling several AI agents coding in parallel, this is the tool you need.
+
+Git Watchtower supports **three server modes** to fit your workflow:
 - **Static Site Mode** - Built-in server with live reload for HTML/CSS/JS
 - **Custom Server Command Mode** - Run your own dev server (Next.js, Vite, Nuxt, etc.)
-- **No Server Mode** - Branch monitoring only
+- **No Server Mode** - Branch monitoring only (ideal for watching multiple AI agents)
 
 ## Features
 
@@ -107,9 +111,9 @@ Features:
 
 ### No Server Mode
 Branch monitoring only, no server. Perfect for:
+- Watching AI agents (Claude web, OpenAI Codex, etc.) pushing to multiple branches
 - Backend projects
 - When you have your own dev server running separately
-- Monitoring multiple AI coding agents (Claude Code, Cursor, etc.) working in parallel worktrees
 
 ## Configuration
 
