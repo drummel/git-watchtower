@@ -175,6 +175,7 @@ function debounce(fn, delay) {
     }
   };
 
+  // @ts-ignore - TypeScript can't verify generic function augmentation
   return debounced;
 }
 
@@ -189,6 +190,7 @@ function throttle(fn, interval) {
   let lastCall = 0;
   let timeoutId = null;
 
+  // @ts-ignore - TypeScript can't verify generic function return type
   return (...args) => {
     const now = Date.now();
     const timeSinceLastCall = now - lastCall;

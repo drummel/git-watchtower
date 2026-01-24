@@ -168,6 +168,7 @@ class ProcessManager {
 
     // Spawn options
     const isWindows = process.platform === 'win32';
+    /** @type {import('child_process').SpawnOptions} */
     const spawnOptions = {
       cwd: this.cwd,
       env: { ...process.env, FORCE_COLOR: '1' },
@@ -180,13 +181,13 @@ class ProcessManager {
       this.running = true;
 
       // Handle stdout
-      this.process.stdout.on('data', (data) => {
+      this.process.stdout?.on('data', (data) => {
         const lines = data.toString().split('\n').filter(Boolean);
         lines.forEach((line) => this.addLog(line));
       });
 
       // Handle stderr
-      this.process.stderr.on('data', (data) => {
+      this.process.stderr?.on('data', (data) => {
         const lines = data.toString().split('\n').filter(Boolean);
         lines.forEach((line) => this.addLog(line, true));
       });

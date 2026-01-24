@@ -136,7 +136,7 @@ async function getAllBranches(options = {}) {
         if (name === 'HEAD') continue;
         if (!isValidBranchName(name)) continue;
 
-        const existing = branchList.find((b) => b.name === name);
+        const existing = /** @type {Branch|undefined} */ (branchList.find((b) => b.name === name));
         if (existing) {
           existing.hasRemote = true;
           existing.remoteCommit = commit;
@@ -164,7 +164,7 @@ async function getAllBranches(options = {}) {
     }
 
     // Sort by date (most recent first)
-    branchList.sort((a, b) => b.date - a.date);
+    branchList.sort((a, b) => b.date.getTime() - a.date.getTime());
 
     return branchList;
   } catch (error) {

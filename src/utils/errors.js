@@ -169,8 +169,10 @@ class GitError extends AppError {
     let code = 'GIT_ERROR';
 
     // Determine specific error code
+    // @ts-ignore - Node.js ExecException has killed and code properties
     if (error.killed) {
       code = 'GIT_TIMEOUT';
+      // @ts-ignore - Node.js ExecException has code property
     } else if (error.code === 'ENOENT') {
       code = 'GIT_NOT_FOUND';
     }

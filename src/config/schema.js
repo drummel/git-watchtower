@@ -35,10 +35,11 @@ const SERVER_MODES = ['static', 'command', 'none'];
 
 /**
  * Configuration defaults
+ * @type {Config}
  */
 const DEFAULTS = {
   server: {
-    mode: 'static',
+    mode: /** @type {ServerMode} */ ('static'),
     staticDir: 'public',
     command: '',
     port: 3000,

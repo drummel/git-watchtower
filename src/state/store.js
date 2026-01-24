@@ -192,6 +192,7 @@ class Store {
   subscribeToKeys(keys, listener) {
     const keySet = new Set(keys);
     return this.subscribe((prevState, newState, changedKeys) => {
+      // @ts-ignore - changedKeys are always valid State keys
       if (changedKeys.some((key) => keySet.has(key))) {
         listener(prevState, newState);
       }

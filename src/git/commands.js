@@ -213,7 +213,7 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
     for (const line of stdout.split('\n').filter(Boolean)) {
       const commitDate = new Date(line);
       commitDate.setHours(0, 0, 0, 0);
-      const daysDiff = Math.floor((today - commitDate) / (1000 * 60 * 60 * 24));
+      const daysDiff = Math.floor((today.getTime() - commitDate.getTime()) / (1000 * 60 * 60 * 24));
       if (daysDiff >= 0 && daysDiff < days) {
         counts[days - 1 - daysDiff]++;
       }
