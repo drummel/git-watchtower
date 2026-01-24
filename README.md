@@ -1,5 +1,9 @@
 # Git Watchtower
 
+[![npm version](https://img.shields.io/npm/v/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
+[![npm downloads](https://img.shields.io/npm/dm/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Monitor and switch between git branches in real-time. Built for working with web based AI coding agents, like Claude Code Web & Codex.
 
 - **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
@@ -198,7 +202,7 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 
 ## Requirements
 
-- **Node.js** 14.0.0 or higher
+- **Node.js** 18.0.0 or higher
 - **Git** installed and in PATH
 - **Git remote** configured (any name, defaults to `origin`)
 - **Terminal** with ANSI color support
