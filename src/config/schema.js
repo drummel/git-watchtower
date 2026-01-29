@@ -26,6 +26,7 @@ const { ConfigError, ValidationError } = require('../utils/errors');
  * @property {number} gitPollInterval - Polling interval in ms
  * @property {boolean} soundEnabled - Sound notifications enabled
  * @property {number} visibleBranches - Number of visible branches
+ * @property {boolean} casinoMode - Casino mode enabled
  */
 
 /**
