@@ -1422,7 +1422,7 @@ function renderCasinoStats(startRow) {
   // Line 2: House Edge | Vibes Quality | Luck Meter | Dopamine Hits
   write(ansi.moveTo(startRow + 3, 3));
   write('🎰 House Edge: ' + ansi.brightCyan + stats.houseEdge + '%' + ansi.reset);
-  write('  |  ' + stats.vibesQuality + ' Vibes Quality: ' + ansi.brightMagenta + 'Immaculate' + ansi.reset);
+  write('  |  😎 Vibes: ' + ansi.brightMagenta + 'Immaculate' + ansi.reset + ' ' + stats.vibesQuality);
   write('  |  🎲 Luck: ' + ansi.brightYellow + stats.luckMeter + '%' + ansi.reset);
   write('  |  🧠 Dopamine Hits: ' + ansi.brightGreen + stats.dopamineHits + ansi.reset);
 
@@ -1923,10 +1923,10 @@ function render() {
         rightLabel = '';
       } else if (resultLabel) {
         leftLabel = ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
-        // Flash effect for jackpots
+        // Flash effect for jackpots, use result color for text
         const flash = resultLabel.isJackpot && (Math.floor(Date.now() / 150) % 2 === 0);
         const bgColor = flash ? ansi.bgBrightYellow : ansi.bgWhite;
-        rightLabel = ' ' + bgColor + ansi.black + ansi.bold + ' ' + resultLabel.text + ' ' + ansi.reset;
+        rightLabel = ' ' + bgColor + resultLabel.color + ansi.bold + ' ' + resultLabel.text + ' ' + ansi.reset;
       } else {
         leftLabel = ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
         rightLabel = '';
