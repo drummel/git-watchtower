@@ -919,6 +919,49 @@ function padLeft(str, len) {
   return ' '.repeat(len - str.length) + str;
 }
 
+// Casino mode funny messages
+const CASINO_WIN_MESSAGES = [
+  "Here's your dopamine hit! 🎰",
+  "The house always wins... wait, YOU won!",
+  "Cha-ching! Fresh code incoming!",
+  "🎲 Lucky roll! New commits detected!",
+  "Jackpot! Someone's been busy coding!",
+  "💰 Cashing out some fresh changes!",
+  "The slot gods smile upon you!",
+  "Winner winner, chicken dinner! 🍗",
+  "Your patience has been rewarded!",
+  "🎯 Bullseye! Updates acquired!",
+  "Dopamine delivery service! 📦",
+  "The code fairy visited while you waited!",
+  "🌟 Wish granted: new commits!",
+  "Variable reward unlocked! 🔓",
+  "Your gambling addiction pays off!",
+];
+
+const CASINO_PULL_MESSAGES = [
+  "Pulling the lever... 🎰",
+  "Spinning the reels of fate...",
+  "Checking if luck is on your side...",
+  "Rolling the dice on git fetch...",
+  "Summoning the code spirits...",
+  "Consulting the commit oracle...",
+];
+
+const CASINO_LOSS_MESSAGES = [
+  "The house wins this round! 💀",
+  "Better luck next merge!",
+  "🎲 Snake eyes! Conflict detected!",
+  "Busted! Time to resolve manually.",
+  "The git gods are displeased...",
+];
+
+function getCasinoMessage(type) {
+  const messages = type === 'win' ? CASINO_WIN_MESSAGES
+    : type === 'pull' ? CASINO_PULL_MESSAGES
+    : CASINO_LOSS_MESSAGES;
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
 function addLog(message, type = 'info') {
   const timestamp = new Date().toLocaleTimeString();
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
@@ -1103,6 +1146,9 @@ function clearArea(row, col, width, height) {
 
 function renderHeader() {
   const width = terminalWidth;
+  // Header row: 1 normally, 2 when casino mode (row 1 is marquee)
+  const headerRow = casinoModeEnabled ? 2 : 1;
+
   let statusIcon = { idle: ansi.green + '●', fetching: ansi.yellow + '⟳', error: ansi.red + '●' }[pollingStatus];
 
   // Override status for special states
@@ -1113,7 +1159,7 @@ function renderHeader() {
   const soundIcon = soundEnabled ? ansi.green + '🔔' : ansi.gray + '🔕';
   const projectName = path.basename(PROJECT_ROOT);
 
-  write(ansi.moveTo(1, 1));
+  write(ansi.moveTo(headerRow, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
 
   // Left side: Title + separator + project name
@@ -1126,11 +1172,19 @@ function renderHeader() {
   let badges = '';
   let badgesVisibleLen = 0;
 
-  // Casino mode badge - show prominently!
+  // Casino mode: show spinning slots when polling, otherwise show badge
   if (casinoModeEnabled) {
-    const casinoBadge = casino.getHeaderBadge();
-    badges += casinoBadge;
-    badgesVisibleLen += 20; // " 🎰 MAX ADDICTION 🎰 "
+    if (isPolling && casino.isSlotSpinning()) {
+      // Show spinning slots in header during polling
+      const slotDisplay = casino.getSlotReelDisplay();
+      badges += ' ' + slotDisplay + ansi.bgBlue + ansi.white;
+      badgesVisibleLen += 15; // approximate width of slot display
+    } else {
+      // Show MAX ADDICTION badge when not polling
+      const casinoBadge = casino.getHeaderBadge();
+      badges += casinoBadge + ansi.bgBlue + ansi.white;
+      badgesVisibleLen += 22; // " 🎰 MAX ADDICTION 🎰 "
+    }
   }
 
   if (SERVER_MODE === 'command' && serverCrashed) {
@@ -1192,7 +1246,8 @@ function renderHeader() {
 }
 
 function renderBranchList() {
-  const startRow = 3;
+  // Start row: 3 normally, 4 when casino mode (row 1 is marquee, row 2 is header)
+  const startRow = casinoModeEnabled ? 4 : 3;
   const boxWidth = terminalWidth;
   const contentWidth = boxWidth - 4; // Space between borders
   const height = Math.min(visibleBranchCount * 2 + 4, Math.floor(terminalHeight * 0.5));
@@ -2376,6 +2431,12 @@ async function pollGitChanges() {
       for (const branch of updatedBranches) {
         addLog(`Update on ${branch.name}: ${branch.commit}`, 'update');
       }
+
+      // Casino mode: add funny commentary
+      if (casinoModeEnabled) {
+        addLog(`🎰 ${getCasinoMessage('win')}`, 'success');
+      }
+
       const names = notifyBranches.map(b => b.name).join(', ');
       showFlash(names);
       playSound();
@@ -2479,6 +2540,7 @@ async function pollGitChanges() {
           if (casinoModeEnabled) {
             casino.triggerLoss('MERGE CONFLICT!', render);
             casinoSounds.playLoss();
+            addLog(`💀 ${getCasinoMessage('loss')}`, 'error');
           }
         } else if (isAuthError(errMsg)) {
           addLog(`Authentication failed during pull`, 'error');
