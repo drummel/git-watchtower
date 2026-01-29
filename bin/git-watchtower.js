@@ -1390,7 +1390,7 @@ function renderCasinoStats(startRow) {
   if (!casinoModeEnabled) return startRow;
 
   const boxWidth = terminalWidth;
-  const height = 5; // Box with breathing room
+  const height = 6; // Box with two content lines
 
   // Don't draw if not enough space
   if (startRow + height > terminalHeight - 3) return startRow;
@@ -1405,22 +1405,26 @@ function renderCasinoStats(startRow) {
 
   const stats = casino.getStats();
 
-  // Net winnings color and emoji
+  // Net winnings color
   const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
   const netSign = stats.netWinnings >= 0 ? '+' : '';
-  const netEmoji = stats.netWinnings >= 0 ? '🪙' : '💸';
 
-  // One-liner: Lines (GitHub style) | Polls ($) | Net
+  // Line 1: Line Changes | Poll Cost | Net Earnings
   write(ansi.moveTo(startRow + 2, 3));
-  // Lines added/removed (GitHub style coloring)
-  write('Lines: ');
+  write('Line Changes: ');
   write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset);
   write(' / ');
   write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset);
-  // Number of polls with $ sign (each poll costs 1)
-  write('  |  💵 Polls: $' + stats.totalPolls);
-  // Net earnings
-  write('  |  ' + netEmoji + ' Net: ' + netColor + netSign + stats.netWinnings + ansi.reset + ' lines');
+  write(' = ' + ansi.brightYellow + '$' + stats.totalLines + ansi.reset + ' 💵');
+  write('  |  Poll Cost: ' + ansi.brightRed + '$' + stats.totalPolls + ansi.reset + ' 💸');
+  write('  |  Net Earnings: ' + netColor + netSign + '$' + stats.netWinnings + ansi.reset + ' 🪙');
+
+  // Line 2: House Edge | Vibes Quality | Luck Meter | Dopamine Hits
+  write(ansi.moveTo(startRow + 3, 3));
+  write('🎰 House Edge: ' + ansi.brightCyan + stats.houseEdge + '%' + ansi.reset);
+  write('  |  ' + stats.vibesQuality + ' Vibes Quality: ' + ansi.brightMagenta + 'Immaculate' + ansi.reset);
+  write('  |  🎲 Luck: ' + ansi.brightYellow + stats.luckMeter + '%' + ansi.reset);
+  write('  |  🧠 Dopamine Hits: ' + ansi.brightGreen + stats.dopamineHits + ansi.reset);
 
   return startRow + height;
 }
@@ -1911,11 +1915,25 @@ function render() {
     const slotDisplay = casino.getSlotReelDisplay();
     if (slotDisplay) {
       // Row 3: below header (row 1 is marquee, row 2 is header)
-      const labelText = casino.isSlotSpinning()
-        ? ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset
-        : ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
-      const fullDisplay = labelText + ' ' + slotDisplay;
-      const col = Math.floor((terminalWidth - 50) / 2); // Center the display
+      const resultLabel = casino.getSlotResultLabel();
+      let leftLabel, rightLabel;
+
+      if (casino.isSlotSpinning()) {
+        leftLabel = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset;
+        rightLabel = '';
+      } else if (resultLabel) {
+        leftLabel = ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
+        // Flash effect for jackpots
+        const flash = resultLabel.isJackpot && (Math.floor(Date.now() / 150) % 2 === 0);
+        const bgColor = flash ? ansi.bgBrightYellow : ansi.bgWhite;
+        rightLabel = ' ' + bgColor + ansi.black + ansi.bold + ' ' + resultLabel.text + ' ' + ansi.reset;
+      } else {
+        leftLabel = ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
+        rightLabel = '';
+      }
+
+      const fullDisplay = leftLabel + ' ' + slotDisplay + rightLabel;
+      const col = Math.floor((terminalWidth - 70) / 2); // Center the display
       write(ansi.moveTo(3, Math.max(2, col)));
       write(fullDisplay);
     }
@@ -2461,12 +2479,12 @@ async function pollGitChanges() {
 
       // Casino mode: trigger win effect based on number of updated branches
       if (casinoModeEnabled) {
-        casino.stopSlotReels(true, render);  // Win - matching symbols + flash
         // Estimate line changes: more branches = bigger "win"
         // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
         const estimatedLines = notifyBranches.length * 100;
-        casino.triggerWin(estimatedLines, 0, render);
         const winLevel = casino.getWinLevel(estimatedLines);
+        casino.stopSlotReels(true, render, winLevel);  // Win - matching symbols + flash + label
+        casino.triggerWin(estimatedLines, 0, render);
         if (winLevel) {
           casinoSounds.playForWinLevel(winLevel.key);
         }

@@ -40,6 +40,7 @@ let slotResultIsWin = false;     // Whether result was a win
 let slotResultFlashFrame = 0;    // Flash animation frame
 let slotResultInterval = null;   // Interval for result display/flash
 let slotResultRenderCallback = null; // Callback for re-rendering
+let slotResultLabel = null;      // "NOTHING", "WIN", "BIG WIN", "JACKPOT" etc
 
 // Win animation state
 let winAnimationFrame = 0;
@@ -241,8 +242,9 @@ function startSlotReels(renderCallback) {
  * Stop slot reel animation and show result
  * @param {boolean} hadUpdates - Whether this poll found updates (win)
  * @param {Function} renderCallback - Called to re-render display
+ * @param {Object|null} winLevel - The win level object from getWinLevel()
  */
-function stopSlotReels(hadUpdates = false, renderCallback = null) {
+function stopSlotReels(hadUpdates = false, renderCallback = null, winLevel = null) {
   if (slotReelInterval) {
     clearInterval(slotReelInterval);
     slotReelInterval = null;
@@ -259,18 +261,44 @@ function stopSlotReels(hadUpdates = false, renderCallback = null) {
   slotResultFlashFrame = 0;
   slotResultRenderCallback = renderCallback;
 
+  // Set result label based on win level
+  if (!hadUpdates) {
+    slotResultLabel = { text: 'NOTHING', color: ansi.gray, emoji: '😴' };
+  } else if (!winLevel || winLevel.key === 'small') {
+    slotResultLabel = { text: 'WIN', color: ansi.green, emoji: '✨' };
+  } else if (winLevel.key === 'medium') {
+    slotResultLabel = { text: 'NICE WIN', color: ansi.yellow, emoji: '🎉' };
+  } else if (winLevel.key === 'large') {
+    slotResultLabel = { text: 'BIG WIN', color: ansi.brightYellow, emoji: '🔥' };
+  } else if (winLevel.key === 'huge') {
+    slotResultLabel = { text: 'HUGE WIN', color: ansi.brightMagenta, emoji: '💥' };
+  } else if (winLevel.key === 'jackpot') {
+    slotResultLabel = { text: '💰 JACKPOT 💰', color: ansi.brightCyan, emoji: '7️⃣', isJackpot: true };
+  } else if (winLevel.key === 'mega') {
+    slotResultLabel = { text: '🎰💰 MEGA JACKPOT 💰🎰', color: ansi.brightRed, emoji: '7️⃣', isJackpot: true };
+  } else {
+    slotResultLabel = { text: 'WIN', color: ansi.green, emoji: '✨' };
+  }
+
   if (hadUpdates) {
-    // WIN: All matching symbols (jackpot look)
-    const winSymbol = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+    // WIN: Pick symbol based on win level
+    let winSymbol;
+    if (slotResultLabel.isJackpot) {
+      winSymbol = '7️⃣'; // Classic jackpot sevens
+    } else {
+      winSymbol = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+    }
     slotResult = [winSymbol, winSymbol, winSymbol, winSymbol, winSymbol];
 
-    // Flash animation for wins
+    // Flash animation for wins (longer for jackpots)
+    const flashDuration = slotResultLabel.isJackpot ? 40 : 20;
     slotResultInterval = setInterval(() => {
       slotResultFlashFrame++;
-      if (slotResultFlashFrame > 20) {
+      if (slotResultFlashFrame > flashDuration) {
         clearInterval(slotResultInterval);
         slotResultInterval = null;
         slotResult = null;
+        slotResultLabel = null;
         if (slotResultRenderCallback) slotResultRenderCallback();
       } else if (slotResultRenderCallback) {
         slotResultRenderCallback();
@@ -287,9 +315,18 @@ function stopSlotReels(hadUpdates = false, renderCallback = null) {
     // Display for 2 seconds then fade
     setTimeout(() => {
       slotResult = null;
+      slotResultLabel = null;
       if (slotResultRenderCallback) slotResultRenderCallback();
     }, 2000);
   }
+}
+
+/**
+ * Get the current slot result label
+ * @returns {Object|null}
+ */
+function getSlotResultLabel() {
+  return slotResultLabel;
 }
 
 /**
@@ -562,6 +599,16 @@ function getStats() {
   // House edge - oscillates between 55% and 100%
   const houseEdge = Math.round(55 + Math.random() * 45);
 
+  // Vibes quality - random emoji that changes slowly (based on seconds)
+  const vibesEmojis = ['😎', '🔥', '✨', '💫', '🌟', '⚡', '🎯', '💪', '🚀', '💯'];
+  const vibesIndex = Math.floor(Date.now() / 3000) % vibesEmojis.length;
+  const vibesQuality = vibesEmojis[vibesIndex];
+
+  // Dopamine hits - based on updates received, with multiplier for big wins
+  const baseHits = casinoStats.pollsWithUpdates;
+  const bonusHits = casinoStats.bigWins * 2 + casinoStats.jackpots * 5 + casinoStats.megaJackpots * 10;
+  const dopamineHits = baseHits + bonusHits;
+
   // Net winnings: total lines gained minus poll cost (1 per poll)
   const totalLines = casinoStats.totalLinesAdded + casinoStats.totalLinesDeleted;
   const netWinnings = totalLines - casinoStats.totalPolls;
@@ -574,6 +621,8 @@ function getStats() {
     timeSinceLastHit,
     luckMeter,
     houseEdge,
+    vibesQuality,
+    dopamineHits,
     netWinnings,
   };
 }
@@ -650,6 +699,7 @@ module.exports = {
   hasSlotResult,
   isSlotsActive,
   getSlotReelDisplay,
+  getSlotResultLabel,
 
   // Win effects
   triggerWin,
