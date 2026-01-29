@@ -693,6 +693,7 @@ const ansi = {
   italic: `${CSI}3m`,
   underline: `${CSI}4m`,
   inverse: `${CSI}7m`,
+  blink: `${CSI}5m`,
 
   // Foreground colors
   black: `${CSI}30m`,
@@ -705,6 +706,15 @@ const ansi = {
   white: `${CSI}37m`,
   gray: `${CSI}90m`,
 
+  // Bright foreground colors
+  brightRed: `${CSI}91m`,
+  brightGreen: `${CSI}92m`,
+  brightYellow: `${CSI}93m`,
+  brightBlue: `${CSI}94m`,
+  brightMagenta: `${CSI}95m`,
+  brightCyan: `${CSI}96m`,
+  brightWhite: `${CSI}97m`,
+
   // Background colors
   bgBlack: `${CSI}40m`,
   bgRed: `${CSI}41m`,
@@ -714,6 +724,15 @@ const ansi = {
   bgMagenta: `${CSI}45m`,
   bgCyan: `${CSI}46m`,
   bgWhite: `${CSI}47m`,
+
+  // Bright background colors
+  bgBrightRed: `${CSI}101m`,
+  bgBrightGreen: `${CSI}102m`,
+  bgBrightYellow: `${CSI}103m`,
+  bgBrightBlue: `${CSI}104m`,
+  bgBrightMagenta: `${CSI}105m`,
+  bgBrightCyan: `${CSI}106m`,
+  bgBrightWhite: `${CSI}107m`,
 
   // 256 colors
   fg256: (n) => `${CSI}38;5;${n}m`,
@@ -1106,6 +1125,14 @@ function renderHeader() {
   // Warning badges (center area)
   let badges = '';
   let badgesVisibleLen = 0;
+
+  // Casino mode badge - show prominently!
+  if (casinoModeEnabled) {
+    const casinoBadge = casino.getHeaderBadge();
+    badges += casinoBadge;
+    badgesVisibleLen += 20; // " 🎰 MAX ADDICTION 🎰 "
+  }
+
   if (SERVER_MODE === 'command' && serverCrashed) {
     const label = ' CRASHED ';
     badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
@@ -1793,10 +1820,21 @@ function render() {
   renderActivityLog(logStart);
   renderFooter();
 
-  // Casino mode: bottom marquee border
+  // Casino mode: full border (top, bottom, left, right)
   if (casinoModeEnabled) {
+    // Bottom marquee border
     write(ansi.moveTo(terminalHeight, 1));
     write(casino.renderMarqueeLine(terminalWidth, 'bottom'));
+
+    // Left and right side borders
+    for (let row = 2; row < terminalHeight; row++) {
+      // Left side
+      write(ansi.moveTo(row, 1));
+      write(casino.getMarqueeSideChar(row, terminalHeight, 'left'));
+      // Right side
+      write(ansi.moveTo(row, terminalWidth));
+      write(casino.getMarqueeSideChar(row, terminalHeight, 'right'));
+    }
   }
 
   // Casino mode: slot reels when polling

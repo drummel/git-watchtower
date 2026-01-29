@@ -157,6 +157,39 @@ function getMarqueeChar(position, total) {
 }
 
 /**
+ * Get a single marquee character for a specific position on the border
+ * @param {number} row - Current row (for side borders)
+ * @param {number} height - Terminal height
+ * @param {'left' | 'right'} side - Which side
+ * @returns {string}
+ */
+function getMarqueeSideChar(row, height, side) {
+  if (!casinoEnabled) return ' ';
+
+  // For side borders, offset based on row position
+  const position = side === 'left' ? row : (height - row);
+  const offset = (marqueeFrame + position) % MARQUEE_COLORS.length;
+  const charOffset = Math.floor((marqueeFrame + position) / 2) % MARQUEE_CHARS.length;
+  return MARQUEE_COLORS[offset] + MARQUEE_CHARS[charOffset] + ansi.reset;
+}
+
+/**
+ * Get casino mode header badge
+ * @returns {string}
+ */
+function getHeaderBadge() {
+  if (!casinoEnabled) return '';
+
+  // Flashing "MAX ADDICTION" badge
+  const flash = Math.floor(marqueeFrame / 2) % 2 === 0;
+  const colors = flash
+    ? ansi.bgBrightMagenta + ansi.brightYellow + ansi.bold
+    : ansi.bgBrightYellow + ansi.brightMagenta + ansi.bold;
+
+  return ` ${colors} 🎰 MAX ADDICTION 🎰 ${ansi.reset}`;
+}
+
+/**
  * Render a marquee border line
  * @param {number} width - Terminal width
  * @param {'top' | 'bottom'} position - Border position
@@ -477,6 +510,8 @@ module.exports = {
 
   // Marquee
   renderMarqueeLine,
+  getMarqueeSideChar,
+  getHeaderBadge,
   startMarquee,
   stopMarquee,
 
