@@ -1409,9 +1409,9 @@ function renderCasinoStats(startRow) {
   const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
   const netSign = stats.netWinnings >= 0 ? '+' : '';
 
-  // Simple one-liner: Pulls cost 1 line each, show the math
+  // Simple one-liner: Polls cost 1 line each, show the math
   write(ansi.moveTo(startRow + 2, 3));
-  write('Pulls: ' + stats.totalPolls + ' (-1 line each)');
+  write('Polls: ' + stats.totalPolls + ' (-1 line each)');
   write('  |  Lines won: ' + ansi.brightGreen + '+' + stats.totalLines + ansi.reset);
   write('  |  Net: ' + netColor + netSign + stats.netWinnings + ansi.reset + ' lines');
 
@@ -1904,8 +1904,8 @@ function render() {
     const slotDisplay = casino.getSlotReelDisplay();
     if (slotDisplay) {
       // Row 3: below header (row 1 is marquee, row 2 is header)
-      const pullingText = ansi.bgBrightYellow + ansi.black + ansi.bold + ' PULLING ' + ansi.reset;
-      const fullDisplay = pullingText + ' ' + slotDisplay + ' ' + pullingText;
+      const pollingText = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset;
+      const fullDisplay = pollingText + ' ' + slotDisplay + ' ' + pollingText;
       const col = Math.floor((terminalWidth - 45) / 2); // Center the display
       write(ansi.moveTo(3, Math.max(2, col)));
       write(fullDisplay);
