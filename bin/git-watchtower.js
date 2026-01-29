@@ -1170,16 +1170,7 @@ function renderHeader() {
   let badges = '';
   let badgesVisibleLen = 0;
 
-  // Casino mode: show polling indicator with slot reels
-  if (casinoModeEnabled && isPolling && casino.isSlotSpinning()) {
-    // Fixed-width polling display: "POLLING [reels] POLLING"
-    const slotDisplay = casino.getSlotReelDisplay();
-    const pollingBadge = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset + ansi.bgBlue + ansi.white +
-      ' ' + slotDisplay + ansi.bgBlue + ansi.white + ' ' +
-      ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset + ansi.bgBlue + ansi.white;
-    badges += ' ' + pollingBadge;
-    badgesVisibleLen += 38; // " POLLING " + slots + " POLLING " (fixed width)
-  }
+  // Casino mode slot display moved to its own row below header (row 3)
 
   if (SERVER_MODE === 'command' && serverCrashed) {
     const label = ' CRASHED ';
@@ -1395,19 +1386,49 @@ function renderActivityLog(startRow) {
   return startRow + height;
 }
 
-function renderFooter() {
-  // Casino mode: show stats on a separate line above the controls
-  if (casinoModeEnabled) {
-    const statsRow = terminalHeight - 2;
-    write(ansi.moveTo(statsRow, 1));
-    write(ansi.bgBlack);
-    const statsDisplay = casino.getStatsDisplay();
-    write(statsDisplay);
-    write(' '.repeat(Math.max(0, terminalWidth - 60))); // Pad to clear line
-    write(ansi.reset);
+function renderCasinoStats(startRow) {
+  if (!casinoModeEnabled) return startRow;
+
+  const boxWidth = terminalWidth;
+  const height = 4; // Small box for stats
+
+  // Don't draw if not enough space
+  if (startRow + height > terminalHeight - 3) return startRow;
+
+  drawBox(startRow, 1, boxWidth, height, '🎰 CASINO WINNINGS 🎰', ansi.brightMagenta);
+
+  // Clear content area
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(startRow + i, 2));
+    write(' '.repeat(boxWidth - 2));
   }
 
-  const row = casinoModeEnabled ? terminalHeight - 1 : terminalHeight - 1;
+  const stats = casino.getStats();
+
+  // Row 1: Lines won
+  write(ansi.moveTo(startRow + 1, 3));
+  write(ansi.brightYellow + 'Session Winnings: ' + ansi.reset);
+  write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset + ' / ');
+  write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset + ' lines');
+
+  // Row 2: Jackpots and streaks
+  write(ansi.moveTo(startRow + 2, 3));
+  if (stats.jackpots > 0) {
+    write(ansi.brightCyan + '💰 Jackpots: ' + stats.jackpots + ansi.reset + '  ');
+  }
+  if (stats.bigWins > 0) {
+    write(ansi.brightYellow + '🎯 Big Wins: ' + stats.bigWins + ansi.reset + '  ');
+  }
+  if (stats.consecutivePolls > 1) {
+    write(ansi.brightMagenta + '🔥 Streak: ' + stats.consecutivePolls + 'x' + ansi.reset + '  ');
+  }
+  write(ansi.gray + '⏱ ' + stats.sessionDuration + ansi.reset);
+
+  return startRow + height;
+}
+
+function renderFooter() {
+  const row = terminalHeight - 1;
 
   write(ansi.moveTo(row, 1));
   write(ansi.bgBlack + ansi.white);
@@ -1866,7 +1887,8 @@ function render() {
 
   renderHeader();
   const logStart = renderBranchList();
-  renderActivityLog(logStart);
+  const statsStart = renderActivityLog(logStart);
+  renderCasinoStats(statsStart);
   renderFooter();
 
   // Casino mode: full border (top, bottom, left, right)
@@ -1886,13 +1908,16 @@ function render() {
     }
   }
 
-  // Casino mode: slot reels when polling
+  // Casino mode: slot reels on row 3 (below header) when polling
   if (casinoModeEnabled && casino.isSlotSpinning()) {
     const slotDisplay = casino.getSlotReelDisplay();
     if (slotDisplay) {
-      const col = Math.floor((terminalWidth - 20) / 2);
-      write(ansi.moveTo(2, col));
-      write(slotDisplay);
+      // Row 3: below header (row 1 is marquee, row 2 is header)
+      const pullingText = ansi.bgBrightYellow + ansi.black + ansi.bold + ' PULLING ' + ansi.reset;
+      const fullDisplay = pullingText + ' ' + slotDisplay + ' ' + pullingText;
+      const col = Math.floor((terminalWidth - 45) / 2); // Center the display
+      write(ansi.moveTo(3, Math.max(2, col)));
+      write(fullDisplay);
     }
   }
 
@@ -2989,8 +3014,12 @@ function setupKeyboardInput() {
       case 'c': // Toggle casino mode
         casinoModeEnabled = casino.toggle();
         addLog(`Casino mode ${casinoModeEnabled ? '🎰 ENABLED' : 'disabled'}`, casinoModeEnabled ? 'success' : 'info');
-        if (casinoModeEnabled && soundEnabled) {
-          casinoSounds.playJackpot();
+        if (casinoModeEnabled) {
+          // Add vibe coding commentary
+          addLog(`Ever notice vibe coding is just variable reward timing? 🎲`, 'info');
+          if (soundEnabled) {
+            casinoSounds.playJackpot();
+          }
         }
         render();
         break;

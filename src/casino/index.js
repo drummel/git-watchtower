@@ -249,22 +249,19 @@ function isSlotSpinning() {
 }
 
 /**
- * Get current slot reel display (3 reels)
+ * Get current slot reel display (3 reels) with emojis
  * @returns {string}
  */
 function getSlotReelDisplay() {
   if (!isSpinning) return '';
 
-  // Use simple ASCII characters for consistent width in header
-  const spinChars = ['◆', '◇', '●', '○', '★', '☆', '▲', '▼'];
   const symbols = [];
   for (let i = 0; i < 3; i++) {
-    const idx = (slotReelFrame + i * 3) % spinChars.length;
-    symbols.push(spinChars[idx]);
+    const idx = (slotReelFrame + i * 3) % SLOT_SYMBOLS.length;
+    symbols.push(SLOT_SYMBOLS[idx]);
   }
 
-  // Fixed-width display: "[◆ ◇ ●]"
-  return `${ansi.bgBlack}${ansi.brightYellow}[${symbols.join(' ')}]${ansi.reset}`;
+  return `${ansi.bgBlack}${ansi.brightYellow} 🎰 ${symbols.join(' ')} 🎰 ${ansi.reset}`;
 }
 
 // ============================================================================
