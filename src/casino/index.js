@@ -252,19 +252,21 @@ function isSlotSpinning() {
 }
 
 /**
- * Get current slot reel display (3 reels) with emojis
+ * Get current slot reel display (5 reels) with emojis on white backgrounds
  * @returns {string}
  */
 function getSlotReelDisplay() {
   if (!isSpinning) return '';
 
-  const symbols = [];
-  for (let i = 0; i < 3; i++) {
+  const reels = [];
+  for (let i = 0; i < 5; i++) {
     const idx = (slotReelFrame + i * 3) % SLOT_SYMBOLS.length;
-    symbols.push(SLOT_SYMBOLS[idx]);
+    // Each emoji on white background
+    reels.push(`${ansi.bgWhite} ${SLOT_SYMBOLS[idx]} ${ansi.reset}`);
   }
 
-  return `${ansi.bgBlack}${ansi.brightYellow} 🎰 ${symbols.join(' ')} 🎰 ${ansi.reset}`;
+  // Join with black background space between
+  return reels.join(`${ansi.bgBlack} ${ansi.reset}`);
 }
 
 // ============================================================================

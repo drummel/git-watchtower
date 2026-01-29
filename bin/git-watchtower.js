@@ -1905,8 +1905,8 @@ function render() {
     if (slotDisplay) {
       // Row 3: below header (row 1 is marquee, row 2 is header)
       const pollingText = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset;
-      const fullDisplay = pollingText + ' ' + slotDisplay + ' ' + pollingText;
-      const col = Math.floor((terminalWidth - 45) / 2); // Center the display
+      const fullDisplay = pollingText + ' ' + slotDisplay;
+      const col = Math.floor((terminalWidth - 50) / 2); // Center the display
       write(ansi.moveTo(3, Math.max(2, col)));
       write(fullDisplay);
     }
