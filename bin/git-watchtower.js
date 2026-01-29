@@ -1390,7 +1390,7 @@ function renderCasinoStats(startRow) {
   if (!casinoModeEnabled) return startRow;
 
   const boxWidth = terminalWidth;
-  const height = 6; // Box with breathing room
+  const height = 5; // Box with breathing room
 
   // Don't draw if not enough space
   if (startRow + height > terminalHeight - 3) return startRow;
@@ -1406,30 +1406,21 @@ function renderCasinoStats(startRow) {
   const stats = casino.getStats();
   const branchCount = branches.length;
 
-  // Row 1: Empty for breathing
-  // Row 2: Pulls, Watching, Hit Rate, Near Misses, Last Hit
-  write(ansi.moveTo(startRow + 2, 3));
-  write(ansi.brightYellow + '🎰 Pulls: ' + ansi.reset + stats.totalPolls + '  ');
-  write(ansi.brightCyan + '📺 Watching: ' + ansi.reset + branchCount + '  ');
-  write(ansi.brightGreen + '🎯 Hit Rate: ' + ansi.reset + stats.hitRate + '%  ');
-  write(ansi.gray + '💨 Misses: ' + ansi.reset + stats.nearMisses + '  ');
-  write(ansi.brightMagenta + '⚡ Last Hit: ' + ansi.reset + stats.timeSinceLastHit);
-
-  // Row 3: Luck, House Edge, Net Winnings
-  write(ansi.moveTo(startRow + 3, 3));
-  write(ansi.brightCyan + '🎲 Luck: ' + ansi.reset + stats.luckMeter + '%  ');
-  write(ansi.brightRed + '🏠 House Edge: ' + ansi.reset + stats.houseEdge + '%  ');
-
-  // Net winnings with color based on value
+  // Net winnings color
   const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
   const netSign = stats.netWinnings >= 0 ? '+' : '';
-  write(ansi.brightYellow + '💵 Net Winnings: ' + ansi.reset);
-  write(netColor + netSign + stats.netWinnings + ansi.reset + ' lines  ');
 
-  // Session duration
-  write(ansi.gray + '⏱ ' + stats.sessionDuration + ansi.reset);
-
-  // Row 4: Empty for breathing
+  // All stats on one line (row 2, with breathing room above/below)
+  write(ansi.moveTo(startRow + 2, 3));
+  write('🎰 ' + stats.totalPolls + '  ');
+  write('📺 ' + branchCount + '  ');
+  write('🎯 ' + stats.hitRate + '%  ');
+  write('💨 ' + stats.nearMisses + '  ');
+  write('⚡ ' + stats.timeSinceLastHit + '  ');
+  write('🎲 ' + stats.luckMeter + '%  ');
+  write('🏠 ' + stats.houseEdge + '%  ');
+  write('💵 ' + netColor + netSign + stats.netWinnings + ansi.reset + '  ');
+  write('⏱ ' + stats.sessionDuration);
 
   return startRow + height;
 }
