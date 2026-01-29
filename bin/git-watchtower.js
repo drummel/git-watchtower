@@ -1390,12 +1390,12 @@ function renderCasinoStats(startRow) {
   if (!casinoModeEnabled) return startRow;
 
   const boxWidth = terminalWidth;
-  const height = 4; // Small box for stats
+  const height = 6; // Box with breathing room
 
   // Don't draw if not enough space
   if (startRow + height > terminalHeight - 3) return startRow;
 
-  drawBox(startRow, 1, boxWidth, height, '🎰 CASINO WINNINGS 🎰', ansi.brightMagenta);
+  drawBox(startRow, 1, boxWidth, height, '🎰 CASINO STATS 🎰', ansi.brightMagenta);
 
   // Clear content area
   for (let i = 1; i < height - 1; i++) {
@@ -1404,25 +1404,32 @@ function renderCasinoStats(startRow) {
   }
 
   const stats = casino.getStats();
+  const branchCount = branches.length;
 
-  // Row 1: Lines won
-  write(ansi.moveTo(startRow + 1, 3));
-  write(ansi.brightYellow + 'Session Winnings: ' + ansi.reset);
-  write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset + ' / ');
-  write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset + ' lines');
-
-  // Row 2: Jackpots and streaks
+  // Row 1: Empty for breathing
+  // Row 2: Pulls, Watching, Hit Rate, Near Misses, Last Hit
   write(ansi.moveTo(startRow + 2, 3));
-  if (stats.jackpots > 0) {
-    write(ansi.brightCyan + '💰 Jackpots: ' + stats.jackpots + ansi.reset + '  ');
-  }
-  if (stats.bigWins > 0) {
-    write(ansi.brightYellow + '🎯 Big Wins: ' + stats.bigWins + ansi.reset + '  ');
-  }
-  if (stats.consecutivePolls > 1) {
-    write(ansi.brightMagenta + '🔥 Streak: ' + stats.consecutivePolls + 'x' + ansi.reset + '  ');
-  }
+  write(ansi.brightYellow + '🎰 Pulls: ' + ansi.reset + stats.totalPolls + '  ');
+  write(ansi.brightCyan + '📺 Watching: ' + ansi.reset + branchCount + '  ');
+  write(ansi.brightGreen + '🎯 Hit Rate: ' + ansi.reset + stats.hitRate + '%  ');
+  write(ansi.gray + '💨 Misses: ' + ansi.reset + stats.nearMisses + '  ');
+  write(ansi.brightMagenta + '⚡ Last Hit: ' + ansi.reset + stats.timeSinceLastHit);
+
+  // Row 3: Luck, House Edge, Net Winnings
+  write(ansi.moveTo(startRow + 3, 3));
+  write(ansi.brightCyan + '🎲 Luck: ' + ansi.reset + stats.luckMeter + '%  ');
+  write(ansi.brightRed + '🏠 House Edge: ' + ansi.reset + stats.houseEdge + '%  ');
+
+  // Net winnings with color based on value
+  const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
+  const netSign = stats.netWinnings >= 0 ? '+' : '';
+  write(ansi.brightYellow + '💵 Net Winnings: ' + ansi.reset);
+  write(netColor + netSign + stats.netWinnings + ansi.reset + ' lines  ');
+
+  // Session duration
   write(ansi.gray + '⏱ ' + stats.sessionDuration + ansi.reset);
+
+  // Row 4: Empty for breathing
 
   return startRow + height;
 }

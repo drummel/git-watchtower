@@ -22,6 +22,9 @@ let casinoStats = {
   jackpots: 0,         // 1000+ line changes
   megaJackpots: 0,     // 5000+ line changes
   sessionStart: Date.now(),
+  totalPolls: 0,       // Total lever pulls
+  nearMisses: 0,       // Polls with no changes
+  lastHitTime: null,   // Timestamp of last update
 };
 
 // Marquee animation state
@@ -425,16 +428,21 @@ function isLossAnimating() {
 // ============================================================================
 
 /**
- * Record a successful poll
+ * Record a poll (each pull of the lever)
  * @param {boolean} hadUpdates - Whether updates were found
  */
 function recordPoll(hadUpdates) {
   if (!casinoEnabled) return;
 
+  casinoStats.totalPolls++;
+
   if (hadUpdates) {
     casinoStats.consecutivePolls++;
+    casinoStats.lastHitTime = Date.now();
   } else {
-    // Reset streak if no updates (optional - could keep streak going)
+    casinoStats.nearMisses++;
+    // Reset streak on miss
+    casinoStats.consecutivePolls = 0;
   }
 }
 
@@ -447,10 +455,41 @@ function getStats() {
   const hours = Math.floor(elapsed / 3600000);
   const minutes = Math.floor((elapsed % 3600000) / 60000);
 
+  // Calculate hit rate (percentage of polls that had updates)
+  const hitRate = casinoStats.totalPolls > 0
+    ? Math.round((casinoStats.pollsWithUpdates / casinoStats.totalPolls) * 100)
+    : 0;
+
+  // Time since last hit
+  let timeSinceLastHit = 'Never';
+  if (casinoStats.lastHitTime) {
+    const sinceHit = Date.now() - casinoStats.lastHitTime;
+    const hitMins = Math.floor(sinceHit / 60000);
+    const hitSecs = Math.floor((sinceHit % 60000) / 1000);
+    timeSinceLastHit = hitMins > 0 ? `${hitMins}m ${hitSecs}s` : `${hitSecs}s`;
+  }
+
+  // Luck meter - weighted random that trends with recent activity
+  const baseLuck = 50 + Math.random() * 30;
+  const streakBonus = Math.min(casinoStats.consecutivePolls * 5, 20);
+  const luckMeter = Math.min(Math.round(baseLuck + streakBonus), 99);
+
+  // House edge - oscillates between 55% and 100%
+  const houseEdge = Math.round(55 + Math.random() * 45);
+
+  // Net winnings: total lines gained minus poll cost (1 per poll)
+  const totalLines = casinoStats.totalLinesAdded + casinoStats.totalLinesDeleted;
+  const netWinnings = totalLines - casinoStats.totalPolls;
+
   return {
     ...casinoStats,
     sessionDuration: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
-    totalLines: casinoStats.totalLinesAdded + casinoStats.totalLinesDeleted,
+    totalLines,
+    hitRate,
+    timeSinceLastHit,
+    luckMeter,
+    houseEdge,
+    netWinnings,
   };
 }
 
@@ -467,6 +506,9 @@ function resetStats() {
     jackpots: 0,
     megaJackpots: 0,
     sessionStart: Date.now(),
+    totalPolls: 0,
+    nearMisses: 0,
+    lastHitTime: null,
   };
 }
 
