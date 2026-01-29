@@ -35,6 +35,11 @@ let marqueeInterval = null;
 let slotReelFrame = 0;
 let slotReelInterval = null;
 let isSpinning = false;
+let slotResult = null;           // Final symbols to display
+let slotResultIsWin = false;     // Whether result was a win
+let slotResultFlashFrame = 0;    // Flash animation frame
+let slotResultInterval = null;   // Interval for result display/flash
+let slotResultRenderCallback = null; // Callback for re-rendering
 
 // Win animation state
 let winAnimationFrame = 0;
@@ -233,14 +238,58 @@ function startSlotReels(renderCallback) {
 }
 
 /**
- * Stop slot reel animation
+ * Stop slot reel animation and show result
+ * @param {boolean} hadUpdates - Whether this poll found updates (win)
+ * @param {Function} renderCallback - Called to re-render display
  */
-function stopSlotReels() {
+function stopSlotReels(hadUpdates = false, renderCallback = null) {
   if (slotReelInterval) {
     clearInterval(slotReelInterval);
     slotReelInterval = null;
   }
   isSpinning = false;
+
+  // Clear any existing result display
+  if (slotResultInterval) {
+    clearInterval(slotResultInterval);
+    slotResultInterval = null;
+  }
+
+  slotResultIsWin = hadUpdates;
+  slotResultFlashFrame = 0;
+  slotResultRenderCallback = renderCallback;
+
+  if (hadUpdates) {
+    // WIN: All matching symbols (jackpot look)
+    const winSymbol = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
+    slotResult = [winSymbol, winSymbol, winSymbol, winSymbol, winSymbol];
+
+    // Flash animation for wins
+    slotResultInterval = setInterval(() => {
+      slotResultFlashFrame++;
+      if (slotResultFlashFrame > 20) {
+        clearInterval(slotResultInterval);
+        slotResultInterval = null;
+        slotResult = null;
+        if (slotResultRenderCallback) slotResultRenderCallback();
+      } else if (slotResultRenderCallback) {
+        slotResultRenderCallback();
+      }
+    }, 150);
+  } else {
+    // NO WIN: Show random final symbols
+    slotResult = [];
+    for (let i = 0; i < 5; i++) {
+      const idx = (slotReelFrame + i * 3) % SLOT_SYMBOLS.length;
+      slotResult.push(SLOT_SYMBOLS[idx]);
+    }
+
+    // Display for 2 seconds then fade
+    setTimeout(() => {
+      slotResult = null;
+      if (slotResultRenderCallback) slotResultRenderCallback();
+    }, 2000);
+  }
 }
 
 /**
@@ -252,10 +301,44 @@ function isSlotSpinning() {
 }
 
 /**
+ * Check if there's a slot result being displayed
+ * @returns {boolean}
+ */
+function hasSlotResult() {
+  return slotResult !== null;
+}
+
+/**
+ * Check if slots are active (spinning or showing result)
+ * @returns {boolean}
+ */
+function isSlotsActive() {
+  return isSpinning || slotResult !== null;
+}
+
+/**
  * Get current slot reel display (5 reels) with emojis on white backgrounds
  * @returns {string}
  */
 function getSlotReelDisplay() {
+  // Show result if we have one
+  if (slotResult) {
+    const reels = [];
+    for (let i = 0; i < 5; i++) {
+      if (slotResultIsWin) {
+        // Flashing effect for wins - alternate between bright and dim
+        const flash = slotResultFlashFrame % 2 === 0;
+        const bg = flash ? ansi.bgBrightYellow : ansi.bgWhite;
+        reels.push(`${bg} ${slotResult[i]} ${ansi.reset}`);
+      } else {
+        // Static white background for no-win results
+        reels.push(`${ansi.bgWhite} ${slotResult[i]} ${ansi.reset}`);
+      }
+    }
+    return reels.join(`${ansi.bgBlack} ${ansi.reset}`);
+  }
+
+  // Show spinning reels
   if (!isSpinning) return '';
 
   const reels = [];
@@ -564,6 +647,8 @@ module.exports = {
   startSlotReels,
   stopSlotReels,
   isSlotSpinning,
+  hasSlotResult,
+  isSlotsActive,
   getSlotReelDisplay,
 
   // Win effects

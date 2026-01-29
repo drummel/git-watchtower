@@ -1395,7 +1395,7 @@ function renderCasinoStats(startRow) {
   // Don't draw if not enough space
   if (startRow + height > terminalHeight - 3) return startRow;
 
-  drawBox(startRow, 1, boxWidth, height, '🎰 CASINO STATS 🎰', ansi.brightMagenta);
+  drawBox(startRow, 1, boxWidth, height, '🎰 CASINO WINNINGS 🎰', ansi.brightMagenta);
 
   // Clear content area
   for (let i = 1; i < height - 1; i++) {
@@ -1405,15 +1405,22 @@ function renderCasinoStats(startRow) {
 
   const stats = casino.getStats();
 
-  // Net winnings color
+  // Net winnings color and emoji
   const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
   const netSign = stats.netWinnings >= 0 ? '+' : '';
+  const netEmoji = stats.netWinnings >= 0 ? '🪙' : '💸';
 
-  // Simple one-liner: Polls cost 1 line each, show the math
+  // One-liner: Lines (GitHub style) | Polls ($) | Net
   write(ansi.moveTo(startRow + 2, 3));
-  write('Polls: ' + stats.totalPolls + ' (-1 line each)');
-  write('  |  Lines won: ' + ansi.brightGreen + '+' + stats.totalLines + ansi.reset);
-  write('  |  Net: ' + netColor + netSign + stats.netWinnings + ansi.reset + ' lines');
+  // Lines added/removed (GitHub style coloring)
+  write('Lines: ');
+  write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset);
+  write(' / ');
+  write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset);
+  // Number of polls with $ sign (each poll costs 1)
+  write('  |  💵 Polls: $' + stats.totalPolls);
+  // Net earnings
+  write('  |  ' + netEmoji + ' Net: ' + netColor + netSign + stats.netWinnings + ansi.reset + ' lines');
 
   return startRow + height;
 }
@@ -1899,13 +1906,15 @@ function render() {
     }
   }
 
-  // Casino mode: slot reels on row 3 (below header) when polling
-  if (casinoModeEnabled && casino.isSlotSpinning()) {
+  // Casino mode: slot reels on row 3 (below header) when polling or showing result
+  if (casinoModeEnabled && casino.isSlotsActive()) {
     const slotDisplay = casino.getSlotReelDisplay();
     if (slotDisplay) {
       // Row 3: below header (row 1 is marquee, row 2 is header)
-      const pollingText = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset;
-      const fullDisplay = pollingText + ' ' + slotDisplay;
+      const labelText = casino.isSlotSpinning()
+        ? ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset
+        : ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
+      const fullDisplay = labelText + ' ' + slotDisplay;
       const col = Math.floor((terminalWidth - 50) / 2); // Center the display
       write(ansi.moveTo(3, Math.max(2, col)));
       write(fullDisplay);
@@ -2452,7 +2461,7 @@ async function pollGitChanges() {
 
       // Casino mode: trigger win effect based on number of updated branches
       if (casinoModeEnabled) {
-        casino.stopSlotReels();
+        casino.stopSlotReels(true, render);  // Win - matching symbols + flash
         // Estimate line changes: more branches = bigger "win"
         // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
         const estimatedLines = notifyBranches.length * 100;
@@ -2464,8 +2473,8 @@ async function pollGitChanges() {
         casino.recordPoll(true);
       }
     } else if (casinoModeEnabled) {
-      // No updates - just stop reels quietly
-      casino.stopSlotReels();
+      // No updates - stop reels and show result briefly
+      casino.stopSlotReels(false, render);
       casino.recordPoll(false);
     }
 
@@ -2571,16 +2580,16 @@ async function pollGitChanges() {
     }
 
     pollingStatus = 'idle';
-    // Casino mode: stop slot reels if still spinning
-    if (casinoModeEnabled) {
-      casino.stopSlotReels();
+    // Casino mode: stop slot reels if still spinning (already handled above, just cleanup)
+    if (casinoModeEnabled && casino.isSlotSpinning()) {
+      casino.stopSlotReels(false, render);
     }
   } catch (err) {
     const errMsg = err.stderr || err.message || String(err);
 
     // Casino mode: stop slot reels and show loss on error
     if (casinoModeEnabled) {
-      casino.stopSlotReels();
+      casino.stopSlotReels(false, render);
       casino.triggerLoss('BUST!', render);
       casinoSounds.playLoss();
     }
