@@ -1417,12 +1417,12 @@ function renderCasinoStats(startRow) {
   write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset);
   write(' = ' + ansi.brightYellow + '$' + stats.totalLines + ansi.reset + ' 💵');
   write('  |  Poll Cost: ' + ansi.brightRed + '$' + stats.totalPolls + ansi.reset + ' 💸');
-  write('  |  Net Earnings: ' + netColor + netSign + '$' + stats.netWinnings + ansi.reset + ' 🪙');
+  write('  |  Net Earnings: ' + netColor + netSign + '$' + stats.netWinnings + ansi.reset + ' 💰');
 
   // Line 2: House Edge | Vibes Quality | Luck Meter | Dopamine Hits
   write(ansi.moveTo(startRow + 3, 3));
   write('🎰 House Edge: ' + ansi.brightCyan + stats.houseEdge + '%' + ansi.reset);
-  write('  |  😎 Vibes: ' + ansi.brightMagenta + 'Immaculate' + ansi.reset + ' ' + stats.vibesQuality);
+  write('  |  😎 Vibes: ' + stats.vibesQuality);
   write('  |  🎲 Luck: ' + ansi.brightYellow + stats.luckMeter + '%' + ansi.reset);
   write('  |  🧠 Dopamine Hits: ' + ansi.brightGreen + stats.dopamineHits + ansi.reset);
 
