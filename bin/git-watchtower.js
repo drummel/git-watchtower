@@ -922,7 +922,7 @@ function padLeft(str, len) {
 // Casino mode funny messages
 const CASINO_WIN_MESSAGES = [
   "Here's your dopamine hit! 🎰",
-  "This is your house... and YOU won!",
+  "The house always wins... and this is YOUR house!",
   "Cha-ching! Fresh code incoming!",
   "🎲 Lucky roll! New commits detected!",
   "Jackpot! Someone's been busy coding!",
