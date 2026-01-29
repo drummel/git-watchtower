@@ -50,6 +50,7 @@ const DEFAULTS = {
   gitPollInterval: 5000,
   soundEnabled: true,
   visibleBranches: 7,
+  casinoMode: false,
 };
 
 /**
@@ -73,6 +74,7 @@ function getDefaultConfig() {
     gitPollInterval: DEFAULTS.gitPollInterval,
     soundEnabled: DEFAULTS.soundEnabled,
     visibleBranches: DEFAULTS.visibleBranches,
+    casinoMode: DEFAULTS.casinoMode,
   };
 }
 
@@ -218,6 +220,10 @@ function validateConfig(config) {
 
   if (config.visibleBranches !== undefined) {
     result.visibleBranches = validateVisibleBranches(config.visibleBranches);
+  }
+
+  if (config.casinoMode !== undefined) {
+    result.casinoMode = Boolean(config.casinoMode);
   }
 
   return result;

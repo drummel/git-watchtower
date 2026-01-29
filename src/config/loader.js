@@ -165,6 +165,9 @@ function applyCliArgs(config, cliArgs) {
   if (cliArgs.visibleBranches !== undefined && cliArgs.visibleBranches !== null) {
     result.visibleBranches = cliArgs.visibleBranches;
   }
+  if (cliArgs.casino !== undefined && cliArgs.casino !== null) {
+    result.casinoMode = cliArgs.casino;
+  }
 
   return result;
 }
@@ -190,6 +193,7 @@ function parseCliArgs(argv = process.argv.slice(2)) {
     // UI settings
     sound: null,
     visibleBranches: null,
+    casino: null,
     // Special flags
     init: false,
     help: false,
@@ -249,6 +253,12 @@ function parseCliArgs(argv = process.argv.slice(2)) {
         break;
       case '--visible-branches':
         result.visibleBranches = parseInt(argv[++i], 10);
+        break;
+      case '--casino':
+        result.casino = true;
+        break;
+      case '--no-casino':
+        result.casino = false;
         break;
 
       // Special flags

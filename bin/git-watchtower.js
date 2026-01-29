@@ -17,11 +17,14 @@
  * - Network failure detection with offline indicator
  * - Graceful shutdown handling
  * - Support for custom dev server commands (Next.js, Vite, etc.)
+ * - Casino Mode: Vegas-style feedback with slot reels, marquee lights,
+ *   and win celebrations based on diff size (toggle with 'c' or --casino)
  *
  * Usage:
  *   git-watchtower              # Run with config or defaults
  *   git-watchtower --port 8080  # Override port
  *   git-watchtower --no-server  # Branch monitoring only
+ *   git-watchtower --casino     # Enable casino mode
  *   git-watchtower --init       # Run configuration wizard
  *   git-watchtower --version    # Show version
  *
@@ -41,6 +44,7 @@
  *   l       - View server logs (command mode)
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
+ *   c       - Toggle casino mode (Vegas-style feedback)
  *   i       - Show server info (port, connections)
  *   1-0     - Set visible branch count (1-10)
  *   +/-     - Increase/decrease visible branches
@@ -52,6 +56,10 @@ const fs = require('fs');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 const readline = require('readline');
+
+// Casino mode - Vegas-style feedback effects
+const casino = require('../src/casino');
+const casinoSounds = require('../src/casino/sounds');
 
 // Package info for --version
 const PACKAGE_VERSION = '1.0.0';
@@ -498,6 +506,7 @@ const MAX_SERVER_LOG_LINES = 500;
 // Dynamic settings
 let visibleBranchCount = 7;
 let soundEnabled = true;
+let casinoModeEnabled = false;
 
 // Server process management (for command mode)
 let serverProcess = null;
@@ -525,6 +534,12 @@ function applyConfig(config) {
   // UI settings
   visibleBranchCount = config.visibleBranches || 7;
   soundEnabled = config.soundEnabled !== false;
+
+  // Casino mode
+  casinoModeEnabled = config.casinoMode === true;
+  if (casinoModeEnabled) {
+    casino.enable();
+  }
 }
 
 // Server log management
@@ -818,6 +833,32 @@ function execAsync(command, options = {}) {
       }
     });
   });
+}
+
+/**
+ * Get diff stats between two commits
+ * @param {string} fromCommit - Starting commit
+ * @param {string} toCommit - Ending commit (default HEAD)
+ * @returns {Promise<{added: number, deleted: number}>}
+ */
+async function getDiffStats(fromCommit, toCommit = 'HEAD') {
+  try {
+    const { stdout } = await execAsync(`git diff --stat ${fromCommit}..${toCommit}`);
+    // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
+    const match = stdout.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
+    if (match) {
+      return { added: parseInt(match[1], 10), deleted: parseInt(match[2], 10) };
+    }
+    // Try to match just insertions or just deletions
+    const insertMatch = stdout.match(/(\d+) insertions?\(\+\)/);
+    const deleteMatch = stdout.match(/(\d+) deletions?\(-\)/);
+    return {
+      added: insertMatch ? parseInt(insertMatch[1], 10) : 0,
+      deleted: deleteMatch ? parseInt(deleteMatch[1], 10) : 0,
+    };
+  } catch (e) {
+    return { added: 0, deleted: 0 };
+  }
 }
 
 function formatTimeAgo(date) {
@@ -1279,7 +1320,18 @@ function renderActivityLog(startRow) {
 }
 
 function renderFooter() {
-  const row = terminalHeight - 1;
+  // Casino mode: show stats on a separate line above the controls
+  if (casinoModeEnabled) {
+    const statsRow = terminalHeight - 2;
+    write(ansi.moveTo(statsRow, 1));
+    write(ansi.bgBlack);
+    const statsDisplay = casino.getStatsDisplay();
+    write(statsDisplay);
+    write(' '.repeat(Math.max(0, terminalWidth - 60))); // Pad to clear line
+    write(ansi.reset);
+  }
+
+  const row = casinoModeEnabled ? terminalHeight - 1 : terminalHeight - 1;
 
   write(ansi.moveTo(row, 1));
   write(ansi.bgBlack + ansi.white);
@@ -1302,6 +1354,14 @@ function renderFooter() {
   }
 
   write(ansi.gray + '[±]' + ansi.reset + ansi.bgBlack + ' List:' + ansi.cyan + visibleBranchCount + ansi.reset + ansi.bgBlack + '  ');
+
+  // Casino mode toggle indicator
+  if (casinoModeEnabled) {
+    write(ansi.brightMagenta + '[c]' + ansi.reset + ansi.bgBlack + ' 🎰  ');
+  } else {
+    write(ansi.gray + '[c]' + ansi.reset + ansi.bgBlack + ' Casino  ');
+  }
+
   write(ansi.gray + '[q]' + ansi.reset + ansi.bgBlack + ' Quit  ');
   write(ansi.reset);
 }
@@ -1722,10 +1782,52 @@ function render() {
   write(ansi.moveToTop);
   write(ansi.clearScreen);
 
+  // Casino mode: top marquee border
+  if (casinoModeEnabled) {
+    write(ansi.moveTo(1, 1));
+    write(casino.renderMarqueeLine(terminalWidth, 'top'));
+  }
+
   renderHeader();
   const logStart = renderBranchList();
   renderActivityLog(logStart);
   renderFooter();
+
+  // Casino mode: bottom marquee border
+  if (casinoModeEnabled) {
+    write(ansi.moveTo(terminalHeight, 1));
+    write(casino.renderMarqueeLine(terminalWidth, 'bottom'));
+  }
+
+  // Casino mode: slot reels when polling
+  if (casinoModeEnabled && casino.isSlotSpinning()) {
+    const slotDisplay = casino.getSlotReelDisplay();
+    if (slotDisplay) {
+      const col = Math.floor((terminalWidth - 20) / 2);
+      write(ansi.moveTo(2, col));
+      write(slotDisplay);
+    }
+  }
+
+  // Casino mode: win animation overlay
+  if (casinoModeEnabled && casino.isWinAnimating()) {
+    const winDisplay = casino.getWinDisplay(terminalWidth);
+    if (winDisplay) {
+      const row = Math.floor(terminalHeight / 2);
+      write(ansi.moveTo(row, 1));
+      write(winDisplay);
+    }
+  }
+
+  // Casino mode: loss animation overlay
+  if (casinoModeEnabled && casino.isLossAnimating()) {
+    const lossDisplay = casino.getLossDisplay(terminalWidth);
+    if (lossDisplay) {
+      const row = Math.floor(terminalHeight / 2);
+      write(ansi.moveTo(row, 1));
+      write(lossDisplay);
+    }
+  }
 
   if (flashMessage) {
     renderFlash();
@@ -2122,6 +2224,13 @@ async function pollGitChanges() {
   if (isPolling) return;
   isPolling = true;
   pollingStatus = 'fetching';
+
+  // Casino mode: start slot reels spinning
+  if (casinoModeEnabled) {
+    casino.startSlotReels(render);
+    casinoSounds.playSpin();
+  }
+
   render();
 
   const fetchStartTime = Date.now();
@@ -2232,6 +2341,24 @@ async function pollGitChanges() {
       const names = notifyBranches.map(b => b.name).join(', ');
       showFlash(names);
       playSound();
+
+      // Casino mode: trigger win effect based on number of updated branches
+      if (casinoModeEnabled) {
+        casino.stopSlotReels();
+        // Estimate line changes: more branches = bigger "win"
+        // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
+        const estimatedLines = notifyBranches.length * 100;
+        casino.triggerWin(estimatedLines, 0, render);
+        const winLevel = casino.getWinLevel(estimatedLines);
+        if (winLevel) {
+          casinoSounds.playForWinLevel(winLevel.key);
+        }
+        casino.recordPoll(true);
+      }
+    } else if (casinoModeEnabled) {
+      // No updates - just stop reels quietly
+      casino.stopSlotReels();
+      casino.recordPoll(false);
     }
 
     // Remember which branch was selected before updating the list
@@ -2271,6 +2398,9 @@ async function pollGitChanges() {
       addLog(`Auto-pulling changes for ${currentBranch}...`, 'update');
       render();
 
+      // Save the old commit for diff calculation (casino mode)
+      const oldCommit = currentInfo.commit;
+
       try {
         await execAsync(`git pull "${REMOTE_NAME}" "${currentBranch}"`);
         addLog(`Pulled successfully from ${currentBranch}`, 'success');
@@ -2282,6 +2412,20 @@ async function pollGitChanges() {
         previousBranchStates.set(currentBranch, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
+
+        // Casino mode: calculate actual diff and trigger win effect
+        if (casinoModeEnabled && oldCommit) {
+          const diffStats = await getDiffStats(oldCommit, 'HEAD');
+          const totalLines = diffStats.added + diffStats.deleted;
+          if (totalLines > 0) {
+            casino.triggerWin(diffStats.added, diffStats.deleted, render);
+            const winLevel = casino.getWinLevel(totalLines);
+            if (winLevel) {
+              addLog(`🎰 ${winLevel.label} +${diffStats.added}/-${diffStats.deleted} lines`, 'success');
+              casinoSounds.playForWinLevel(winLevel.key);
+            }
+          }
+        }
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
         if (isMergeConflict(errMsg)) {
@@ -2293,6 +2437,11 @@ async function pollGitChanges() {
             'Auto-pull resulted in merge conflicts that need manual resolution.',
             'Run: git status to see conflicts'
           );
+          // Casino mode: trigger loss effect
+          if (casinoModeEnabled) {
+            casino.triggerLoss('MERGE CONFLICT!', render);
+            casinoSounds.playLoss();
+          }
         } else if (isAuthError(errMsg)) {
           addLog(`Authentication failed during pull`, 'error');
           addLog(`Check your Git credentials`, 'warning');
@@ -2313,8 +2462,19 @@ async function pollGitChanges() {
     }
 
     pollingStatus = 'idle';
+    // Casino mode: stop slot reels if still spinning
+    if (casinoModeEnabled) {
+      casino.stopSlotReels();
+    }
   } catch (err) {
     const errMsg = err.stderr || err.message || String(err);
+
+    // Casino mode: stop slot reels and show loss on error
+    if (casinoModeEnabled) {
+      casino.stopSlotReels();
+      casino.triggerLoss('BUST!', render);
+      casinoSounds.playLoss();
+    }
 
     // Handle different error types
     if (isNetworkError(errMsg)) {
@@ -2733,6 +2893,15 @@ function setupKeyboardInput() {
         render();
         break;
 
+      case 'c': // Toggle casino mode
+        casinoModeEnabled = casino.toggle();
+        addLog(`Casino mode ${casinoModeEnabled ? '🎰 ENABLED' : 'disabled'}`, casinoModeEnabled ? 'success' : 'info');
+        if (casinoModeEnabled && soundEnabled) {
+          casinoSounds.playJackpot();
+        }
+        render();
+        break;
+
       // Number keys to set visible branch count
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9':
@@ -2849,6 +3018,9 @@ async function start() {
   // Load or create configuration
   const config = await ensureConfig(cliArgs);
   applyConfig(config);
+
+  // Set up casino mode render callback for animations
+  casino.setRenderCallback(render);
 
   // Check for remote before starting TUI
   const hasRemote = await checkRemoteExists();
