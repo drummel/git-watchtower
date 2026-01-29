@@ -199,10 +199,11 @@ function renderMarqueeLine(width, position) {
   if (!casinoEnabled) return '';
 
   let line = '';
-  const startOffset = position === 'bottom' ? width : 0;
 
   for (let i = 0; i < width; i++) {
-    line += getMarqueeChar(startOffset + i, width * 2);
+    // Top goes right (reverse direction), bottom goes left
+    const pos = position === 'top' ? (width - 1 - i) : i;
+    line += getMarqueeChar(pos, width * 2);
   }
 
   return line;
@@ -254,13 +255,16 @@ function isSlotSpinning() {
 function getSlotReelDisplay() {
   if (!isSpinning) return '';
 
+  // Use simple ASCII characters for consistent width in header
+  const spinChars = ['◆', '◇', '●', '○', '★', '☆', '▲', '▼'];
   const symbols = [];
   for (let i = 0; i < 3; i++) {
-    const idx = (slotReelFrame + i * 3) % SLOT_SYMBOLS.length;
-    symbols.push(SLOT_SYMBOLS[idx]);
+    const idx = (slotReelFrame + i * 3) % spinChars.length;
+    symbols.push(spinChars[idx]);
   }
 
-  return `${ansi.bgBlack}${ansi.brightYellow} 🎰 ${symbols.join(' ')} 🎰 ${ansi.reset}`;
+  // Fixed-width display: "[◆ ◇ ●]"
+  return `${ansi.bgBlack}${ansi.brightYellow}[${symbols.join(' ')}]${ansi.reset}`;
 }
 
 // ============================================================================

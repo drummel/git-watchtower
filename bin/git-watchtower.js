@@ -922,7 +922,7 @@ function padLeft(str, len) {
 // Casino mode funny messages
 const CASINO_WIN_MESSAGES = [
   "Here's your dopamine hit! 🎰",
-  "The house always wins... wait, YOU won!",
+  "This is your house... and YOU won!",
   "Cha-ching! Fresh code incoming!",
   "🎲 Lucky roll! New commits detected!",
   "Jackpot! Someone's been busy coding!",
@@ -935,7 +935,6 @@ const CASINO_WIN_MESSAGES = [
   "The code fairy visited while you waited!",
   "🌟 Wish granted: new commits!",
   "Variable reward unlocked! 🔓",
-  "Your gambling addiction pays off!",
 ];
 
 const CASINO_PULL_MESSAGES = [
@@ -948,7 +947,6 @@ const CASINO_PULL_MESSAGES = [
 ];
 
 const CASINO_LOSS_MESSAGES = [
-  "The house wins this round! 💀",
   "Better luck next merge!",
   "🎲 Snake eyes! Conflict detected!",
   "Busted! Time to resolve manually.",
@@ -1172,19 +1170,15 @@ function renderHeader() {
   let badges = '';
   let badgesVisibleLen = 0;
 
-  // Casino mode: show spinning slots when polling, otherwise show badge
-  if (casinoModeEnabled) {
-    if (isPolling && casino.isSlotSpinning()) {
-      // Show spinning slots in header during polling
-      const slotDisplay = casino.getSlotReelDisplay();
-      badges += ' ' + slotDisplay + ansi.bgBlue + ansi.white;
-      badgesVisibleLen += 15; // approximate width of slot display
-    } else {
-      // Show MAX ADDICTION badge when not polling
-      const casinoBadge = casino.getHeaderBadge();
-      badges += casinoBadge + ansi.bgBlue + ansi.white;
-      badgesVisibleLen += 22; // " 🎰 MAX ADDICTION 🎰 "
-    }
+  // Casino mode: show polling indicator with slot reels
+  if (casinoModeEnabled && isPolling && casino.isSlotSpinning()) {
+    // Fixed-width polling display: "POLLING [reels] POLLING"
+    const slotDisplay = casino.getSlotReelDisplay();
+    const pollingBadge = ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset + ansi.bgBlue + ansi.white +
+      ' ' + slotDisplay + ansi.bgBlue + ansi.white + ' ' +
+      ansi.bgBrightYellow + ansi.black + ansi.bold + ' POLLING ' + ansi.reset + ansi.bgBlue + ansi.white;
+    badges += ' ' + pollingBadge;
+    badgesVisibleLen += 38; // " POLLING " + slots + " POLLING " (fixed width)
   }
 
   if (SERVER_MODE === 'command' && serverCrashed) {
@@ -2318,10 +2312,9 @@ async function pollGitChanges() {
   isPolling = true;
   pollingStatus = 'fetching';
 
-  // Casino mode: start slot reels spinning
+  // Casino mode: start slot reels spinning (no sound - too annoying)
   if (casinoModeEnabled) {
     casino.startSlotReels(render);
-    casinoSounds.playSpin();
   }
 
   render();
