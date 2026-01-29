@@ -1404,23 +1404,16 @@ function renderCasinoStats(startRow) {
   }
 
   const stats = casino.getStats();
-  const branchCount = branches.length;
 
   // Net winnings color
   const netColor = stats.netWinnings >= 0 ? ansi.brightGreen : ansi.brightRed;
   const netSign = stats.netWinnings >= 0 ? '+' : '';
 
-  // All stats on one line (row 2, with breathing room above/below)
+  // Simple one-liner: Pulls cost 1 line each, show the math
   write(ansi.moveTo(startRow + 2, 3));
-  write('🎰 ' + stats.totalPolls + '  ');
-  write('📺 ' + branchCount + '  ');
-  write('🎯 ' + stats.hitRate + '%  ');
-  write('💨 ' + stats.nearMisses + '  ');
-  write('⚡ ' + stats.timeSinceLastHit + '  ');
-  write('🎲 ' + stats.luckMeter + '%  ');
-  write('🏠 ' + stats.houseEdge + '%  ');
-  write('💵 ' + netColor + netSign + stats.netWinnings + ansi.reset + '  ');
-  write('⏱ ' + stats.sessionDuration);
+  write('Pulls: ' + stats.totalPolls + ' (-1 line each)');
+  write('  |  Lines won: ' + ansi.brightGreen + '+' + stats.totalLines + ansi.reset);
+  write('  |  Net: ' + netColor + netSign + stats.netWinnings + ansi.reset + ' lines');
 
   return startRow + height;
 }
