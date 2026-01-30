@@ -235,7 +235,7 @@ function startSlotReels(renderCallback) {
   slotReelInterval = setInterval(() => {
     slotReelFrame++;
     if (renderCallback) renderCallback();
-  }, 80);
+  }, 100); // 25% slower than original 80ms
 }
 
 /**
