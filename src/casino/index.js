@@ -365,11 +365,11 @@ function getSlotReelDisplay() {
       if (slotResultIsWin) {
         // Flashing effect for wins - alternate between bright and dim
         const flash = slotResultFlashFrame % 2 === 0;
-        const bg = flash ? ansi.bgBrightYellow : ansi.bgWhite;
+        const bg = flash ? ansi.bgBrightYellow : ansi.bgBrightWhite;
         reels.push(`${bg} ${slotResult[i]} ${ansi.reset}`);
       } else {
-        // Static white background for no-win results
-        reels.push(`${ansi.bgWhite} ${slotResult[i]} ${ansi.reset}`);
+        // Static pure white background for no-win results
+        reels.push(`${ansi.bgBrightWhite} ${slotResult[i]} ${ansi.reset}`);
       }
     }
     return reels.join(`${ansi.bgBlack} ${ansi.reset}`);
@@ -381,8 +381,8 @@ function getSlotReelDisplay() {
   const reels = [];
   for (let i = 0; i < 5; i++) {
     const idx = (slotReelFrame + i * 3) % SLOT_SYMBOLS.length;
-    // Each emoji on white background
-    reels.push(`${ansi.bgWhite} ${SLOT_SYMBOLS[idx]} ${ansi.reset}`);
+    // Each emoji on pure white background
+    reels.push(`${ansi.bgBrightWhite} ${SLOT_SYMBOLS[idx]} ${ansi.reset}`);
   }
 
   // Join with black background space between
