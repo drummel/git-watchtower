@@ -3033,8 +3033,7 @@ function setupKeyboardInput() {
         casinoModeEnabled = casino.toggle();
         addLog(`Casino mode ${casinoModeEnabled ? '🎰 ENABLED' : 'disabled'}`, casinoModeEnabled ? 'success' : 'info');
         if (casinoModeEnabled) {
-          // Add vibe coding commentary
-          addLog(`Ever notice vibe coding is just variable reward timing? 🎲`, 'info');
+          addLog(`Have you noticed this game has that 'variable rewards' thing going on? 🤔😉`, 'info');
           if (soundEnabled) {
             casinoSounds.playJackpot();
           }
