@@ -1411,13 +1411,13 @@ function renderCasinoStats(startRow) {
 
   // Line 1: Line Changes | Poll Cost | Net Earnings
   write(ansi.moveTo(startRow + 2, 3));
-  write('📝 Lines: ');
+  write('📝 Line Changes: ');
   write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset);
   write(' / ');
   write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset);
   write(' = ' + ansi.brightYellow + '$' + stats.totalLines + ansi.reset);
   write('  |  💸 Poll Cost: ' + ansi.brightRed + '$' + stats.totalPolls + ansi.reset);
-  write('  |  💰 Net: ' + netColor + netSign + '$' + stats.netWinnings + ansi.reset);
+  write('  |  💰 Net Earnings: ' + netColor + netSign + '$' + stats.netWinnings + ansi.reset);
 
   // Line 2: House Edge | Vibes Quality | Luck Meter | Dopamine Hits
   write(ansi.moveTo(startRow + 3, 3));
