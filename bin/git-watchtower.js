@@ -1411,7 +1411,7 @@ function renderCasinoStats(startRow) {
 
   // Line 1: Line Changes | Poll Cost | Net Earnings
   write(ansi.moveTo(startRow + 2, 3));
-  write('💵 Lines: ');
+  write('📝 Lines: ');
   write(ansi.brightGreen + '+' + stats.totalLinesAdded + ansi.reset);
   write(' / ');
   write(ansi.brightRed + '-' + stats.totalLinesDeleted + ansi.reset);
