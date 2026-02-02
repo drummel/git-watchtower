@@ -1,3 +1,10 @@
+# 1.0.0 (2026-02-02)
+
+
+### Bug Fixes
+
+* update Node.js version to 22 for semantic-release compatibility ([#19](https://github.com/drummel/git-watchtower/issues/19)) ([09f8217](https://github.com/drummel/git-watchtower/commit/09f82171b51743b6250e7f12451b6a328b1f6082))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
