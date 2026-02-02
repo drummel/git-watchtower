@@ -42,6 +42,7 @@
  *   r       - Force reload all browsers (static mode)
  *   R       - Restart dev server (command mode)
  *   l       - View server logs (command mode)
+ *   o       - Open live server in browser
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
@@ -553,6 +554,27 @@ function addServerLog(line, isError = false) {
 
 function clearServerLog() {
   serverLogBuffer = [];
+}
+
+// Open URL in default browser (cross-platform)
+function openInBrowser(url) {
+  const platform = process.platform;
+  let command;
+
+  if (platform === 'darwin') {
+    command = `open "${url}"`;
+  } else if (platform === 'win32') {
+    command = `start "" "${url}"`;
+  } else {
+    // Linux and other Unix-like systems
+    command = `xdg-open "${url}"`;
+  }
+
+  exec(command, (error) => {
+    if (error) {
+      addLog(`Failed to open browser: ${error.message}`, 'error');
+    }
+  });
 }
 
 // Command mode server management
@@ -1445,6 +1467,7 @@ function renderFooter() {
   // Mode-specific keys
   if (!NO_SERVER) {
     write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
+    write(ansi.gray + '[o]' + ansi.reset + ansi.bgBlack + ' Open  ');
   }
   if (SERVER_MODE === 'static') {
     write(ansi.gray + '[r]' + ansi.reset + ansi.bgBlack + ' Reload  ');
@@ -3008,6 +3031,15 @@ function setupKeyboardInput() {
         if (!NO_SERVER) {
           logViewMode = true;
           logScrollOffset = 0;
+          render();
+        }
+        break;
+
+      case 'o': // Open live server in browser
+        if (!NO_SERVER) {
+          const serverUrl = `http://localhost:${PORT}`;
+          addLog(`Opening ${serverUrl} in browser...`, 'info');
+          openInBrowser(serverUrl);
           render();
         }
         break;
