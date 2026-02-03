@@ -2740,6 +2740,134 @@ const server = http.createServer((req, res) => {
 });
 
 // ============================================================================
+// Gitignore Parsing for File Watcher
+// ============================================================================
+
+let ignorePatterns = [];
+
+/**
+ * Convert a gitignore pattern to a RegExp
+ * Supports basic gitignore syntax: *, **, ?, negation (!), directory markers (/)
+ */
+function gitignorePatternToRegex(pattern) {
+  // Handle negation (we'll filter these out separately)
+  if (pattern.startsWith('!')) {
+    return null;
+  }
+
+  // Handle directory-only patterns (ending with /)
+  const dirOnly = pattern.endsWith('/');
+  if (dirOnly) {
+    pattern = pattern.slice(0, -1);
+  }
+
+  // Handle patterns starting with / (anchored to root)
+  const anchored = pattern.startsWith('/');
+  if (anchored) {
+    pattern = pattern.slice(1);
+  }
+
+  // Escape special regex characters except * and ?
+  let regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    // Convert ** to a placeholder
+    .replace(/\*\*/g, '{{GLOBSTAR}}')
+    // Convert * to match anything except /
+    .replace(/\*/g, '[^/]*')
+    // Convert ? to match single character except /
+    .replace(/\?/g, '[^/]')
+    // Convert globstar placeholder back - matches any path
+    .replace(/\{\{GLOBSTAR\}\}/g, '.*');
+
+  // Build the final regex
+  if (anchored) {
+    regexStr = '^' + regexStr;
+  } else {
+    // Match anywhere in path
+    regexStr = '(^|/)' + regexStr;
+  }
+
+  if (dirOnly) {
+    regexStr = regexStr + '(/|$)';
+  } else {
+    regexStr = regexStr + '($|/)';
+  }
+
+  try {
+    return new RegExp(regexStr);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Load and parse .gitignore file from STATIC_DIR or PROJECT_ROOT
+ */
+function loadGitignorePatterns() {
+  ignorePatterns = [];
+
+  // Try to load .gitignore from STATIC_DIR first, then PROJECT_ROOT
+  const gitignorePaths = [
+    path.join(STATIC_DIR, '.gitignore'),
+    path.join(PROJECT_ROOT, '.gitignore')
+  ];
+
+  for (const gitignorePath of gitignorePaths) {
+    if (fs.existsSync(gitignorePath)) {
+      try {
+        const content = fs.readFileSync(gitignorePath, 'utf8');
+        const lines = content.split('\n');
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Skip empty lines and comments
+          if (!trimmed || trimmed.startsWith('#')) {
+            continue;
+          }
+
+          const regex = gitignorePatternToRegex(trimmed);
+          if (regex) {
+            ignorePatterns.push(regex);
+          }
+        }
+
+        addLog(`Loaded ${ignorePatterns.length} ignore patterns from .gitignore`, 'info');
+        break; // Use first found .gitignore
+      } catch (err) {
+        // Silently continue if we can't read .gitignore
+      }
+    }
+  }
+}
+
+/**
+ * Check if a file path should be ignored by the file watcher
+ */
+function shouldIgnoreFile(filename) {
+  // Always ignore .git directory
+  if (filename === '.git' || filename.startsWith('.git/') || filename.startsWith('.git\\')) {
+    return true;
+  }
+
+  // Normalize path separators for cross-platform support
+  const normalizedPath = filename.replace(/\\/g, '/');
+
+  // Check if path contains .git directory anywhere
+  if (normalizedPath.includes('/.git/') || normalizedPath.includes('/.git')) {
+    return true;
+  }
+
+  // Check against gitignore patterns
+  for (const pattern of ignorePatterns) {
+    if (pattern.test(normalizedPath)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ============================================================================
 // File Watcher
 // ============================================================================
 
@@ -2749,9 +2877,18 @@ let debounceTimer = null;
 function setupFileWatcher() {
   if (fileWatcher) fileWatcher.close();
 
+  // Load gitignore patterns before setting up the watcher
+  loadGitignorePatterns();
+
   try {
     fileWatcher = fs.watch(STATIC_DIR, { recursive: true }, (eventType, filename) => {
       if (!filename) return;
+
+      // Skip ignored files (.git directory and gitignore patterns)
+      if (shouldIgnoreFile(filename)) {
+        return;
+      }
+
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         addLog(`File changed: ${filename}`, 'info');
