@@ -93,6 +93,40 @@ git-watchtower --help
 ### Static Site Mode (Default)
 Serves static files with automatic live reload. Good for static HTML/CSS/JS sites, projects without a build step, quick prototyping.
 
+#### Live Reload
+
+The static server includes automatic live reload powered by Server-Sent Events (SSE). When you save a file, all connected browsers refresh instantly.
+
+**How it works:**
+1. A small script is automatically injected into HTML pages
+2. The script opens an SSE connection to `/livereload`
+3. When files change in your static directory, the server notifies all browsers
+4. Browsers automatically reload to show your changes
+
+**File watching behavior:**
+- Uses Node.js native `fs.watch()` with recursive watching
+- Changes are debounced (100ms) to prevent rapid reloads during saves
+- Press `r` to manually trigger a reload for all connected browsers
+
+**Ignored files:**
+
+The file watcher automatically ignores certain files to prevent unnecessary reloads:
+
+| Ignored | Reason |
+|---------|--------|
+| `.git/` directory | Git internals change frequently during commits, fetches, etc. |
+| `.gitignore` patterns | Respects your project's ignore rules |
+
+If a `.gitignore` file exists in your static directory (or project root), those patterns are used to filter file change events. This means changes to `node_modules/`, build artifacts, log files, and other ignored paths won't trigger reloads.
+
+**Supported `.gitignore` patterns:**
+- Simple filenames: `foo.txt`
+- Wildcards: `*.log`, `file?.txt`
+- Globstar: `**/logs`, `logs/**/*.log`
+- Directory patterns: `node_modules/`, `dist/`
+- Anchored patterns: `/build` (root only)
+- Comments and blank lines are ignored
+
 ### Custom Server Command Mode
 Runs your own dev server command (`next dev`, `npm run dev`, `vite`, etc.). Press `l` to view server logs, `R` to restart the server.
 

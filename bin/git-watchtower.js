@@ -61,6 +61,9 @@ const readline = require('readline');
 const casino = require('../src/casino');
 const casinoSounds = require('../src/casino/sounds');
 
+// Gitignore utilities for file watcher
+const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
+
 // Package info for --version
 const PACKAGE_VERSION = '1.0.0';
 
@@ -2745,13 +2748,26 @@ const server = http.createServer((req, res) => {
 
 let fileWatcher = null;
 let debounceTimer = null;
+let ignorePatterns = [];
 
 function setupFileWatcher() {
   if (fileWatcher) fileWatcher.close();
 
+  // Load gitignore patterns before setting up the watcher
+  ignorePatterns = loadGitignorePatterns([STATIC_DIR, PROJECT_ROOT]);
+  if (ignorePatterns.length > 0) {
+    addLog(`Loaded ${ignorePatterns.length} ignore patterns from .gitignore`, 'info');
+  }
+
   try {
     fileWatcher = fs.watch(STATIC_DIR, { recursive: true }, (eventType, filename) => {
       if (!filename) return;
+
+      // Skip ignored files (.git directory and gitignore patterns)
+      if (shouldIgnoreFile(filename, ignorePatterns)) {
+        return;
+      }
+
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         addLog(`File changed: ${filename}`, 'info');
