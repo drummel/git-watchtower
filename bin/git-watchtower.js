@@ -55,7 +55,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { exec, spawn } = require('child_process');
+const { exec, execSync, spawn } = require('child_process');
 const readline = require('readline');
 
 // Casino mode - Vegas-style feedback effects
@@ -279,7 +279,122 @@ async function runConfigurationWizard() {
   console.log('\n✓ Configuration saved to ' + CONFIG_FILE_NAME);
   console.log('  You can edit this file manually or delete it to reconfigure.\n');
 
+  // Ask user how to handle the new config file in git
+  await promptConfigFileHandling();
+
   return config;
+}
+
+/**
+ * After creating .watchtowerrc.json, ask the user how to handle it in git.
+ * This prevents the new config file from dirtying the working directory
+ * and blocking branch switching.
+ */
+async function promptConfigFileHandling() {
+  // Check if we're in a git repo
+  try {
+    execSync('git rev-parse --git-dir', { cwd: PROJECT_ROOT, stdio: 'pipe' });
+  } catch {
+    return; // Not a git repo, nothing to do
+  }
+
+  console.log('How should the config file be handled in git?\n');
+  console.log('  1. Keep local (ignore via .git/info/exclude) [recommended]');
+  console.log('  2. Track in repo (commit ' + CONFIG_FILE_NAME + ')');
+  console.log('  3. Add to .gitignore (you\'ll need to commit .gitignore)');
+  console.log('  4. Do nothing (handle manually)\n');
+
+  const answer = await promptUser('Choice', '1');
+
+  switch (answer) {
+    case '1':
+      handleConfigExcludeLocal();
+      break;
+    case '2':
+      await handleConfigCommit();
+      break;
+    case '3':
+      handleConfigGitignore();
+      break;
+    case '4':
+    default:
+      console.log('  Skipped. Note: the config file may block branch switching until handled.\n');
+      break;
+  }
+}
+
+/**
+ * Add .watchtowerrc.json to .git/info/exclude (local-only gitignore)
+ */
+function handleConfigExcludeLocal() {
+  try {
+    const gitDir = execSync('git rev-parse --git-dir', { cwd: PROJECT_ROOT, encoding: 'utf8' }).trim();
+    const excludePath = path.join(PROJECT_ROOT, gitDir, 'info', 'exclude');
+
+    // Ensure the info directory exists
+    const infoDir = path.dirname(excludePath);
+    if (!fs.existsSync(infoDir)) {
+      fs.mkdirSync(infoDir, { recursive: true });
+    }
+
+    // Check if already excluded
+    if (fs.existsSync(excludePath)) {
+      const content = fs.readFileSync(excludePath, 'utf8');
+      if (content.includes(CONFIG_FILE_NAME)) {
+        console.log('  Already excluded in .git/info/exclude.\n');
+        return;
+      }
+    }
+
+    // Append the exclusion
+    const line = '\n# Git Watchtower config (local)\n' + CONFIG_FILE_NAME + '\n';
+    fs.appendFileSync(excludePath, line, 'utf8');
+    console.log('  ✓ Added ' + CONFIG_FILE_NAME + ' to .git/info/exclude');
+    console.log('  Config file will be ignored locally without affecting the repo.\n');
+  } catch (e) {
+    console.error('  Warning: Could not update .git/info/exclude: ' + e.message);
+    console.log('  You may need to handle the config file manually.\n');
+  }
+}
+
+/**
+ * Stage and commit .watchtowerrc.json
+ */
+async function handleConfigCommit() {
+  try {
+    execSync(`git add "${CONFIG_FILE_NAME}"`, { cwd: PROJECT_ROOT, stdio: 'pipe' });
+    execSync(`git commit -m "Add git-watchtower configuration"`, { cwd: PROJECT_ROOT, stdio: 'pipe' });
+    console.log('  ✓ Committed ' + CONFIG_FILE_NAME + ' to the repository.\n');
+  } catch (e) {
+    console.error('  Warning: Could not commit config file: ' + (e.message || 'unknown error'));
+    console.log('  You may need to commit it manually: git add ' + CONFIG_FILE_NAME + ' && git commit\n');
+  }
+}
+
+/**
+ * Add .watchtowerrc.json to .gitignore
+ */
+function handleConfigGitignore() {
+  try {
+    const gitignorePath = path.join(PROJECT_ROOT, '.gitignore');
+
+    // Check if already in .gitignore
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      if (content.includes(CONFIG_FILE_NAME)) {
+        console.log('  Already listed in .gitignore.\n');
+        return;
+      }
+    }
+
+    const line = '\n# Git Watchtower config\n' + CONFIG_FILE_NAME + '\n';
+    fs.appendFileSync(gitignorePath, line, 'utf8');
+    console.log('  ✓ Added ' + CONFIG_FILE_NAME + ' to .gitignore');
+    console.log('  Note: You\'ll need to commit the .gitignore change.\n');
+  } catch (e) {
+    console.error('  Warning: Could not update .gitignore: ' + e.message);
+    console.log('  You may need to add it manually.\n');
+  }
 }
 
 async function ensureConfig(cliArgs) {
