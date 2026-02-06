@@ -43,6 +43,7 @@
  *   R       - Restart dev server (command mode)
  *   l       - View server logs (command mode)
  *   o       - Open live server in browser
+ *   g       - Open selected branch on GitHub/GitLab in browser
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
@@ -693,6 +694,46 @@ function openInBrowser(url) {
       addLog(`Failed to open browser: ${error.message}`, 'error');
     }
   });
+}
+
+// Convert a git remote URL to a browser-friendly web URL
+// Supports GitHub, GitLab, Bitbucket, and self-hosted instances
+function remoteUrlToWebUrl(remoteUrl) {
+  let url = remoteUrl.trim();
+
+  // SSH format: git@host:user/repo.git
+  const sshMatch = url.match(/^[\w-]+@([^:]+):(.+?)(?:\.git)?$/);
+  if (sshMatch) {
+    return `https://${sshMatch[1]}/${sshMatch[2]}`;
+  }
+
+  // HTTPS/HTTP format: https://host/user/repo.git
+  const httpMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
+  if (httpMatch) {
+    return `https://${httpMatch[1]}/${httpMatch[2]}`;
+  }
+
+  // ssh:// format: ssh://git@host/user/repo.git
+  const sshProtoMatch = url.match(/^ssh:\/\/[\w-]+@([^/]+)\/(.+?)(?:\.git)?$/);
+  if (sshProtoMatch) {
+    return `https://${sshProtoMatch[1]}/${sshProtoMatch[2]}`;
+  }
+
+  return null;
+}
+
+async function getRemoteWebUrl(branchName) {
+  try {
+    const { stdout } = await execAsync(`git remote get-url "${REMOTE_NAME}"`);
+    const webUrl = remoteUrlToWebUrl(stdout);
+    if (!webUrl) return null;
+    if (branchName) {
+      return `${webUrl}/tree/${encodeURIComponent(branchName)}`;
+    }
+    return webUrl;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Command mode server management
@@ -1581,6 +1622,7 @@ function renderFooter() {
   write(ansi.gray + '[Enter]' + ansi.reset + ansi.bgBlack + ' Switch  ');
   write(ansi.gray + '[h]' + ansi.reset + ansi.bgBlack + ' History  ');
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
+  write(ansi.gray + '[g]' + ansi.reset + ansi.bgBlack + ' GitHub  ');
 
   // Mode-specific keys
   if (!NO_SERVER) {
@@ -3174,6 +3216,20 @@ function setupKeyboardInput() {
           render();
         }
         break;
+
+      case 'g': { // Open selected branch on GitHub/GitLab
+        const branch = displayBranches.length > 0 && selectedIndex < displayBranches.length
+          ? displayBranches[selectedIndex] : null;
+        const webUrl = await getRemoteWebUrl(branch ? branch.name : null);
+        if (webUrl) {
+          addLog(`Opening ${webUrl}`, 'info');
+          openInBrowser(webUrl);
+        } else {
+          addLog('Could not determine repository web URL from remote', 'error');
+        }
+        render();
+        break;
+      }
 
       case 'f':
         addLog('Fetching all branches...', 'update');
