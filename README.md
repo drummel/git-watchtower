@@ -198,21 +198,21 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 | `u` | Undo last branch switch |
 | `p` | Force pull current branch |
 | `f` | Fetch all branches + refresh sparklines |
-| `g` | Branch actions modal (see below) |
+| `b` | Branch actions modal (see below) |
 
-### Branch Actions (`g`)
+### Branch Actions (`b`)
 
-Press `g` on any branch to open an interactive action modal. All actions are always visible — unavailable ones are grayed out with reasons (e.g., "Requires gh CLI", "Run: gh auth login").
+Press `b` on any branch to open an interactive action modal. All actions are always visible — unavailable ones are grayed out with reasons (e.g., "Requires gh CLI", "Run: gh auth login").
 
 | Key | Action | Requires |
 |-----|--------|----------|
-| `g` | Open on GitHub/GitLab/Bitbucket/Azure DevOps | - |
-| `s` | Open Claude Code session in browser | Claude branch with session URL |
+| `b` | Open branch on GitHub/GitLab/Bitbucket/Azure DevOps | - |
+| `c` | Open Claude Code session in browser | Claude branch with session URL |
 | `p` | Create PR (or view existing PR) | `gh` or `glab` CLI |
 | `d` | View PR diff on GitHub/GitLab | Open PR |
 | `a` | Approve pull request | `gh` or `glab` CLI + open PR |
 | `m` | Merge pull request (squash + delete branch) | `gh` or `glab` CLI + open PR |
-| `c` | Check CI status | `gh` or `glab` CLI |
+| `i` | Check CI status | `gh` or `glab` CLI |
 | `Esc` | Close modal | - |
 
 The modal opens instantly and loads PR info in the background. Results are cached per branch and invalidated when the branch receives new commits. The modal auto-detects:

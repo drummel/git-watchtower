@@ -43,7 +43,7 @@
  *   R       - Restart dev server (command mode)
  *   l       - View server logs (command mode)
  *   o       - Open live server in browser
- *   g       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
+ *   b       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
@@ -1850,7 +1850,7 @@ function renderFooter() {
   write(ansi.gray + '[Enter]' + ansi.reset + ansi.bgBlack + ' Switch  ');
   write(ansi.gray + '[h]' + ansi.reset + ansi.bgBlack + ' History  ');
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
-  write(ansi.gray + '[g]' + ansi.reset + ansi.bgBlack + ' Actions  ');
+  write(ansi.gray + '[b]' + ansi.reset + ansi.bgBlack + ' Actions  ');
 
   // Mode-specific keys
   if (!NO_SERVER) {
@@ -2307,13 +2307,13 @@ function renderActionModal() {
 
   // Open on web
   actions.push({
-    key: 'g', label: `Open on ${platformLabel}`,
+    key: 'b', label: `Open branch on ${platformLabel}`,
     available: !!webUrl, reason: !webUrl ? 'Could not parse remote URL' : null,
   });
 
   // Claude session — always shown so users know it exists
   actions.push({
-    key: 's', label: 'Open Claude Code session',
+    key: 'c', label: 'Open Claude Code session',
     available: !!sessionUrl,
     reason: !isClaudeBranch ? 'Not a Claude branch' : !sessionUrl && !loading ? 'No session URL in commits' : null,
     loading: isClaudeBranch && !sessionUrl && loading,
@@ -2357,7 +2357,7 @@ function renderActionModal() {
 
   // CI
   actions.push({
-    key: 'c', label: 'Check CI status',
+    key: 'i', label: 'Check CI status',
     available: cliReady && (!!prInfo || platform === 'gitlab'),
     reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded && platform !== 'gitlab' ? `No open ${prLabel}` : null,
     loading: cliReady && !prLoaded && platform !== 'gitlab',
@@ -3553,13 +3553,13 @@ function setupKeyboardInput() {
       // Helper to extract the base repo URL from a branch-specific URL
       const repoUrl = webUrl ? webUrl.replace(/\/tree\/.*$/, '') : null;
 
-      if (key === 'g' && webUrl) { // Open on web host
+      if (key === 'b' && webUrl) { // Open branch on web host
         addLog(`Opening ${webUrl}`, 'info');
         openInBrowser(webUrl);
         render();
         return;
       }
-      if (key === 's' && sessionUrl) { // Open Claude session
+      if (key === 'c' && sessionUrl) { // Open Claude session
         addLog(`Opening Claude session...`, 'info');
         openInBrowser(sessionUrl);
         render();
@@ -3657,7 +3657,7 @@ function setupKeyboardInput() {
         render();
         return;
       }
-      if (key === 'c' && cliReady) { // CI status
+      if (key === 'i' && cliReady) { // CI status
         addLog(`Checking CI for ${aBranch.name}...`, 'info');
         render();
         try {
@@ -3820,7 +3820,7 @@ function setupKeyboardInput() {
         }
         break;
 
-      case 'g': { // Branch action modal
+      case 'b': { // Branch action modal
         const branch = displayBranches.length > 0 && selectedIndex < displayBranches.length
           ? displayBranches[selectedIndex] : null;
         if (branch) {
