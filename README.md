@@ -198,7 +198,27 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 | `u` | Undo last branch switch |
 | `p` | Force pull current branch |
 | `f` | Fetch all branches + refresh sparklines |
-| `g` | Open selected branch on git host (GitHub, GitLab, Bitbucket, Azure DevOps, etc.) |
+| `g` | Branch actions modal (see below) |
+
+### Branch Actions (`g`)
+
+Press `g` on any branch to open an interactive action modal. Available actions depend on the branch and installed tools:
+
+| Key | Action | Requires |
+|-----|--------|----------|
+| `g` | Open branch on GitHub/GitLab/Bitbucket/Azure DevOps | - |
+| `s` | Open Claude Code session in browser | Claude branch |
+| `p` | Create pull request | `gh` or `glab` CLI |
+| `d` | View PR diff (file list) | `gh` or `glab` CLI + open PR |
+| `a` | Approve pull request | `gh` or `glab` CLI + open PR |
+| `m` | Merge pull request (squash + delete branch) | `gh` or `glab` CLI + open PR |
+| `c` | Check CI status | `gh` or `glab` CLI |
+| `Esc` | Close modal | - |
+
+The modal auto-detects:
+- **Claude Code branches** (`claude/` prefix) and extracts session URLs from commit messages
+- **Git hosting platform** from the remote URL (GitHub, GitLab, Bitbucket, Azure DevOps)
+- **Existing PRs** and their review/CI status
 
 ### Server Controls
 | Key | Mode | Action |
