@@ -43,7 +43,7 @@
  *   R       - Restart dev server (command mode)
  *   l       - View server logs (command mode)
  *   o       - Open live server in browser
- *   g       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
+ *   b       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
@@ -857,24 +857,99 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   return null;
 }
 
-// Gather all context for the branch action modal
-async function gatherActionData(branch) {
-  const isClaudeBranch = /^claude\//.test(branch.name);
+// Check if gh/glab CLI is authenticated
+async function checkCliAuth(cmd) {
+  try {
+    if (cmd === 'gh') {
+      await execAsync('gh auth status 2>&1');
+    } else if (cmd === 'glab') {
+      await execAsync('glab auth status 2>&1');
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
-  // Run all async lookups in parallel
-  const [sessionUrl, webUrl, hasGh, hasGlab] = await Promise.all([
-    isClaudeBranch ? getSessionUrl(branch.name) : Promise.resolve(null),
-    getRemoteWebUrl(branch.name),
+// One-time environment detection (called at startup)
+async function initActionCache() {
+  const [hasGh, hasGlab, webUrlBase] = await Promise.all([
     hasCommand('gh'),
     hasCommand('glab'),
+    getRemoteWebUrl(null), // base URL without branch
   ]);
 
-  const platform = detectPlatform(webUrl);
+  let ghAuthed = false;
+  let glabAuthed = false;
+  if (hasGh) ghAuthed = await checkCliAuth('gh');
+  if (hasGlab) glabAuthed = await checkCliAuth('glab');
 
-  // PR lookup depends on the results above
-  const prInfo = await getPrInfo(branch.name, platform, hasGh, hasGlab);
+  const platform = detectPlatform(webUrlBase);
 
-  return { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch, platform };
+  cachedEnv = { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform };
+}
+
+// Phase 1: Instant local data for the modal (no network calls)
+function gatherLocalActionData(branch) {
+  const isClaudeBranch = /^claude\//.test(branch.name);
+  const env = cachedEnv || { hasGh: false, hasGlab: false, ghAuthed: false, glabAuthed: false, webUrlBase: null, platform: 'github' };
+
+  // Build branch-specific web URL from cached base
+  let webUrl = null;
+  if (env.webUrlBase) {
+    try {
+      const host = new URL(env.webUrlBase).hostname;
+      webUrl = buildBranchUrl(env.webUrlBase, host, branch.name);
+    } catch (e) { /* invalid URL, will be resolved in async phase */ }
+  }
+
+  // Check PR cache (instant if we've seen this branch+commit before)
+  const cached = prInfoCache.get(branch.name);
+  const prInfo = (cached && cached.commit === branch.commit) ? cached.prInfo : null;
+  const prLoaded = !!(cached && cached.commit === branch.commit);
+
+  return {
+    branch, sessionUrl: null, prInfo, webUrl, isClaudeBranch,
+    ...env,
+    prLoaded, // false means PR info still needs to be fetched
+  };
+}
+
+// Phase 2: Async data that requires network/git calls
+async function loadAsyncActionData(branch, currentData) {
+  const isClaudeBranch = currentData.isClaudeBranch;
+
+  // Ensure env cache is populated (might have been in flight during Phase 1)
+  if (!cachedEnv) {
+    await initActionCache();
+  }
+  const env = cachedEnv || {};
+
+  // Resolve webUrl if it wasn't available synchronously
+  let webUrl = currentData.webUrl;
+  if (!webUrl && env.webUrlBase) {
+    try {
+      const host = new URL(env.webUrlBase).hostname;
+      webUrl = buildBranchUrl(env.webUrlBase, host, branch.name);
+    } catch (e) { /* ignore */ }
+  }
+
+  // Fetch session URL (local git, fast but async)
+  const sessionUrl = isClaudeBranch ? await getSessionUrl(branch.name) : null;
+
+  // Fetch PR info if not cached
+  let prInfo = currentData.prInfo;
+  let prLoaded = currentData.prLoaded;
+  if (!prLoaded) {
+    const canQueryPr = (env.platform === 'github' && env.hasGh && env.ghAuthed) ||
+                       (env.platform === 'gitlab' && env.hasGlab && env.glabAuthed);
+    prInfo = canQueryPr ? await getPrInfo(branch.name, env.platform, env.hasGh && env.ghAuthed, env.hasGlab && env.glabAuthed) : null;
+    // Cache the result, keyed by branch commit
+    prInfoCache.set(branch.name, { commit: branch.commit, prInfo });
+    prLoaded = true;
+  }
+
+  return { ...currentData, ...env, webUrl, sessionUrl, prInfo, prLoaded };
 }
 
 // Command mode server management
@@ -1119,7 +1194,15 @@ let filteredBranches = null;
 
 // Branch action modal state
 let actionMode = false;
-let actionData = null; // { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch }
+let actionData = null; // { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch, ... }
+let actionLoading = false; // true while PR info is being fetched asynchronously
+
+// Cached environment info (populated once at startup, doesn't change during session)
+let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
+
+// Per-branch PR info cache: Map<branchName, { commit, prInfo }>
+// Invalidated when the branch's commit hash changes
+const prInfoCache = new Map();
 
 // Session history for undo
 const switchHistory = [];
@@ -1767,7 +1850,7 @@ function renderFooter() {
   write(ansi.gray + '[Enter]' + ansi.reset + ansi.bgBlack + ' Switch  ');
   write(ansi.gray + '[h]' + ansi.reset + ansi.bgBlack + ' History  ');
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
-  write(ansi.gray + '[g]' + ansi.reset + ansi.bgBlack + ' Actions  ');
+  write(ansi.gray + '[b]' + ansi.reset + ansi.bgBlack + ' Actions  ');
 
   // Mode-specific keys
   if (!NO_SERVER) {
@@ -2205,43 +2288,138 @@ function renderInfo() {
 function renderActionModal() {
   if (!actionMode || !actionData) return;
 
-  const { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch, platform } = actionData;
+  const { branch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, isClaudeBranch, platform, prLoaded } = actionData;
 
   const width = Math.min(64, terminalWidth - 4);
-  const innerW = width - 6; // content area width (2 border + 2 padding each side)
+  const innerW = width - 6;
 
-  // Calculate dynamic height
-  let contentLines = 0;
-  contentLines += 2; // header spacing + branch name
-  contentLines += 1; // blank line separator
+  const platformLabel = platform === 'gitlab' ? 'GitLab' : platform === 'bitbucket' ? 'Bitbucket' : platform === 'azure' ? 'Azure DevOps' : 'GitHub';
+  const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
+  const cliTool = platform === 'gitlab' ? 'glab' : 'gh';
+  const hasCli = platform === 'gitlab' ? hasGlab : hasGh;
+  const cliAuthed = platform === 'gitlab' ? glabAuthed : ghAuthed;
+  const cliReady = hasCli && cliAuthed;
+  const loading = actionLoading; // PR info still loading
 
-  // Count action lines
+  // Build actions list — ALL actions always shown, grayed out with reasons when unavailable
+  // { key, label, available, reason, loading }
   const actions = [];
-  if (webUrl) actions.push({ key: 'g', label: 'Open on ' + (platform === 'gitlab' ? 'GitLab' : platform === 'bitbucket' ? 'Bitbucket' : platform === 'azure' ? 'Azure DevOps' : 'GitHub') });
-  if (isClaudeBranch && sessionUrl) actions.push({ key: 's', label: 'Open Claude session' });
-  if (hasGh || hasGlab) {
-    if (prInfo) {
-      actions.push({ key: 'd', label: 'View diff in terminal' });
-      actions.push({ key: 'a', label: 'Approve PR' });
-      actions.push({ key: 'm', label: 'Merge PR' });
-    } else {
-      actions.push({ key: 'p', label: 'Create pull request' });
-    }
-    actions.push({ key: 'c', label: 'Check CI status' });
-  }
-  contentLines += actions.length;
-  contentLines += 1; // blank line before status
 
-  // Status section
-  let statusLines = 0;
-  if (prInfo) statusLines += 1;
-  if (isClaudeBranch) statusLines += 1;
-  if (!webUrl && !hasGh && !hasGlab) statusLines += 1; // "no tools" message
-  contentLines += statusLines;
+  // Open on web
+  actions.push({
+    key: 'b', label: `Open branch on ${platformLabel}`,
+    available: !!webUrl, reason: !webUrl ? 'Could not parse remote URL' : null,
+  });
+
+  // Claude session — always shown so users know it exists
+  actions.push({
+    key: 'c', label: 'Open Claude Code session',
+    available: !!sessionUrl,
+    reason: !isClaudeBranch ? 'Not a Claude branch' : !sessionUrl && !loading ? 'No session URL in commits' : null,
+    loading: isClaudeBranch && !sessionUrl && loading,
+  });
+
+  // PR: create or view depending on state
+  if (prInfo) {
+    actions.push({ key: 'p', label: `View ${prLabel} #${prInfo.number}`, available: !!webUrl, reason: null });
+  } else {
+    actions.push({
+      key: 'p', label: `Create ${prLabel}`,
+      available: cliReady && prLoaded,
+      reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : null,
+      loading: cliReady && !prLoaded,
+    });
+  }
+
+  // Diff — opens on web, just needs a PR and webUrl
+  actions.push({
+    key: 'd', label: `View ${prLabel} diff on ${platformLabel}`,
+    available: !!prInfo && !!webUrl,
+    reason: !prInfo && prLoaded ? `No open ${prLabel}` : !webUrl ? 'Could not parse remote URL' : null,
+    loading: !prLoaded && (cliReady || !!webUrl),
+  });
+
+  // Approve
+  actions.push({
+    key: 'a', label: `Approve ${prLabel}`,
+    available: !!prInfo && cliReady,
+    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
+    loading: cliReady && !prLoaded,
+  });
+
+  // Merge
+  actions.push({
+    key: 'm', label: `Merge ${prLabel} (squash)`,
+    available: !!prInfo && cliReady,
+    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
+    loading: cliReady && !prLoaded,
+  });
+
+  // CI
+  actions.push({
+    key: 'i', label: 'Check CI status',
+    available: cliReady && (!!prInfo || platform === 'gitlab'),
+    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded && platform !== 'gitlab' ? `No open ${prLabel}` : null,
+    loading: cliReady && !prLoaded && platform !== 'gitlab',
+  });
+
+  // Calculate height
+  let contentLines = 0;
+  contentLines += 2; // spacing + branch name
+  contentLines += 1; // separator
+  contentLines += actions.length;
+  contentLines += 1; // separator
+
+  // Status info
+  const statusInfoLines = [];
+  if (prInfo) {
+    let prStatus = `${prLabel} #${prInfo.number}: ${truncate(prInfo.title, innerW - 20)}`;
+    const badges = [];
+    if (prInfo.approved) badges.push('approved');
+    if (prInfo.checksPass) badges.push('checks pass');
+    if (prInfo.checksFail) badges.push('checks fail');
+    if (badges.length) prStatus += ` [${badges.join(', ')}]`;
+    statusInfoLines.push({ color: 'green', text: prStatus });
+  } else if (loading) {
+    statusInfoLines.push({ color: 'gray', text: `Loading ${prLabel} info...` });
+  } else if (cliReady) {
+    statusInfoLines.push({ color: 'gray', text: `No open ${prLabel} for this branch` });
+  }
+
+  if (isClaudeBranch) {
+    if (sessionUrl) {
+      const shortSession = sessionUrl.replace('https://claude.ai/code/', '');
+      statusInfoLines.push({ color: 'magenta', text: `Session: ${truncate(shortSession, innerW - 10)}` });
+    } else if (!loading) {
+      statusInfoLines.push({ color: 'gray', text: 'Claude branch (no session URL in commits)' });
+    }
+  }
+
+  contentLines += statusInfoLines.length;
+
+  // Setup hints
+  const hints = [];
+  if (!hasCli) {
+    if (platform === 'gitlab') {
+      hints.push(`Install glab: https://gitlab.com/gitlab-org/cli`);
+      hints.push(`Then run: glab auth login`);
+    } else {
+      hints.push(`Install gh:   https://cli.github.com`);
+      hints.push(`Then run: gh auth login`);
+    }
+  } else if (!cliAuthed) {
+    hints.push(`${cliTool} is installed but not authenticated`);
+    hints.push(`Run: ${cliTool} auth login`);
+  }
+
+  if (hints.length > 0) {
+    contentLines += 1;
+    contentLines += hints.length;
+  }
 
   contentLines += 2; // blank + close instructions
 
-  const height = contentLines + 3; // +3 for top/bottom borders and padding
+  const height = contentLines + 3;
   const col = Math.floor((terminalWidth - width) / 2);
   const row = Math.floor((terminalHeight - height) / 2);
 
@@ -2267,52 +2445,52 @@ function renderActionModal() {
 
   let r = row + 2;
 
-  // Branch name
+  // Branch name with type indicator
   write(ansi.moveTo(r, col + 3));
-  write(ansi.white + ansi.bold + truncate(branch.name, innerW) + ansi.reset);
+  write(ansi.white + ansi.bold + truncate(branch.name, innerW - 10) + ansi.reset);
+  if (isClaudeBranch) {
+    write(ansi.magenta + ' [Claude]' + ansi.reset);
+  }
   r++;
 
   // Separator
   r++;
 
-  // Actions list
+  // Actions list — all always visible
   for (const action of actions) {
     write(ansi.moveTo(r, col + 3));
-    write(ansi.brightCyan + '[' + action.key + ']' + ansi.reset + ' ' + action.label);
-    r++;
-  }
-
-  // Separator
-  r++;
-
-  // Status section
-  if (prInfo) {
-    write(ansi.moveTo(r, col + 3));
-    const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
-    let statusStr = ansi.gray + prLabel + ' #' + prInfo.number + ': ' + ansi.reset;
-    statusStr += truncate(prInfo.title, innerW - 15);
-    if (prInfo.approved) statusStr += ansi.green + ' ✓approved' + ansi.reset;
-    if (prInfo.checksPass) statusStr += ansi.green + ' ✓checks' + ansi.reset;
-    if (prInfo.checksFail) statusStr += ansi.red + ' ✗checks' + ansi.reset;
-    write(statusStr);
-    r++;
-  }
-
-  if (isClaudeBranch) {
-    write(ansi.moveTo(r, col + 3));
-    if (sessionUrl) {
-      const shortSession = sessionUrl.replace('https://claude.ai/code/', '');
-      write(ansi.gray + 'Session: ' + ansi.reset + ansi.magenta + truncate(shortSession, innerW - 10) + ansi.reset);
+    if (action.loading) {
+      write(ansi.gray + '[' + action.key + '] ' + action.label + '  ' + ansi.dim + ansi.cyan + 'loading...' + ansi.reset);
+    } else if (action.available) {
+      write(ansi.brightCyan + '[' + action.key + ']' + ansi.reset + ' ' + action.label);
     } else {
-      write(ansi.gray + 'Claude branch (no session URL found in commits)' + ansi.reset);
+      write(ansi.gray + '[' + action.key + '] ' + action.label);
+      if (action.reason) {
+        write('  ' + ansi.dim + ansi.yellow + action.reason + ansi.reset);
+      }
+      write(ansi.reset);
     }
     r++;
   }
 
-  if (!webUrl && !hasGh && !hasGlab) {
+  // Separator
+  r++;
+
+  // Status info
+  for (const info of statusInfoLines) {
     write(ansi.moveTo(r, col + 3));
-    write(ansi.yellow + 'Install gh or glab CLI for PR actions' + ansi.reset);
+    write(ansi[info.color] + truncate(info.text, innerW) + ansi.reset);
     r++;
+  }
+
+  // Setup hints
+  if (hints.length > 0) {
+    r++;
+    for (const hint of hints) {
+      write(ansi.moveTo(r, col + 3));
+      write(ansi.yellow + truncate(hint, innerW) + ansi.reset);
+      r++;
+    }
   }
 
   // Close instructions
@@ -3363,136 +3541,153 @@ function setupKeyboardInput() {
       if (key === '\u001b') { // Escape to close
         actionMode = false;
         actionData = null;
+        actionLoading = false;
         render();
         return;
       }
       if (!actionData) return;
-      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, platform } = actionData;
+      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = actionData;
+      const cliReady = (platform === 'gitlab') ? (hasGlab && glabAuthed) : (hasGh && ghAuthed);
+      const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
 
-      if (key === 'g') { // Open on GitHub/GitLab
-        if (webUrl) {
-          addLog(`Opening ${webUrl}`, 'info');
-          openInBrowser(webUrl);
-        }
-        actionMode = false;
-        actionData = null;
+      // Helper to extract the base repo URL from a branch-specific URL
+      const repoUrl = webUrl ? webUrl.replace(/\/tree\/.*$/, '') : null;
+
+      if (key === 'b' && webUrl) { // Open branch on web host
+        addLog(`Opening ${webUrl}`, 'info');
+        openInBrowser(webUrl);
         render();
         return;
       }
-      if (key === 's' && sessionUrl) { // Open Claude session
+      if (key === 'c' && sessionUrl) { // Open Claude session
         addLog(`Opening Claude session...`, 'info');
         openInBrowser(sessionUrl);
-        actionMode = false;
-        actionData = null;
         render();
         return;
       }
-      if (key === 'p' && !prInfo && (hasGh || hasGlab)) { // Create PR
-        actionMode = false;
-        actionData = null;
-        addLog(`Creating PR for ${aBranch.name}...`, 'update');
-        render();
-        try {
-          if (platform === 'gitlab' && hasGlab) {
-            const { stdout } = await execAsync(`glab mr create --source-branch="${aBranch.name}" --fill --yes 2>&1`);
-            addLog(`MR created: ${stdout.trim().split('\n').pop()}`, 'success');
-          } else {
-            const { stdout } = await execAsync(`gh pr create --head "${aBranch.name}" --fill 2>&1`);
-            addLog(`PR created: ${stdout.trim().split('\n').pop()}`, 'success');
+      if (key === 'p') { // Create or view PR
+        if (prInfo && repoUrl) {
+          // View existing PR on web
+          const prUrl = platform === 'gitlab'
+            ? `${repoUrl}/-/merge_requests/${prInfo.number}`
+            : `${repoUrl}/pull/${prInfo.number}`;
+          addLog(`Opening ${prLabel} #${prInfo.number}...`, 'info');
+          openInBrowser(prUrl);
+        } else if (!prInfo && prLoaded && cliReady) {
+          // Create PR — only if we've confirmed no PR exists (prLoaded=true)
+          addLog(`Creating ${prLabel} for ${aBranch.name}...`, 'update');
+          render();
+          try {
+            let result;
+            if (platform === 'gitlab') {
+              result = await execAsync(`glab mr create --source-branch="${aBranch.name}" --fill --yes 2>&1`);
+            } else {
+              result = await execAsync(`gh pr create --head "${aBranch.name}" --fill 2>&1`);
+            }
+            addLog(`${prLabel} created: ${(result.stdout || '').trim().split('\n').pop()}`, 'success');
+            // Invalidate cache and refresh modal data
+            prInfoCache.delete(aBranch.name);
+            actionData = gatherLocalActionData(aBranch);
+            actionLoading = true;
+            render();
+            loadAsyncActionData(aBranch, actionData).then((fullData) => {
+              if (actionMode && actionData && actionData.branch.name === aBranch.name) {
+                actionData = fullData;
+                actionLoading = false;
+                render();
+              }
+            }).catch(() => {});
+          } catch (e) {
+            const msg = (e && e.stderr) || (e && e.message) || String(e);
+            addLog(`Failed to create ${prLabel}: ${msg.split('\n')[0]}`, 'error');
           }
-        } catch (e) {
-          addLog(`Failed to create PR: ${e.message.split('\n')[0]}`, 'error');
+        } else if (!prLoaded) {
+          addLog(`Still loading ${prLabel} info...`, 'info');
         }
         render();
         return;
       }
-      if (key === 'd' && prInfo && (hasGh || hasGlab)) { // View diff
-        actionMode = false;
-        actionData = null;
-        addLog(`Loading diff for PR #${prInfo.number}...`, 'info');
-        render();
-        try {
-          let diffOutput;
-          if (platform === 'gitlab' && hasGlab) {
-            const result = await execAsync(`glab mr diff ${prInfo.number} --name-only 2>&1`);
-            diffOutput = result.stdout;
-          } else {
-            const result = await execAsync(`gh pr diff ${prInfo.number} --name-only 2>&1`);
-            diffOutput = result.stdout;
-          }
-          const files = diffOutput.trim().split('\n').filter(Boolean);
-          // Reuse the preview modal to show the diff file list
-          previewData = {
-            commits: [],
-            filesChanged: files,
-          };
-          previewMode = true;
-        } catch (e) {
-          addLog(`Failed to load diff: ${e.message.split('\n')[0]}`, 'error');
-        }
+      if (key === 'd' && prInfo && repoUrl) { // View diff on web
+        const diffUrl = platform === 'gitlab'
+          ? `${repoUrl}/-/merge_requests/${prInfo.number}/diffs`
+          : `${repoUrl}/pull/${prInfo.number}/files`;
+        addLog(`Opening ${prLabel} #${prInfo.number} diff...`, 'info');
+        openInBrowser(diffUrl);
         render();
         return;
       }
-      if (key === 'a' && prInfo && (hasGh || hasGlab)) { // Approve PR
-        actionMode = false;
-        actionData = null;
-        addLog(`Approving PR #${prInfo.number}...`, 'update');
+      if (key === 'a' && prInfo && cliReady) { // Approve PR
+        addLog(`Approving ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
-          if (platform === 'gitlab' && hasGlab) {
+          if (platform === 'gitlab') {
             await execAsync(`glab mr approve ${prInfo.number} 2>&1`);
           } else {
             await execAsync(`gh pr review ${prInfo.number} --approve 2>&1`);
           }
-          addLog(`PR #${prInfo.number} approved`, 'success');
+          addLog(`${prLabel} #${prInfo.number} approved`, 'success');
+          // Refresh PR info to show updated status
+          prInfoCache.delete(aBranch.name);
         } catch (e) {
-          addLog(`Failed to approve: ${e.message.split('\n')[0]}`, 'error');
+          const msg = (e && e.stderr) || (e && e.message) || String(e);
+          addLog(`Failed to approve: ${msg.split('\n')[0]}`, 'error');
         }
         render();
         return;
       }
-      if (key === 'm' && prInfo && (hasGh || hasGlab)) { // Merge PR
-        actionMode = false;
-        actionData = null;
-        addLog(`Merging PR #${prInfo.number}...`, 'update');
+      if (key === 'm' && prInfo && cliReady) { // Merge PR
+        addLog(`Merging ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
-          if (platform === 'gitlab' && hasGlab) {
+          if (platform === 'gitlab') {
             await execAsync(`glab mr merge ${prInfo.number} --squash --remove-source-branch --yes 2>&1`);
           } else {
             await execAsync(`gh pr merge ${prInfo.number} --squash --delete-branch 2>&1`);
           }
-          addLog(`PR #${prInfo.number} merged`, 'success');
+          addLog(`${prLabel} #${prInfo.number} merged`, 'success');
+          actionMode = false;
+          actionData = null;
+          actionLoading = false;
+          prInfoCache.delete(aBranch.name);
           await pollGitChanges();
         } catch (e) {
-          addLog(`Failed to merge: ${e.message.split('\n')[0]}`, 'error');
+          const msg = (e && e.stderr) || (e && e.message) || String(e);
+          addLog(`Failed to merge: ${msg.split('\n')[0]}`, 'error');
         }
         render();
         return;
       }
-      if (key === 'c' && (hasGh || hasGlab)) { // CI status
-        actionMode = false;
-        actionData = null;
+      if (key === 'i' && cliReady) { // CI status
         addLog(`Checking CI for ${aBranch.name}...`, 'info');
         render();
         try {
-          if (platform === 'gitlab' && hasGlab) {
-            const { stdout } = await execAsync(`glab ci status --branch "${aBranch.name}" 2>&1`);
-            const lines = stdout.trim().split('\n');
+          if (platform === 'gitlab') {
+            const result = await execAsync(`glab ci status --branch "${aBranch.name}" 2>&1`);
+            const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 3)) {
               addLog(line.trim(), 'info');
             }
           } else if (prInfo) {
-            const { stdout } = await execAsync(`gh pr checks ${prInfo.number} 2>&1`);
-            const lines = stdout.trim().split('\n');
+            const result = await execAsync(`gh pr checks ${prInfo.number} 2>&1`);
+            const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 5)) {
               addLog(line.trim(), 'info');
             }
           } else {
-            addLog('No PR found — CI status requires an open PR on GitHub', 'error');
+            addLog(`No open ${prLabel} — CI status requires an open ${prLabel} on GitHub`, 'info');
           }
         } catch (e) {
-          addLog(`CI check failed: ${e.message.split('\n')[0]}`, 'error');
+          // gh pr checks exits non-zero when checks fail — stdout still has useful info
+          const output = (e && e.stdout) || '';
+          if (output.trim()) {
+            const lines = output.trim().split('\n');
+            for (const line of lines.slice(0, 5)) {
+              addLog(line.trim(), 'info');
+            }
+          } else {
+            const msg = (e && e.stderr) || (e && e.message) || String(e);
+            addLog(`CI check failed: ${msg.split('\n')[0]}`, 'error');
+          }
         }
         render();
         return;
@@ -3625,15 +3820,30 @@ function setupKeyboardInput() {
         }
         break;
 
-      case 'g': { // Branch action modal
+      case 'b': { // Branch action modal
         const branch = displayBranches.length > 0 && selectedIndex < displayBranches.length
           ? displayBranches[selectedIndex] : null;
         if (branch) {
-          addLog(`Loading actions for ${branch.name}...`, 'info');
-          render();
-          actionData = await gatherActionData(branch);
+          // Phase 1: Open modal instantly with local/cached data
+          actionData = gatherLocalActionData(branch);
           actionMode = true;
+          actionLoading = !actionData.prLoaded;
           render();
+
+          // Phase 2: Load async data (session URL, PR info) in background
+          loadAsyncActionData(branch, actionData).then((fullData) => {
+            // Only update if modal is still open for the same branch
+            if (actionMode && actionData && actionData.branch.name === branch.name) {
+              actionData = fullData;
+              actionLoading = false;
+              render();
+            }
+          }).catch(() => {
+            if (actionMode && actionData && actionData.branch.name === branch.name) {
+              actionLoading = false;
+              render();
+            }
+          });
         }
         break;
       }
@@ -3834,8 +4044,9 @@ async function start() {
     selectedBranchName = branches[0].name;
   }
 
-  // Load sparklines in background
+  // Load sparklines and action cache in background
   refreshAllSparklines().catch(() => {});
+  initActionCache().catch(() => {});
 
   // Start server based on mode
   if (SERVER_MODE === 'none') {
