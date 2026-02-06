@@ -209,7 +209,7 @@ Press `g` on any branch to open an interactive action modal. All actions are alw
 | `g` | Open branch on GitHub/GitLab/Bitbucket/Azure DevOps | - |
 | `s` | Open Claude Code session in browser | Claude branch with session URL |
 | `p` | Create PR (or view existing PR) | `gh` or `glab` CLI |
-| `d` | View PR diff (file list) | `gh` or `glab` CLI + open PR |
+| `d` | View PR diff on GitHub/GitLab | Open PR |
 | `a` | Approve pull request | `gh` or `glab` CLI + open PR |
 | `m` | Merge pull request (squash + delete branch) | `gh` or `glab` CLI + open PR |
 | `c` | Check CI status | `gh` or `glab` CLI |

@@ -2331,12 +2331,12 @@ function renderActionModal() {
     });
   }
 
-  // Diff
+  // Diff — opens on web, just needs a PR and webUrl
   actions.push({
-    key: 'd', label: `View ${prLabel} diff`,
-    available: !!prInfo && cliReady,
-    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
-    loading: cliReady && !prLoaded,
+    key: 'd', label: `View ${prLabel} diff on ${platformLabel}`,
+    available: !!prInfo && !!webUrl,
+    reason: !prInfo && prLoaded ? `No open ${prLabel}` : !webUrl ? 'Could not parse remote URL' : null,
+    loading: !prLoaded && (cliReady || !!webUrl),
   });
 
   // Approve
@@ -3541,95 +3541,83 @@ function setupKeyboardInput() {
       if (key === '\u001b') { // Escape to close
         actionMode = false;
         actionData = null;
+        actionLoading = false;
         render();
         return;
       }
       if (!actionData) return;
-      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform } = actionData;
+      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = actionData;
       const cliReady = (platform === 'gitlab') ? (hasGlab && glabAuthed) : (hasGh && ghAuthed);
+      const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
 
-      if (key === 'g') { // Open on web host
-        if (webUrl) {
-          addLog(`Opening ${webUrl}`, 'info');
-          openInBrowser(webUrl);
-        } else {
-          addLog('Could not determine repository web URL from remote', 'error');
-        }
-        actionMode = false;
-        actionData = null;
+      // Helper to extract the base repo URL from a branch-specific URL
+      const repoUrl = webUrl ? webUrl.replace(/\/tree\/.*$/, '') : null;
+
+      if (key === 'g' && webUrl) { // Open on web host
+        addLog(`Opening ${webUrl}`, 'info');
+        openInBrowser(webUrl);
         render();
         return;
       }
       if (key === 's' && sessionUrl) { // Open Claude session
         addLog(`Opening Claude session...`, 'info');
         openInBrowser(sessionUrl);
-        actionMode = false;
-        actionData = null;
         render();
         return;
       }
       if (key === 'p') { // Create or view PR
-        actionMode = false;
-        actionData = null;
-        const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
-        if (prInfo && webUrl) {
-          // View existing PR — open PR URL on web
+        if (prInfo && repoUrl) {
+          // View existing PR on web
           const prUrl = platform === 'gitlab'
-            ? webUrl.replace(/\/tree\/.*/, `/-/merge_requests/${prInfo.number}`)
-            : webUrl.replace(/\/tree\/.*/, `/pull/${prInfo.number}`);
+            ? `${repoUrl}/-/merge_requests/${prInfo.number}`
+            : `${repoUrl}/pull/${prInfo.number}`;
           addLog(`Opening ${prLabel} #${prInfo.number}...`, 'info');
           openInBrowser(prUrl);
-        } else if (cliReady) {
+        } else if (!prInfo && prLoaded && cliReady) {
+          // Create PR — only if we've confirmed no PR exists (prLoaded=true)
           addLog(`Creating ${prLabel} for ${aBranch.name}...`, 'update');
           render();
           try {
+            let result;
             if (platform === 'gitlab') {
-              const { stdout } = await execAsync(`glab mr create --source-branch="${aBranch.name}" --fill --yes 2>&1`);
-              addLog(`MR created: ${stdout.trim().split('\n').pop()}`, 'success');
+              result = await execAsync(`glab mr create --source-branch="${aBranch.name}" --fill --yes 2>&1`);
             } else {
-              const { stdout } = await execAsync(`gh pr create --head "${aBranch.name}" --fill 2>&1`);
-              addLog(`PR created: ${stdout.trim().split('\n').pop()}`, 'success');
+              result = await execAsync(`gh pr create --head "${aBranch.name}" --fill 2>&1`);
             }
-            // Invalidate PR cache so next open reflects the new PR
+            addLog(`${prLabel} created: ${(result.stdout || '').trim().split('\n').pop()}`, 'success');
+            // Invalidate cache and refresh modal data
             prInfoCache.delete(aBranch.name);
+            actionData = gatherLocalActionData(aBranch);
+            actionLoading = true;
+            render();
+            loadAsyncActionData(aBranch, actionData).then((fullData) => {
+              if (actionMode && actionData && actionData.branch.name === aBranch.name) {
+                actionData = fullData;
+                actionLoading = false;
+                render();
+              }
+            }).catch(() => {});
           } catch (e) {
-            addLog(`Failed to create ${prLabel}: ${(e.message || String(e)).split('\n')[0]}`, 'error');
+            const msg = (e && e.stderr) || (e && e.message) || String(e);
+            addLog(`Failed to create ${prLabel}: ${msg.split('\n')[0]}`, 'error');
           }
+        } else if (!prLoaded) {
+          addLog(`Still loading ${prLabel} info...`, 'info');
         }
         render();
         return;
       }
-      if (key === 'd' && prInfo && cliReady) { // View diff
-        actionMode = false;
-        actionData = null;
-        addLog(`Loading diff for #${prInfo.number}...`, 'info');
-        render();
-        try {
-          let diffOutput;
-          if (platform === 'gitlab') {
-            const result = await execAsync(`glab mr diff ${prInfo.number} --name-only 2>&1`);
-            diffOutput = result.stdout;
-          } else {
-            const result = await execAsync(`gh pr diff ${prInfo.number} --name-only 2>&1`);
-            diffOutput = result.stdout;
-          }
-          const files = diffOutput.trim().split('\n').filter(Boolean);
-          // Reuse the preview modal to show the diff file list
-          previewData = {
-            commits: [],
-            filesChanged: files,
-          };
-          previewMode = true;
-        } catch (e) {
-          addLog(`Failed to load diff: ${(e.message || String(e)).split('\n')[0]}`, 'error');
-        }
+      if (key === 'd' && prInfo && repoUrl) { // View diff on web
+        const diffUrl = platform === 'gitlab'
+          ? `${repoUrl}/-/merge_requests/${prInfo.number}/diffs`
+          : `${repoUrl}/pull/${prInfo.number}/files`;
+        addLog(`Opening ${prLabel} #${prInfo.number} diff...`, 'info');
+        openInBrowser(diffUrl);
         render();
         return;
       }
       if (key === 'a' && prInfo && cliReady) { // Approve PR
-        actionMode = false;
-        actionData = null;
-        addLog(`Approving #${prInfo.number}...`, 'update');
+        addLog(`Approving ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
           if (platform === 'gitlab') {
@@ -3637,17 +3625,18 @@ function setupKeyboardInput() {
           } else {
             await execAsync(`gh pr review ${prInfo.number} --approve 2>&1`);
           }
-          addLog(`#${prInfo.number} approved`, 'success');
+          addLog(`${prLabel} #${prInfo.number} approved`, 'success');
+          // Refresh PR info to show updated status
+          prInfoCache.delete(aBranch.name);
         } catch (e) {
-          addLog(`Failed to approve: ${(e.message || String(e)).split('\n')[0]}`, 'error');
+          const msg = (e && e.stderr) || (e && e.message) || String(e);
+          addLog(`Failed to approve: ${msg.split('\n')[0]}`, 'error');
         }
         render();
         return;
       }
       if (key === 'm' && prInfo && cliReady) { // Merge PR
-        actionMode = false;
-        actionData = null;
-        addLog(`Merging #${prInfo.number}...`, 'update');
+        addLog(`Merging ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
           if (platform === 'gitlab') {
@@ -3655,37 +3644,50 @@ function setupKeyboardInput() {
           } else {
             await execAsync(`gh pr merge ${prInfo.number} --squash --delete-branch 2>&1`);
           }
-          addLog(`#${prInfo.number} merged`, 'success');
+          addLog(`${prLabel} #${prInfo.number} merged`, 'success');
+          actionMode = false;
+          actionData = null;
+          actionLoading = false;
+          prInfoCache.delete(aBranch.name);
           await pollGitChanges();
         } catch (e) {
-          addLog(`Failed to merge: ${(e.message || String(e)).split('\n')[0]}`, 'error');
+          const msg = (e && e.stderr) || (e && e.message) || String(e);
+          addLog(`Failed to merge: ${msg.split('\n')[0]}`, 'error');
         }
         render();
         return;
       }
       if (key === 'c' && cliReady) { // CI status
-        actionMode = false;
-        actionData = null;
         addLog(`Checking CI for ${aBranch.name}...`, 'info');
         render();
         try {
           if (platform === 'gitlab') {
-            const { stdout } = await execAsync(`glab ci status --branch "${aBranch.name}" 2>&1`);
-            const lines = stdout.trim().split('\n');
+            const result = await execAsync(`glab ci status --branch "${aBranch.name}" 2>&1`);
+            const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 3)) {
               addLog(line.trim(), 'info');
             }
           } else if (prInfo) {
-            const { stdout } = await execAsync(`gh pr checks ${prInfo.number} 2>&1`);
-            const lines = stdout.trim().split('\n');
+            const result = await execAsync(`gh pr checks ${prInfo.number} 2>&1`);
+            const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 5)) {
               addLog(line.trim(), 'info');
             }
           } else {
-            addLog('No PR found — CI status requires an open PR on GitHub', 'error');
+            addLog(`No open ${prLabel} — CI status requires an open ${prLabel} on GitHub`, 'info');
           }
         } catch (e) {
-          addLog(`CI check failed: ${(e.message || String(e)).split('\n')[0]}`, 'error');
+          // gh pr checks exits non-zero when checks fail — stdout still has useful info
+          const output = (e && e.stdout) || '';
+          if (output.trim()) {
+            const lines = output.trim().split('\n');
+            for (const line of lines.slice(0, 5)) {
+              addLog(line.trim(), 'info');
+            }
+          } else {
+            const msg = (e && e.stderr) || (e && e.message) || String(e);
+            addLog(`CI check failed: ${msg.split('\n')[0]}`, 'error');
+          }
         }
         render();
         return;
