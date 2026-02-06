@@ -206,7 +206,7 @@ Press `g` on any branch to open an interactive action modal. All actions are alw
 
 | Key | Action | Requires |
 |-----|--------|----------|
-| `g` | Open branch on GitHub/GitLab/Bitbucket/Azure DevOps | - |
+| `g` | Open on GitHub/GitLab/Bitbucket/Azure DevOps | - |
 | `s` | Open Claude Code session in browser | Claude branch with session URL |
 | `p` | Create PR (or view existing PR) | `gh` or `glab` CLI |
 | `d` | View PR diff on GitHub/GitLab | Open PR |
