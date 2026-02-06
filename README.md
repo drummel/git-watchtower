@@ -198,7 +198,7 @@ GIT_POLL_INTERVAL=10000 git-watchtower
 | `u` | Undo last branch switch |
 | `p` | Force pull current branch |
 | `f` | Fetch all branches + refresh sparklines |
-| `g` | Open selected branch on GitHub/GitLab in browser |
+| `g` | Open selected branch on git host (GitHub, GitLab, Bitbucket, Azure DevOps, etc.) |
 
 ### Server Controls
 | Key | Mode | Action |

@@ -43,7 +43,7 @@
  *   R       - Restart dev server (command mode)
  *   l       - View server logs (command mode)
  *   o       - Open live server in browser
- *   g       - Open selected branch on GitHub/GitLab in browser
+ *   g       - Open selected branch on git host (GitHub/GitLab/etc) in browser
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
@@ -696,41 +696,78 @@ function openInBrowser(url) {
   });
 }
 
-// Convert a git remote URL to a browser-friendly web URL
-// Supports GitHub, GitLab, Bitbucket, and self-hosted instances
-function remoteUrlToWebUrl(remoteUrl) {
-  let url = remoteUrl.trim();
+// Parse a git remote URL into { host, path } components
+// Supports SSH (git@host:path), HTTPS, and ssh:// protocol formats
+function parseRemoteUrl(remoteUrl) {
+  const url = remoteUrl.trim();
 
   // SSH format: git@host:user/repo.git
   const sshMatch = url.match(/^[\w-]+@([^:]+):(.+?)(?:\.git)?$/);
-  if (sshMatch) {
-    return `https://${sshMatch[1]}/${sshMatch[2]}`;
-  }
+  if (sshMatch) return { host: sshMatch[1], path: sshMatch[2] };
 
-  // HTTPS/HTTP format: https://host/user/repo.git
+  // HTTPS/HTTP format: https://host/path.git
   const httpMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-  if (httpMatch) {
-    return `https://${httpMatch[1]}/${httpMatch[2]}`;
-  }
+  if (httpMatch) return { host: httpMatch[1], path: httpMatch[2] };
 
-  // ssh:// format: ssh://git@host/user/repo.git
-  const sshProtoMatch = url.match(/^ssh:\/\/[\w-]+@([^/]+)\/(.+?)(?:\.git)?$/);
-  if (sshProtoMatch) {
-    return `https://${sshProtoMatch[1]}/${sshProtoMatch[2]}`;
-  }
+  // ssh:// format: ssh://git@host/user/repo.git or ssh://git@host:port/user/repo.git
+  const sshProtoMatch = url.match(/^ssh:\/\/[\w-]+@([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?$/);
+  if (sshProtoMatch) return { host: sshProtoMatch[1], path: sshProtoMatch[2] };
 
   return null;
+}
+
+// Build a branch URL for the appropriate git hosting service
+// Each service has its own URL format for viewing branches
+function buildBranchUrl(baseUrl, host, branchName) {
+  const branch = encodeURIComponent(branchName);
+
+  // Azure DevOps: dev.azure.com/org/project/_git/repo or org.visualstudio.com
+  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) {
+    return `${baseUrl}?version=GB${branch}`;
+  }
+
+  // Bitbucket Cloud
+  if (host === 'bitbucket.org') {
+    return `${baseUrl}/src/${branch}`;
+  }
+
+  // AWS CodeCommit
+  if (host.match(/codecommit\..+\.amazonaws\.com/)) {
+    return `${baseUrl}/browse/refs/heads/${branch}`;
+  }
+
+  // SourceHut
+  if (host === 'git.sr.ht') {
+    return `${baseUrl}/tree/${branch}`;
+  }
+
+  // GitHub, GitLab, Codeberg, Gitea, Forgejo, Gogs, and self-hosted instances
+  // All use /tree/<branch>
+  return `${baseUrl}/tree/${branch}`;
 }
 
 async function getRemoteWebUrl(branchName) {
   try {
     const { stdout } = await execAsync(`git remote get-url "${REMOTE_NAME}"`);
-    const webUrl = remoteUrlToWebUrl(stdout);
-    if (!webUrl) return null;
-    if (branchName) {
-      return `${webUrl}/tree/${encodeURIComponent(branchName)}`;
+    const parsed = parseRemoteUrl(stdout);
+    if (!parsed) return null;
+
+    // Azure DevOps SSH uses org@ssh.dev.azure.com:v3/org/project/repo
+    // Normalize to the web URL format
+    let baseUrl;
+    if (parsed.host === 'ssh.dev.azure.com') {
+      // path is v3/org/project/repo -> web url is dev.azure.com/org/project/_git/repo
+      const parts = parsed.path.replace(/^v3\//, '').split('/');
+      if (parts.length >= 3) {
+        baseUrl = `https://dev.azure.com/${parts[0]}/${parts[1]}/_git/${parts.slice(2).join('/')}`;
+        if (branchName) return buildBranchUrl(baseUrl, 'dev.azure.com', branchName);
+        return baseUrl;
+      }
     }
-    return webUrl;
+
+    baseUrl = `https://${parsed.host}/${parsed.path}`;
+    if (branchName) return buildBranchUrl(baseUrl, parsed.host, branchName);
+    return baseUrl;
   } catch (e) {
     return null;
   }
