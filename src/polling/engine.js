@@ -7,9 +7,9 @@ const { isBaseBranch } = require('../git/pr');
 
 /**
  * Detect new branches not previously known.
- * @param {Array<{name: string}>} allBranches - All currently fetched branches
+ * @param {Array<{name: string, isNew?: boolean, newAt?: number}>} allBranches - All currently fetched branches
  * @param {Set<string>} knownBranchNames - Previously known branch names
- * @returns {Array<{name: string, isNew: boolean, newAt: number}>} Branches with isNew flag
+ * @returns {Array<{name: string, isNew?: boolean, newAt?: number}>} Branches with isNew flag
  */
 function detectNewBranches(allBranches, knownBranchNames) {
   const now = Date.now();
@@ -28,8 +28,8 @@ function detectNewBranches(allBranches, knownBranchNames) {
  * Detect deleted branches (were known but no longer exist in fetched set).
  * @param {Set<string>} knownBranchNames - Previously known branch names
  * @param {Set<string>} fetchedBranchNames - Currently fetched branch names
- * @param {Array<{name: string}>} existingBranches - Previous branch list
- * @returns {Array<{name: string, isDeleted: boolean, deletedAt: number}>} Deleted branches
+ * @param {Array<{name: string, isDeleted?: boolean, deletedAt?: number}>} existingBranches - Previous branch list
+ * @returns {Array<{name: string, isDeleted?: boolean, deletedAt?: number}>} Deleted branches
  */
 function detectDeletedBranches(knownBranchNames, fetchedBranchNames, existingBranches) {
   const now = Date.now();
@@ -49,10 +49,10 @@ function detectDeletedBranches(knownBranchNames, fetchedBranchNames, existingBra
 
 /**
  * Detect branches that have been updated (commit changed) since last poll.
- * @param {Array<{name: string, commit: string}>} branches - Current branch list
+ * @param {Array<{name: string, commit: string, isDeleted?: boolean, justUpdated?: boolean}>} branches - Current branch list
  * @param {Map<string, string>} previousStates - Map of branch name -> previous commit hash
  * @param {string} currentBranch - Name of current branch (excluded from updates)
- * @returns {Array<{name: string, justUpdated: boolean}>} Updated branches
+ * @returns {Array<{name: string, commit: string, isDeleted?: boolean, justUpdated?: boolean}>} Updated branches
  */
 function detectUpdatedBranches(branches, previousStates, currentBranch) {
   const updated = [];

@@ -10,7 +10,7 @@
  */
 function formatTimeAgo(date) {
   const now = new Date();
-  const diffMs = now - date;
+  const diffMs = now.getTime() - date.getTime();
   const diffSec = Math.floor(diffMs / 1000);
   const diffMin = Math.floor(diffSec / 60);
   const diffHr = Math.floor(diffMin / 60);
