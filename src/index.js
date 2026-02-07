@@ -19,6 +19,9 @@ const state = require('./state/store');
 
 // UI components
 const ui = require('./ui/ansi');
+const rendererModule = require('./ui/renderer');
+const actionsModule = require('./ui/actions');
+const keybindingsModule = require('./ui/keybindings');
 
 // Git operations
 const gitCommands = require('./git/commands');
@@ -54,6 +57,9 @@ module.exports = {
   ServerError: errors.ServerError,
   ValidationError: errors.ValidationError,
   ErrorHandler: errors.ErrorHandler,
+  isAuthError: errors.isAuthError,
+  isMergeConflict: errors.isMergeConflict,
+  isNetworkError: errors.isNetworkError,
 
   // State management
   Store: state.Store,
@@ -69,11 +75,27 @@ module.exports = {
   visibleLength: ui.visibleLength,
   truncate: ui.truncate,
   pad: ui.pad,
+  padRight: ui.padRight,
+  padLeft: ui.padLeft,
+  getMaxBranchesForScreen: ui.getMaxBranchesForScreen,
+  drawBox: ui.drawBox,
+  clearArea: ui.clearArea,
   wordWrap: ui.wordWrap,
   horizontalLine: ui.horizontalLine,
   style: ui.style,
 
+  // Renderer
+  renderer: rendererModule,
+
+  // Actions (keyboard handlers)
+  actions: actionsModule,
+
+  // Keybindings
+  keybindings: keybindingsModule,
+
   // Git commands
+  parseDiffStats: gitCommands.parseDiffStats,
+  getDiffStats: gitCommands.getDiffStats,
   execGit: gitCommands.execGit,
   execGitSilent: gitCommands.execGitSilent,
   isGitAvailable: gitCommands.isGitAvailable,
