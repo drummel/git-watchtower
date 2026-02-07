@@ -417,6 +417,66 @@ class ErrorHandler {
   }
 }
 
+// ============================================================================
+// Standalone error classifiers (work on raw error message strings)
+// ============================================================================
+
+/**
+ * Check if an error message indicates an authentication failure
+ * @param {string} errorMessage - Error message to check
+ * @returns {boolean}
+ */
+function isAuthError(errorMessage) {
+  const authErrors = [
+    'Authentication failed',
+    'could not read Username',
+    'could not read Password',
+    'Permission denied',
+    'invalid credentials',
+    'authorization failed',
+    'fatal: Authentication',
+    'HTTP 401',
+    'HTTP 403',
+  ];
+  const msg = (errorMessage || '').toLowerCase();
+  return authErrors.some(err => msg.includes(err.toLowerCase()));
+}
+
+/**
+ * Check if an error message indicates a merge conflict
+ * @param {string} errorMessage - Error message to check
+ * @returns {boolean}
+ */
+function isMergeConflict(errorMessage) {
+  const conflictIndicators = [
+    'CONFLICT',
+    'Automatic merge failed',
+    'fix conflicts',
+    'Merge conflict',
+  ];
+  return conflictIndicators.some(ind => (errorMessage || '').includes(ind));
+}
+
+/**
+ * Check if an error message indicates a network error
+ * @param {string} errorMessage - Error message to check
+ * @returns {boolean}
+ */
+function isNetworkError(errorMessage) {
+  const networkErrors = [
+    'Could not resolve host',
+    'unable to access',
+    'Connection refused',
+    'Network is unreachable',
+    'Connection timed out',
+    'Failed to connect',
+    'no route to host',
+    'Temporary failure in name resolution',
+  ];
+  const msg = (errorMessage || '').toLowerCase();
+  return networkErrors.some(err => msg.includes(err.toLowerCase()));
+}
+
 module.exports = {
   AppError,
   GitError,
@@ -424,4 +484,7 @@ module.exports = {
   ServerError,
   ValidationError,
   ErrorHandler,
+  isAuthError,
+  isMergeConflict,
+  isNetworkError,
 };

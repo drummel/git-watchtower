@@ -261,6 +261,43 @@ async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
   }
 }
 
+/**
+ * Parse git diff --stat output into added/deleted line counts
+ * @param {string} diffStatOutput - Output from `git diff --stat`
+ * @returns {{added: number, deleted: number}}
+ */
+function parseDiffStats(diffStatOutput) {
+  // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
+  const match = diffStatOutput.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
+  if (match) {
+    return { added: parseInt(match[1], 10), deleted: parseInt(match[2], 10) };
+  }
+  // Try to match just insertions or just deletions
+  const insertMatch = diffStatOutput.match(/(\d+) insertions?\(\+\)/);
+  const deleteMatch = diffStatOutput.match(/(\d+) deletions?\(-\)/);
+  return {
+    added: insertMatch ? parseInt(insertMatch[1], 10) : 0,
+    deleted: deleteMatch ? parseInt(deleteMatch[1], 10) : 0,
+  };
+}
+
+/**
+ * Get diff stats between two commits
+ * @param {string} fromCommit - Starting commit
+ * @param {string} [toCommit='HEAD'] - Ending commit
+ * @param {Object} [options] - Options
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{added: number, deleted: number}>}
+ */
+async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
+  try {
+    const { stdout } = await execGit(`git diff --stat ${fromCommit}..${toCommit}`, options);
+    return parseDiffStats(stdout);
+  } catch (e) {
+    return { added: 0, deleted: 0 };
+  }
+}
+
 module.exports = {
   execGit,
   execGitSilent,
@@ -274,6 +311,8 @@ module.exports = {
   getCommitsByDay,
   hasUncommittedChanges,
   getChangedFiles,
+  parseDiffStats,
+  getDiffStats,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 };

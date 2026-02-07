@@ -11,6 +11,9 @@ const {
   ServerError,
   ValidationError,
   ErrorHandler,
+  isAuthError,
+  isMergeConflict,
+  isNetworkError,
 } = require('../../../src/utils/errors');
 
 describe('AppError', () => {
@@ -323,5 +326,165 @@ describe('ErrorHandler', () => {
       const error = new Error('Some error');
       assert.strictEqual(handler.isRetryable(error), false);
     });
+  });
+});
+
+describe('isAuthError (standalone)', () => {
+  it('should detect "Authentication failed"', () => {
+    assert.strictEqual(isAuthError('Authentication failed for repo'), true);
+  });
+
+  it('should detect "could not read Username"', () => {
+    assert.strictEqual(isAuthError('could not read Username'), true);
+  });
+
+  it('should detect "could not read Password"', () => {
+    assert.strictEqual(isAuthError('could not read Password'), true);
+  });
+
+  it('should detect "Permission denied"', () => {
+    assert.strictEqual(isAuthError('Permission denied (publickey)'), true);
+  });
+
+  it('should detect "invalid credentials"', () => {
+    assert.strictEqual(isAuthError('invalid credentials provided'), true);
+  });
+
+  it('should detect "authorization failed"', () => {
+    assert.strictEqual(isAuthError('authorization failed'), true);
+  });
+
+  it('should detect "fatal: Authentication"', () => {
+    assert.strictEqual(isAuthError('fatal: Authentication required'), true);
+  });
+
+  it('should detect "HTTP 401"', () => {
+    assert.strictEqual(isAuthError('HTTP 401 Unauthorized'), true);
+  });
+
+  it('should detect "HTTP 403"', () => {
+    assert.strictEqual(isAuthError('HTTP 403 Forbidden'), true);
+  });
+
+  it('should be case-insensitive', () => {
+    assert.strictEqual(isAuthError('AUTHENTICATION FAILED'), true);
+    assert.strictEqual(isAuthError('permission denied'), true);
+    assert.strictEqual(isAuthError('http 401'), true);
+  });
+
+  it('should return false for non-matching messages', () => {
+    assert.strictEqual(isAuthError('Some other git error'), false);
+    assert.strictEqual(isAuthError('Could not resolve host'), false);
+    assert.strictEqual(isAuthError('CONFLICT in file.txt'), false);
+  });
+
+  it('should handle null input', () => {
+    assert.strictEqual(isAuthError(null), false);
+  });
+
+  it('should handle undefined input', () => {
+    assert.strictEqual(isAuthError(undefined), false);
+  });
+
+  it('should handle empty string', () => {
+    assert.strictEqual(isAuthError(''), false);
+  });
+});
+
+describe('isMergeConflict (standalone)', () => {
+  it('should detect "CONFLICT"', () => {
+    assert.strictEqual(isMergeConflict('CONFLICT (content): Merge conflict in file.txt'), true);
+  });
+
+  it('should detect "Automatic merge failed"', () => {
+    assert.strictEqual(isMergeConflict('Automatic merge failed; fix conflicts and then commit'), true);
+  });
+
+  it('should detect "fix conflicts"', () => {
+    assert.strictEqual(isMergeConflict('fix conflicts and then commit the result'), true);
+  });
+
+  it('should detect "Merge conflict"', () => {
+    assert.strictEqual(isMergeConflict('Merge conflict in src/index.js'), true);
+  });
+
+  it('should be case-sensitive for "CONFLICT"', () => {
+    assert.strictEqual(isMergeConflict('CONFLICT in file'), true);
+    assert.strictEqual(isMergeConflict('conflict in file'), false);
+  });
+
+  it('should return false for non-matching messages', () => {
+    assert.strictEqual(isMergeConflict('Some other git error'), false);
+    assert.strictEqual(isMergeConflict('Authentication failed'), false);
+  });
+
+  it('should handle null input', () => {
+    assert.strictEqual(isMergeConflict(null), false);
+  });
+
+  it('should handle undefined input', () => {
+    assert.strictEqual(isMergeConflict(undefined), false);
+  });
+
+  it('should handle empty string', () => {
+    assert.strictEqual(isMergeConflict(''), false);
+  });
+});
+
+describe('isNetworkError (standalone)', () => {
+  it('should detect "Could not resolve host"', () => {
+    assert.strictEqual(isNetworkError('Could not resolve host: github.com'), true);
+  });
+
+  it('should detect "unable to access"', () => {
+    assert.strictEqual(isNetworkError('fatal: unable to access repository'), true);
+  });
+
+  it('should detect "Connection refused"', () => {
+    assert.strictEqual(isNetworkError('Connection refused by server'), true);
+  });
+
+  it('should detect "Network is unreachable"', () => {
+    assert.strictEqual(isNetworkError('Network is unreachable'), true);
+  });
+
+  it('should detect "Connection timed out"', () => {
+    assert.strictEqual(isNetworkError('Connection timed out'), true);
+  });
+
+  it('should detect "Failed to connect"', () => {
+    assert.strictEqual(isNetworkError('Failed to connect to github.com'), true);
+  });
+
+  it('should detect "no route to host"', () => {
+    assert.strictEqual(isNetworkError('no route to host'), true);
+  });
+
+  it('should detect "Temporary failure in name resolution"', () => {
+    assert.strictEqual(isNetworkError('Temporary failure in name resolution'), true);
+  });
+
+  it('should be case-insensitive', () => {
+    assert.strictEqual(isNetworkError('COULD NOT RESOLVE HOST'), true);
+    assert.strictEqual(isNetworkError('connection refused'), true);
+    assert.strictEqual(isNetworkError('NETWORK IS UNREACHABLE'), true);
+  });
+
+  it('should return false for non-matching messages', () => {
+    assert.strictEqual(isNetworkError('Some other git error'), false);
+    assert.strictEqual(isNetworkError('Authentication failed'), false);
+    assert.strictEqual(isNetworkError('CONFLICT in file.txt'), false);
+  });
+
+  it('should handle null input', () => {
+    assert.strictEqual(isNetworkError(null), false);
+  });
+
+  it('should handle undefined input', () => {
+    assert.strictEqual(isNetworkError(undefined), false);
+  });
+
+  it('should handle empty string', () => {
+    assert.strictEqual(isNetworkError(''), false);
   });
 });

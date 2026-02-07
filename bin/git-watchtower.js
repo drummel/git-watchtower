@@ -86,6 +86,10 @@ const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
 const { getDefaultConfig, migrateConfig } = require('../src/config/schema');
 const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, CONFIG_FILE_NAME } = require('../src/config/loader');
 
+// Centralized state store
+const { Store } = require('../src/state/store');
+const store = new Store();
+
 const PROJECT_ROOT = process.cwd();
 
 function loadConfig() {
@@ -363,19 +367,8 @@ let AUTO_PULL = true;
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
 
-// Dynamic settings
-let visibleBranchCount = 7;
-let soundEnabled = true;
-let casinoModeEnabled = false;
-
 // Server process management (for command mode)
 let serverProcess = null;
-let serverLogBuffer = [];         // In-memory log buffer
-let serverRunning = false;
-let serverCrashed = false;
-let logViewMode = false;          // Viewing logs modal
-let logViewTab = 'server';        // 'activity' or 'server'
-let logScrollOffset = 0;          // Scroll position in log view
 
 function applyConfig(config) {
   // Server settings
@@ -391,28 +384,35 @@ function applyConfig(config) {
   AUTO_PULL = config.autoPull !== false;
   GIT_POLL_INTERVAL = config.gitPollInterval || parseInt(process.env.GIT_POLL_INTERVAL, 10) || 5000;
 
-  // UI settings
-  visibleBranchCount = config.visibleBranches || 7;
-  soundEnabled = config.soundEnabled !== false;
+  // UI settings via store
+  const casinoEnabled = config.casinoMode === true;
+  store.setState({
+    visibleBranchCount: config.visibleBranches || 7,
+    soundEnabled: config.soundEnabled !== false,
+    casinoModeEnabled: casinoEnabled,
+    serverMode: SERVER_MODE,
+    noServer: NO_SERVER,
+    port: PORT,
+    maxLogEntries: MAX_LOG_ENTRIES,
+    projectName: path.basename(PROJECT_ROOT),
+    adaptivePollInterval: GIT_POLL_INTERVAL,
+  });
 
   // Casino mode
-  casinoModeEnabled = config.casinoMode === true;
-  if (casinoModeEnabled) {
+  if (casinoEnabled) {
     casino.enable();
   }
 }
 
 // Server log management
 function addServerLog(line, isError = false) {
-  const timestamp = new Date().toLocaleTimeString();
-  serverLogBuffer.push({ timestamp, line, isError });
-  if (serverLogBuffer.length > MAX_SERVER_LOG_LINES) {
-    serverLogBuffer.shift();
-  }
+  const entry = { timestamp: new Date().toLocaleTimeString(), line, isError };
+  const serverLogBuffer = [...store.get('serverLogBuffer'), entry].slice(-MAX_SERVER_LOG_LINES);
+  store.setState({ serverLogBuffer });
 }
 
 function clearServerLog() {
-  serverLogBuffer = [];
+  store.setState({ serverLogBuffer: [] });
 }
 
 // openInBrowser imported from src/utils/browser.js
@@ -609,8 +609,7 @@ function startServerProcess() {
   }
 
   clearServerLog();
-  serverCrashed = false;
-  serverRunning = false;
+  store.setState({ serverCrashed: false, serverRunning: false });
 
   addLog(`Starting: ${SERVER_COMMAND}`, 'update');
   addServerLog(`$ ${SERVER_COMMAND}`);
@@ -631,7 +630,7 @@ function startServerProcess() {
 
   try {
     serverProcess = spawn(cmd, args, spawnOptions);
-    serverRunning = true;
+    store.setState({ serverRunning: true });
 
     serverProcess.stdout.on('data', (data) => {
       const lines = data.toString().split('\n').filter(Boolean);
@@ -644,17 +643,16 @@ function startServerProcess() {
     });
 
     serverProcess.on('error', (err) => {
-      serverRunning = false;
-      serverCrashed = true;
+      store.setState({ serverRunning: false, serverCrashed: true });
       addServerLog(`Error: ${err.message}`, true);
       addLog(`Server error: ${err.message}`, 'error');
       render();
     });
 
     serverProcess.on('close', (code) => {
-      serverRunning = false;
+      store.setState({ serverRunning: false });
       if (code !== 0 && code !== null) {
-        serverCrashed = true;
+        store.setState({ serverCrashed: true });
         addServerLog(`Process exited with code ${code}`, true);
         addLog(`Server exited with code ${code}`, 'error');
       } else {
@@ -667,7 +665,7 @@ function startServerProcess() {
 
     addLog(`Server started (pid: ${serverProcess.pid})`, 'success');
   } catch (err) {
-    serverCrashed = true;
+    store.setState({ serverCrashed: true });
     addServerLog(`Failed to start: ${err.message}`, true);
     addLog(`Failed to start server: ${err.message}`, 'error');
   }
@@ -692,7 +690,7 @@ function stopServerProcess() {
   }
 
   serverProcess = null;
-  serverRunning = false;
+  store.setState({ serverRunning: false });
 }
 
 function restartServerProcess() {
@@ -705,63 +703,36 @@ function restartServerProcess() {
 }
 
 // Network and polling state
-let consecutiveNetworkFailures = 0;
-let isOffline = false;
-let lastFetchDuration = 0;
 let slowFetchWarningShown = false;
 let verySlowFetchWarningShown = false;
-let adaptivePollInterval = GIT_POLL_INTERVAL;
 let pollIntervalId = null;
 
-// Git state
-let isDetachedHead = false;
-let hasMergeConflict = false;
-
 // ANSI escape codes and box drawing imported from src/ui/ansi.js
-const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi } = require('../src/ui/ansi');
+const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
 
 // Error detection utilities imported from src/utils/errors.js
-const { ErrorHandler } = require('../src/utils/errors');
+const { ErrorHandler, isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
 
-// State
-let branches = [];
-let selectedIndex = 0;
-let selectedBranchName = null; // Track selection by name, not just index
-let currentBranch = null;
+// Keyboard handling utilities imported from src/ui/keybindings.js
+const { filterBranches } = require('../src/ui/keybindings');
+
+// Extracted renderer and action handlers
+const renderer = require('../src/ui/renderer');
+const actions = require('../src/ui/actions');
+
+// Diff stats parsing imported from src/git/commands.js
+const { parseDiffStats } = require('../src/git/commands');
+
+// State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
 let knownBranchNames = new Set(); // Track known branches to detect NEW ones
-let isPolling = false;
-let pollingStatus = 'idle';
-let terminalWidth = process.stdout.columns || 80;
-let terminalHeight = process.stdout.rows || 24;
 
 // SSE clients for live reload
 const clients = new Set();
 
-// Activity log entries
-const activityLog = [];
-
-// Flash state
-let flashMessage = null;
+// Flash/error toast timers
 let flashTimeout = null;
-
-// Error toast state (more prominent than activity log)
-let errorToast = null;
 let errorToastTimeout = null;
-
-// Preview pane state
-let previewMode = false;
-let previewData = null;
-
-// Search/filter state
-let searchMode = false;
-let searchQuery = '';
-let filteredBranches = null;
-
-// Branch action modal state
-let actionMode = false;
-let actionData = null; // { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch, ... }
-let actionLoading = false; // true while PR info is being fetched asynchronously
 
 // Cached environment info (populated once at startup, doesn't change during session)
 let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
@@ -770,21 +741,15 @@ let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, pla
 // Invalidated when the branch's commit hash changes
 const prInfoCache = new Map();
 
-// Bulk PR status map: Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
-// Updated in background every PR_STATUS_POLL_INTERVAL ms
-let branchPrStatusMap = new Map();
 let lastPrStatusFetch = 0;
 const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
 let prStatusFetchInFlight = false;
 
 // BASE_BRANCH_RE and isBaseBranch imported from src/git/pr.js
 
-// Session history for undo
-const switchHistory = [];
 const MAX_HISTORY = 20;
 
-// Sparkline cache (conservative - only update on manual fetch)
-const sparklineCache = new Map(); // branch name -> sparkline string
+// Sparkline timing
 let lastSparklineUpdate = 0;
 const SPARKLINE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -847,18 +812,7 @@ function execAsync(command, options = {}) {
 async function getDiffStats(fromCommit, toCommit = 'HEAD') {
   try {
     const { stdout } = await execAsync(`git diff --stat ${fromCommit}..${toCommit}`);
-    // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
-    const match = stdout.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
-    if (match) {
-      return { added: parseInt(match[1], 10), deleted: parseInt(match[2], 10) };
-    }
-    // Try to match just insertions or just deletions
-    const insertMatch = stdout.match(/(\d+) insertions?\(\+\)/);
-    const deleteMatch = stdout.match(/(\d+) deletions?\(-\)/);
-    return {
-      added: insertMatch ? parseInt(insertMatch[1], 10) : 0,
-      deleted: deleteMatch ? parseInt(deleteMatch[1], 10) : 0,
-    };
+    return parseDiffStats(stdout);
   } catch (e) {
     return { added: 0, deleted: 0 };
   }
@@ -868,21 +822,10 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
 
 // truncate imported from src/ui/ansi.js
 
-function padRight(str, len) {
-  if (str.length >= len) return str.substring(0, len);
-  return str + ' '.repeat(len - str.length);
-}
+// padRight, padLeft imported from src/ui/ansi.js
 
 function getMaxBranchesForScreen() {
-  // Calculate max branches that fit: header(2) + branch box + log box(~12) + footer(2)
-  // Each branch takes 2 rows, plus 4 for box borders
-  const availableHeight = terminalHeight - 2 - MAX_LOG_ENTRIES - 5 - 2;
-  return Math.max(1, Math.floor(availableHeight / 2));
-}
-
-function padLeft(str, len) {
-  if (str.length >= len) return str.substring(0, len);
-  return ' '.repeat(len - str.length) + str;
+  return calcMaxBranches(store.get('terminalHeight'), MAX_LOG_ENTRIES);
 }
 
 // Casino mode funny messages
@@ -927,12 +870,16 @@ function getCasinoMessage(type) {
 }
 
 function addLog(message, type = 'info') {
-  const timestamp = new Date().toLocaleTimeString();
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
-
-  activityLog.unshift({ timestamp, message, icon: icons[type] || '○', color: colors[type] || 'white' });
-  if (activityLog.length > MAX_LOG_ENTRIES) activityLog.pop();
+  const entry = {
+    message, type,
+    timestamp: new Date().toLocaleTimeString(),
+    icon: icons[type] || '○',
+    color: colors[type] || 'white',
+  };
+  const activityLog = [entry, ...store.get('activityLog')].slice(0, MAX_LOG_ENTRIES);
+  store.setState({ activityLog });
 }
 
 // generateSparkline uses uiSparkline from src/ui/ansi.js
@@ -943,7 +890,7 @@ function generateSparkline(commitCounts) {
 
 async function getBranchSparkline(branchName) {
   // Check cache first
-  const cached = sparklineCache.get(branchName);
+  const cached = store.get('sparklineCache').get(branchName);
   if (cached && (Date.now() - lastSparklineUpdate) < SPARKLINE_CACHE_TTL) {
     return cached;
   }
@@ -957,7 +904,8 @@ async function refreshAllSparklines() {
   }
 
   try {
-    for (const branch of branches.slice(0, 20)) { // Limit to top 20
+    const currentBranches = store.get('branches');
+    for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
       if (branch.isDeleted) continue;
 
       // Get commit counts for last 7 days
@@ -983,7 +931,7 @@ async function refreshAllSparklines() {
       }
 
       const counts = Array.from(dayCounts.values());
-      sparklineCache.set(branch.name, generateSparkline(counts));
+      store.get('sparklineCache').set(branch.name, generateSparkline(counts));
     }
     lastSparklineUpdate = now;
   } catch (e) {
@@ -1022,7 +970,7 @@ async function getPreviewData(branchName) {
 
 // playSound delegates to extracted src/utils/sound.js
 function playSound() {
-  if (!soundEnabled) return;
+  if (!store.get('soundEnabled')) return;
   playSoundEffect({ cwd: PROJECT_ROOT });
 }
 
@@ -1047,335 +995,32 @@ function restoreTerminalTitle() {
 }
 
 function updateTerminalSize() {
-  terminalWidth = process.stdout.columns || 80;
-  terminalHeight = process.stdout.rows || 24;
+  store.setState({
+    terminalWidth: process.stdout.columns || 80,
+    terminalHeight: process.stdout.rows || 24,
+  });
 }
 
 function drawBox(row, col, width, height, title = '', titleColor = ansi.cyan) {
-  // Top border
-  write(ansi.moveTo(row, col));
-  write(ansi.gray + box.topLeft + box.horizontal.repeat(width - 2) + box.topRight + ansi.reset);
-
-  // Title
-  if (title) {
-    write(ansi.moveTo(row, col + 2));
-    write(ansi.gray + ' ' + titleColor + title + ansi.gray + ' ' + ansi.reset);
-  }
-
-  // Sides
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.gray + box.vertical + ansi.reset);
-    write(ansi.moveTo(row + i, col + width - 1));
-    write(ansi.gray + box.vertical + ansi.reset);
-  }
-
-  // Bottom border
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.gray + box.bottomLeft + box.horizontal.repeat(width - 2) + box.bottomRight + ansi.reset);
+  write(renderBox(row, col, width, height, title, titleColor));
 }
 
 function clearArea(row, col, width, height) {
-  for (let i = 0; i < height; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(' '.repeat(width));
-  }
+  write(renderClearArea(row, col, width, height));
 }
 
-function renderHeader() {
-  const width = terminalWidth;
-  // Header row: 1 normally, 2 when casino mode (row 1 is marquee)
-  const headerRow = casinoModeEnabled ? 2 : 1;
+// renderHeader - now delegated to renderer.renderHeader()
 
-  let statusIcon = { idle: ansi.green + '●', fetching: ansi.yellow + '⟳', error: ansi.red + '●' }[pollingStatus];
-
-  // Override status for special states
-  if (isOffline) {
-    statusIcon = ansi.red + '⊘';
-  }
-
-  const soundIcon = soundEnabled ? ansi.green + '🔔' : ansi.gray + '🔕';
-  const projectName = path.basename(PROJECT_ROOT);
-
-  write(ansi.moveTo(headerRow, 1));
-  write(ansi.bgBlue + ansi.white + ansi.bold);
-
-  // Left side: Title + separator + project name
-  const leftContent = ` 🏰 Git Watchtower ${ansi.dim}│${ansi.bold} ${projectName}`;
-  const leftVisibleLen = 21 + projectName.length; // " 🏰 Git Watchtower │ " + projectName
-
-  write(leftContent);
-
-  // Warning badges (center area)
-  let badges = '';
-  let badgesVisibleLen = 0;
-
-  // Casino mode slot display moved to its own row below header (row 3)
-
-  if (SERVER_MODE === 'command' && serverCrashed) {
-    const label = ' CRASHED ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (isOffline) {
-    const label = ' OFFLINE ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (isDetachedHead) {
-    const label = ' DETACHED HEAD ';
-    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue + ansi.white;
-    badgesVisibleLen += 1 + label.length;
-  }
-  if (hasMergeConflict) {
-    const label = ' MERGE CONFLICT ';
-    badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
-    badgesVisibleLen += 1 + label.length;
-  }
-
-  write(badges);
-
-  // Right side: Server mode + URL + status icons
-  let modeLabel = '';
-  let modeBadge = '';
-  if (SERVER_MODE === 'static') {
-    modeLabel = ' STATIC ';
-    modeBadge = ansi.bgCyan + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
-  } else if (SERVER_MODE === 'command') {
-    modeLabel = ' COMMAND ';
-    modeBadge = ansi.bgGreen + ansi.black + modeLabel + ansi.bgBlue + ansi.white;
-  } else {
-    modeLabel = ' MONITOR ';
-    modeBadge = ansi.bgMagenta + ansi.white + modeLabel + ansi.bgBlue + ansi.white;
-  }
-
-  let serverInfo = '';
-  let serverInfoVisible = '';
-  if (SERVER_MODE === 'none') {
-    serverInfoVisible = '';
-  } else {
-    const statusDot = serverRunning ? ansi.green + '●' : (serverCrashed ? ansi.red + '●' : ansi.gray + '○');
-    serverInfoVisible = `localhost:${PORT} `;
-    serverInfo = statusDot + ansi.white + ` localhost:${PORT} `;
-  }
-
-  const rightContent = `${modeBadge} ${serverInfo}${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
-  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisible.length + 5; // mode + space + serverInfo + "● 🔔 "
-
-  // Calculate padding to fill full width
-  const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
-  const padding = Math.max(1, width - usedSpace);
-  write(' '.repeat(padding));
-  write(rightContent);
-  write(ansi.reset);
-}
-
-function renderBranchList() {
-  // Start row: 3 normally, 4 when casino mode (row 1 is marquee, row 2 is header)
-  const startRow = casinoModeEnabled ? 4 : 3;
-  const boxWidth = terminalWidth;
-  const contentWidth = boxWidth - 4; // Space between borders
-  const height = Math.min(visibleBranchCount * 2 + 4, Math.floor(terminalHeight * 0.5));
-
-  // Determine which branches to show (filtered or all)
-  const displayBranches = filteredBranches !== null ? filteredBranches : branches;
-  const boxTitle = searchMode
-    ? `BRANCHES (/${searchQuery}_)`
-    : 'ACTIVE BRANCHES';
-
-  drawBox(startRow, 1, boxWidth, height, boxTitle, ansi.cyan);
-
-  // Clear content area first (fixes border gaps)
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(startRow + i, 2));
-    write(' '.repeat(contentWidth + 2));
-  }
-
-  // Header line
-  write(ansi.moveTo(startRow + 1, 2));
-  write(ansi.gray + '─'.repeat(contentWidth + 2) + ansi.reset);
-
-  if (displayBranches.length === 0) {
-    write(ansi.moveTo(startRow + 3, 4));
-    if (searchMode && searchQuery) {
-      write(ansi.gray + `No branches matching "${searchQuery}"` + ansi.reset);
-    } else {
-      write(ansi.gray + "No branches found. Press 'f' to fetch." + ansi.reset);
-    }
-    return startRow + height;
-  }
-
-  let row = startRow + 2;
-  for (let i = 0; i < displayBranches.length && i < visibleBranchCount; i++) {
-    const branch = displayBranches[i];
-    const isSelected = i === selectedIndex;
-    const isCurrent = branch.name === currentBranch;
-    const timeAgo = formatTimeAgo(branch.date);
-    const sparkline = sparklineCache.get(branch.name) || '       ';
-    const prStatus = branchPrStatusMap.get(branch.name); // { state, number, title } or undefined
-    // Never treat default/base branches as "merged" — they're merge targets, not sources
-    const isBranchBase = isBaseBranch(branch.name);
-    const isMerged = !isBranchBase && prStatus && prStatus.state === 'MERGED';
-    const hasOpenPr = prStatus && prStatus.state === 'OPEN';
-
-    // Branch name line
-    write(ansi.moveTo(row, 2));
-
-    // Cursor indicator
-    const cursor = isSelected ? ' ▶ ' : '   ';
-
-    // Branch name - adjust for sparkline
-    const maxNameLen = contentWidth - 38; // Extra space for sparkline
-    const displayName = truncate(branch.name, maxNameLen);
-
-    // Padding after name
-    const namePadding = Math.max(1, maxNameLen - displayName.length + 2);
-
-    // Write the line
-    if (isSelected) write(ansi.inverse);
-    write(cursor);
-
-    if (branch.isDeleted) {
-      write(ansi.gray + ansi.dim + displayName + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (isMerged && !isCurrent) {
-      // Merged branches get dimmed styling (like deleted, but in magenta tint)
-      write(ansi.dim + ansi.fg256(103) + displayName + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (isCurrent) {
-      write(ansi.green + ansi.bold + displayName + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (branch.justUpdated) {
-      write(ansi.yellow + displayName + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-      branch.justUpdated = false;
-    } else {
-      write(displayName);
-    }
-
-    write(' '.repeat(namePadding));
-
-    // Sparkline (7 chars)
-    if (isSelected) write(ansi.reset);
-    if (isMerged && !isCurrent) {
-      write(ansi.dim + ansi.fg256(60) + sparkline + ansi.reset); // Dimmed sparkline for merged
-    } else {
-      write(ansi.fg256(39) + sparkline + ansi.reset); // Nice blue color
-    }
-    if (isSelected) write(ansi.inverse);
-
-    // PR status dot indicator (1 char)
-    if (isSelected) write(ansi.reset);
-    if (isMerged) {
-      write(ansi.dim + ansi.magenta + '●' + ansi.reset);
-    } else if (hasOpenPr) {
-      write(ansi.brightGreen + '●' + ansi.reset);
-    } else {
-      write(' ');
-    }
-    if (isSelected) write(ansi.inverse);
-
-    // Status badge
-    if (branch.isDeleted) {
-      if (isSelected) write(ansi.reset);
-      write(ansi.red + ansi.dim + '✗ DELETED' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (isMerged && !isCurrent && !branch.isNew && !branch.hasUpdates) {
-      if (isSelected) write(ansi.reset);
-      write(ansi.dim + ansi.magenta + '✓ MERGED ' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (isCurrent) {
-      if (isSelected) write(ansi.reset);
-      write(ansi.green + '★ CURRENT' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (branch.isNew) {
-      if (isSelected) write(ansi.reset);
-      write(ansi.magenta + '✦ NEW    ' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else if (branch.hasUpdates) {
-      if (isSelected) write(ansi.reset);
-      write(ansi.yellow + '↓ UPDATES' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
-    } else {
-      write('         ');
-    }
-
-    // Time ago
-    write('  ');
-    if (isSelected) write(ansi.reset);
-    write(ansi.gray + padLeft(timeAgo, 10) + ansi.reset);
-
-    if (isSelected) write(ansi.reset);
-
-    row++;
-
-    // Commit info line
-    write(ansi.moveTo(row, 2));
-    if (isMerged && !isCurrent) {
-      // Dimmed commit line for merged branches, with PR number
-      write(ansi.dim + '      └─ ' + ansi.reset);
-      write(ansi.dim + ansi.cyan + (branch.commit || '???????') + ansi.reset);
-      write(ansi.dim + ' • ' + ansi.reset);
-      const prTag = ansi.dim + ansi.magenta + '#' + prStatus.number + ansi.reset + ansi.dim + ' ';
-      write(prTag + ansi.gray + ansi.dim + truncate(branch.subject || 'No commit message', contentWidth - 28) + ansi.reset);
-    } else {
-      write('      └─ ');
-      write(ansi.cyan + (branch.commit || '???????') + ansi.reset);
-      write(' • ');
-      if (hasOpenPr) {
-        // Show PR number inline for open PRs
-        const prTag = ansi.brightGreen + '#' + prStatus.number + ansi.reset + ' ';
-        write(prTag + ansi.gray + truncate(branch.subject || 'No commit message', contentWidth - 28) + ansi.reset);
-      } else {
-        write(ansi.gray + truncate(branch.subject || 'No commit message', contentWidth - 22) + ansi.reset);
-      }
-    }
-
-    row++;
-  }
-
-  return startRow + height;
-}
-
-function renderActivityLog(startRow) {
-  const boxWidth = terminalWidth;
-  const contentWidth = boxWidth - 4;
-  const height = Math.min(MAX_LOG_ENTRIES + 3, terminalHeight - startRow - 4);
-
-  drawBox(startRow, 1, boxWidth, height, 'ACTIVITY LOG', ansi.gray);
-
-  // Clear content area first (fixes border gaps)
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(startRow + i, 2));
-    write(' '.repeat(contentWidth + 2));
-  }
-
-  let row = startRow + 1;
-  for (let i = 0; i < activityLog.length && i < height - 2; i++) {
-    const entry = activityLog[i];
-    write(ansi.moveTo(row, 3));
-    write(ansi.gray + `[${entry.timestamp}]` + ansi.reset + ' ');
-    write(ansi[entry.color] + entry.icon + ansi.reset + ' ');
-    write(truncate(entry.message, contentWidth - 16));
-    row++;
-  }
-
-  if (activityLog.length === 0) {
-    write(ansi.moveTo(startRow + 1, 3));
-    write(ansi.gray + 'No activity yet...' + ansi.reset);
-  }
-
-  return startRow + height;
-}
+// renderBranchList, renderActivityLog — now delegated to renderer module (src/ui/renderer.js)
 
 function renderCasinoStats(startRow) {
-  if (!casinoModeEnabled) return startRow;
+  if (!store.get('casinoModeEnabled')) return startRow;
 
-  const boxWidth = terminalWidth;
+  const boxWidth = store.get('terminalWidth');
   const height = 6; // Box with two content lines
 
   // Don't draw if not enough space
-  if (startRow + height > terminalHeight - 3) return startRow;
+  if (startRow + height > store.get('terminalHeight') - 3) return startRow;
 
   drawBox(startRow, 1, boxWidth, height, '🎰 CASINO WINNINGS 🎰', ansi.brightMagenta);
 
@@ -1411,667 +1056,17 @@ function renderCasinoStats(startRow) {
   return startRow + height;
 }
 
-function renderFooter() {
-  const row = terminalHeight - 1;
-
-  write(ansi.moveTo(row, 1));
-  write(ansi.bgBlack + ansi.white);
-  write('  ');
-  write(ansi.gray + '[↑↓]' + ansi.reset + ansi.bgBlack + ' Nav  ');
-  write(ansi.gray + '[/]' + ansi.reset + ansi.bgBlack + ' Search  ');
-  write(ansi.gray + '[v]' + ansi.reset + ansi.bgBlack + ' Preview  ');
-  write(ansi.gray + '[Enter]' + ansi.reset + ansi.bgBlack + ' Switch  ');
-  write(ansi.gray + '[h]' + ansi.reset + ansi.bgBlack + ' History  ');
-  write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
-  write(ansi.gray + '[b]' + ansi.reset + ansi.bgBlack + ' Actions  ');
-
-  // Mode-specific keys
-  if (!NO_SERVER) {
-    write(ansi.gray + '[l]' + ansi.reset + ansi.bgBlack + ' Logs  ');
-    write(ansi.gray + '[o]' + ansi.reset + ansi.bgBlack + ' Open  ');
-  }
-  if (SERVER_MODE === 'static') {
-    write(ansi.gray + '[r]' + ansi.reset + ansi.bgBlack + ' Reload  ');
-  } else if (SERVER_MODE === 'command') {
-    write(ansi.gray + '[R]' + ansi.reset + ansi.bgBlack + ' Restart  ');
-  }
-
-  write(ansi.gray + '[±]' + ansi.reset + ansi.bgBlack + ' List:' + ansi.cyan + visibleBranchCount + ansi.reset + ansi.bgBlack + '  ');
-
-  // Casino mode toggle indicator
-  if (casinoModeEnabled) {
-    write(ansi.brightMagenta + '[c]' + ansi.reset + ansi.bgBlack + ' 🎰  ');
-  } else {
-    write(ansi.gray + '[c]' + ansi.reset + ansi.bgBlack + ' Casino  ');
-  }
-
-  write(ansi.gray + '[q]' + ansi.reset + ansi.bgBlack + ' Quit  ');
-  write(ansi.reset);
-}
-
-function renderFlash() {
-  if (!flashMessage) return;
-
-  const width = 50;
-  const height = 5;
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  // Draw double-line box
-  write(ansi.moveTo(row, col));
-  write(ansi.yellow + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(box.dVertical + ' '.repeat(width - 2) + box.dVertical);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Content
-  write(ansi.moveTo(row + 1, col + Math.floor((width - 16) / 2)));
-  write(ansi.yellow + ansi.bold + '⚡ NEW UPDATE ⚡' + ansi.reset);
-
-  write(ansi.moveTo(row + 2, col + 2));
-  const truncMsg = truncate(flashMessage, width - 4);
-  write(ansi.white + truncMsg + ansi.reset);
-
-  write(ansi.moveTo(row + 3, col + Math.floor((width - 22) / 2)));
-  write(ansi.gray + 'Press any key to dismiss' + ansi.reset);
-}
-
-function renderErrorToast() {
-  if (!errorToast) return;
-
-  const width = Math.min(60, terminalWidth - 4);
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = 2; // Near the top, below header
-
-  // Calculate height based on content
-  const lines = [];
-  lines.push(errorToast.title || 'Git Error');
-  lines.push('');
-
-  // Word wrap the message
-  const msgWords = errorToast.message.split(' ');
-  let currentLine = '';
-  for (const word of msgWords) {
-    if ((currentLine + ' ' + word).length > width - 6) {
-      lines.push(currentLine.trim());
-      currentLine = word;
-    } else {
-      currentLine += (currentLine ? ' ' : '') + word;
-    }
-  }
-  if (currentLine) lines.push(currentLine.trim());
-
-  if (errorToast.hint) {
-    lines.push('');
-    lines.push(errorToast.hint);
-  }
-  lines.push('');
-  lines.push('Press any key to dismiss');
-
-  const height = lines.length + 2;
-
-  // Draw red error box
-  write(ansi.moveTo(row, col));
-  write(ansi.red + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.red + box.dVertical + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 2) + ansi.reset + ansi.red + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.red + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Render content
-  let contentRow = row + 1;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    write(ansi.moveTo(contentRow, col + 2));
-    write(ansi.bgRed + ansi.white);
-
-    if (i === 0) {
-      // Title line - centered and bold
-      const titlePadding = Math.floor((width - 4 - line.length) / 2);
-      write(' '.repeat(titlePadding) + ansi.bold + line + ansi.reset + ansi.bgRed + ansi.white + ' '.repeat(width - 4 - titlePadding - line.length));
-    } else if (line === 'Press any key to dismiss') {
-      // Instruction line - centered and dimmer
-      const padding = Math.floor((width - 4 - line.length) / 2);
-      write(ansi.reset + ansi.bgRed + ansi.gray + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
-    } else if (errorToast.hint && line === errorToast.hint) {
-      // Hint line - yellow on red
-      const padding = Math.floor((width - 4 - line.length) / 2);
-      write(ansi.reset + ansi.bgRed + ansi.yellow + ' '.repeat(padding) + line + ' '.repeat(width - 4 - padding - line.length));
-    } else {
-      // Regular content
-      write(padRight(line, width - 4));
-    }
-    write(ansi.reset);
-    contentRow++;
-  }
-}
-
-function renderPreview() {
-  if (!previewMode || !previewData) return;
-
-  const width = Math.min(60, terminalWidth - 4);
-  const height = 16;
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  const displayBranches = filteredBranches !== null ? filteredBranches : branches;
-  const branch = displayBranches[selectedIndex];
-  if (!branch) return;
-
-  // Draw box
-  write(ansi.moveTo(row, col));
-  write(ansi.cyan + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.cyan + box.dVertical + ansi.reset + ' '.repeat(width - 2) + ansi.cyan + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.cyan + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Title
-  const title = ` Preview: ${truncate(branch.name, width - 14)} `;
-  write(ansi.moveTo(row, col + 2));
-  write(ansi.cyan + ansi.bold + title + ansi.reset);
-
-  // Commits section
-  write(ansi.moveTo(row + 2, col + 2));
-  write(ansi.white + ansi.bold + 'Recent Commits:' + ansi.reset);
-
-  let contentRow = row + 3;
-  if (previewData.commits.length === 0) {
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + '(no commits)' + ansi.reset);
-    contentRow++;
-  } else {
-    for (const commit of previewData.commits.slice(0, 5)) {
-      write(ansi.moveTo(contentRow, col + 3));
-      write(ansi.yellow + commit.hash + ansi.reset + ' ');
-      write(ansi.gray + truncate(commit.message, width - 14) + ansi.reset);
-      contentRow++;
-    }
-  }
-
-  // Files section
-  contentRow++;
-  write(ansi.moveTo(contentRow, col + 2));
-  write(ansi.white + ansi.bold + 'Files Changed vs HEAD:' + ansi.reset);
-  contentRow++;
-
-  if (previewData.filesChanged.length === 0) {
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + '(no changes or same as current)' + ansi.reset);
-  } else {
-    for (const file of previewData.filesChanged.slice(0, 5)) {
-      write(ansi.moveTo(contentRow, col + 3));
-      write(ansi.green + '• ' + ansi.reset + truncate(file, width - 8));
-      contentRow++;
-    }
-    if (previewData.filesChanged.length > 5) {
-      write(ansi.moveTo(contentRow, col + 3));
-      write(ansi.gray + `... and ${previewData.filesChanged.length - 5} more` + ansi.reset);
-    }
-  }
-
-  // Instructions
-  write(ansi.moveTo(row + height - 2, col + Math.floor((width - 26) / 2)));
-  write(ansi.gray + 'Press [v] or [Esc] to close' + ansi.reset);
-}
-
-function renderHistory() {
-  const width = Math.min(50, terminalWidth - 4);
-  const height = Math.min(switchHistory.length + 5, 15);
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  // Draw box
-  write(ansi.moveTo(row, col));
-  write(ansi.magenta + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.magenta + box.dVertical + ansi.reset + ' '.repeat(width - 2) + ansi.magenta + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.magenta + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Title
-  write(ansi.moveTo(row, col + 2));
-  write(ansi.magenta + ansi.bold + ' Switch History ' + ansi.reset);
-
-  // Content
-  if (switchHistory.length === 0) {
-    write(ansi.moveTo(row + 2, col + 3));
-    write(ansi.gray + 'No branch switches yet' + ansi.reset);
-  } else {
-    let contentRow = row + 2;
-    for (let i = 0; i < Math.min(switchHistory.length, height - 4); i++) {
-      const entry = switchHistory[i];
-      write(ansi.moveTo(contentRow, col + 3));
-      if (i === 0) {
-        write(ansi.yellow + '→ ' + ansi.reset); // Most recent
-      } else {
-        write(ansi.gray + '  ' + ansi.reset);
-      }
-      write(truncate(entry.from, 15) + ansi.gray + ' → ' + ansi.reset);
-      write(ansi.cyan + truncate(entry.to, 15) + ansi.reset);
-      contentRow++;
-    }
-  }
-
-  // Instructions
-  write(ansi.moveTo(row + height - 2, col + 2));
-  write(ansi.gray + '[u] Undo last  [h]/[Esc] Close' + ansi.reset);
-}
-
-let historyMode = false;
-let infoMode = false;
-
-function renderLogView() {
-  if (!logViewMode) return;
-
-  const width = Math.min(terminalWidth - 4, 100);
-  const height = Math.min(terminalHeight - 4, 30);
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  // Determine which log to display
-  const isServerTab = logViewTab === 'server';
-  const logData = isServerTab ? serverLogBuffer : activityLog;
-
-  // Draw box
-  write(ansi.moveTo(row, col));
-  write(ansi.yellow + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.yellow + box.dVertical + ansi.reset + ' '.repeat(width - 2) + ansi.yellow + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.yellow + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Title with tabs
-  const activityTab = logViewTab === 'activity'
-    ? ansi.bgWhite + ansi.black + ' 1:Activity ' + ansi.reset + ansi.yellow
-    : ansi.gray + ' 1:Activity ' + ansi.yellow;
-  const serverTab = logViewTab === 'server'
-    ? ansi.bgWhite + ansi.black + ' 2:Server ' + ansi.reset + ansi.yellow
-    : ansi.gray + ' 2:Server ' + ansi.yellow;
-
-  // Server status (only show on server tab)
-  let statusIndicator = '';
-  if (isServerTab && SERVER_MODE === 'command') {
-    const statusText = serverRunning ? ansi.green + 'RUNNING' : (serverCrashed ? ansi.red + 'CRASHED' : ansi.gray + 'STOPPED');
-    statusIndicator = ` [${statusText}${ansi.yellow}]`;
-  } else if (isServerTab && SERVER_MODE === 'static') {
-    statusIndicator = ansi.green + ' [STATIC]' + ansi.yellow;
-  }
-
-  write(ansi.moveTo(row, col + 2));
-  write(ansi.yellow + ansi.bold + ' ' + activityTab + ' ' + serverTab + statusIndicator + ' ' + ansi.reset);
-
-  // Content
-  const contentHeight = height - 4;
-  const maxScroll = Math.max(0, logData.length - contentHeight);
-  logScrollOffset = Math.min(logScrollOffset, maxScroll);
-  logScrollOffset = Math.max(0, logScrollOffset);
-
-  let contentRow = row + 2;
-
-  if (logData.length === 0) {
-    write(ansi.moveTo(contentRow, col + 2));
-    write(ansi.gray + (isServerTab ? 'No server output yet...' : 'No activity yet...') + ansi.reset);
-  } else if (isServerTab) {
-    // Server log: newest at bottom, scroll from bottom
-    const startIndex = Math.max(0, serverLogBuffer.length - contentHeight - logScrollOffset);
-    const endIndex = Math.min(serverLogBuffer.length, startIndex + contentHeight);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const entry = serverLogBuffer[i];
-      write(ansi.moveTo(contentRow, col + 2));
-      const lineText = truncate(entry.line, width - 4);
-      if (entry.isError) {
-        write(ansi.red + lineText + ansi.reset);
-      } else {
-        write(lineText);
-      }
-      contentRow++;
-    }
-  } else {
-    // Activity log: newest first, scroll from top
-    const startIndex = logScrollOffset;
-    const endIndex = Math.min(activityLog.length, startIndex + contentHeight);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      const entry = activityLog[i];
-      write(ansi.moveTo(contentRow, col + 2));
-      write(ansi.gray + `[${entry.timestamp}]` + ansi.reset + ' ');
-      write(ansi[entry.color] + entry.icon + ansi.reset + ' ');
-      write(truncate(entry.message, width - 18));
-      contentRow++;
-    }
-  }
-
-  // Scroll indicator
-  if (logData.length > contentHeight) {
-    const scrollPercent = isServerTab
-      ? Math.round((1 - logScrollOffset / maxScroll) * 100)
-      : Math.round((logScrollOffset / maxScroll) * 100);
-    write(ansi.moveTo(row, col + width - 10));
-    write(ansi.gray + ` ${scrollPercent}% ` + ansi.reset);
-  }
-
-  // Instructions
-  write(ansi.moveTo(row + height - 2, col + 2));
-  const restartHint = SERVER_MODE === 'command' ? '[R] Restart  ' : '';
-  write(ansi.gray + '[1/2] Switch Tab  [↑↓] Scroll  ' + restartHint + '[l]/[Esc] Close' + ansi.reset);
-}
-
-function renderInfo() {
-  const width = Math.min(50, terminalWidth - 4);
-  const height = NO_SERVER ? 9 : 12;
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  // Draw box
-  write(ansi.moveTo(row, col));
-  write(ansi.cyan + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(ansi.cyan + box.dVertical + ansi.reset + ' '.repeat(width - 2) + ansi.cyan + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(ansi.cyan + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Title
-  write(ansi.moveTo(row, col + 2));
-  write(ansi.cyan + ansi.bold + (NO_SERVER ? ' Status Info ' : ' Server Info ') + ansi.reset);
-
-  // Content
-  let contentRow = row + 2;
-
-  if (!NO_SERVER) {
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.white + ansi.bold + 'Dev Server' + ansi.reset);
-    contentRow++;
-
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + 'URL: ' + ansi.reset + ansi.green + `http://localhost:${PORT}` + ansi.reset);
-    contentRow++;
-
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + 'Port: ' + ansi.reset + ansi.yellow + PORT + ansi.reset);
-    contentRow++;
-
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + 'Connected browsers: ' + ansi.reset + ansi.cyan + clients.size + ansi.reset);
-    contentRow++;
-
-    contentRow++;
-  }
-
-  write(ansi.moveTo(contentRow, col + 3));
-  write(ansi.white + ansi.bold + 'Git Polling' + ansi.reset);
-  contentRow++;
-
-  write(ansi.moveTo(contentRow, col + 3));
-  write(ansi.gray + 'Interval: ' + ansi.reset + `${adaptivePollInterval / 1000}s`);
-  contentRow++;
-
-  write(ansi.moveTo(contentRow, col + 3));
-  write(ansi.gray + 'Status: ' + ansi.reset + (isOffline ? ansi.red + 'Offline' : ansi.green + 'Online') + ansi.reset);
-  contentRow++;
-
-  if (NO_SERVER) {
-    write(ansi.moveTo(contentRow, col + 3));
-    write(ansi.gray + 'Mode: ' + ansi.reset + ansi.magenta + 'No-Server (branch monitor only)' + ansi.reset);
-  }
-
-  // Instructions
-  write(ansi.moveTo(row + height - 2, col + Math.floor((width - 20) / 2)));
-  write(ansi.gray + 'Press [i] or [Esc] to close' + ansi.reset);
-}
-
-function renderActionModal() {
-  if (!actionMode || !actionData) return;
-
-  const { branch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, isClaudeBranch, platform, prLoaded } = actionData;
-
-  const width = Math.min(64, terminalWidth - 4);
-  const innerW = width - 6;
-
-  const platformLabel = platform === 'gitlab' ? 'GitLab' : platform === 'bitbucket' ? 'Bitbucket' : platform === 'azure' ? 'Azure DevOps' : 'GitHub';
-  const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
-  const cliTool = platform === 'gitlab' ? 'glab' : 'gh';
-  const hasCli = platform === 'gitlab' ? hasGlab : hasGh;
-  const cliAuthed = platform === 'gitlab' ? glabAuthed : ghAuthed;
-  const cliReady = hasCli && cliAuthed;
-  const loading = actionLoading; // PR info still loading
-
-  // Build actions list — ALL actions always shown, grayed out with reasons when unavailable
-  // { key, label, available, reason, loading }
-  const actions = [];
-
-  // Open on web
-  actions.push({
-    key: 'b', label: `Open branch on ${platformLabel}`,
-    available: !!webUrl, reason: !webUrl ? 'Could not parse remote URL' : null,
-  });
-
-  // Claude session — always shown so users know it exists
-  actions.push({
-    key: 'c', label: 'Open Claude Code session',
-    available: !!sessionUrl,
-    reason: !isClaudeBranch ? 'Not a Claude branch' : !sessionUrl && !loading ? 'No session URL in commits' : null,
-    loading: isClaudeBranch && !sessionUrl && loading,
-  });
-
-  // PR: create or view depending on state
-  const prIsMerged = prInfo && (prInfo.state === 'MERGED' || prInfo.state === 'merged');
-  const prIsOpen = prInfo && (prInfo.state === 'OPEN' || prInfo.state === 'open');
-  if (prInfo) {
-    actions.push({ key: 'p', label: `View ${prLabel} #${prInfo.number}`, available: !!webUrl, reason: null });
-  } else {
-    actions.push({
-      key: 'p', label: `Create ${prLabel}`,
-      available: cliReady && prLoaded,
-      reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : null,
-      loading: cliReady && !prLoaded,
-    });
-  }
-
-  // Diff — opens on web, just needs a PR and webUrl
-  actions.push({
-    key: 'd', label: `View ${prLabel} diff on ${platformLabel}`,
-    available: !!prInfo && !!webUrl,
-    reason: !prInfo && prLoaded ? `No ${prLabel}` : !webUrl ? 'Could not parse remote URL' : null,
-    loading: !prLoaded && (cliReady || !!webUrl),
-  });
-
-  // Approve — disabled for merged PRs
-  actions.push({
-    key: 'a', label: `Approve ${prLabel}`,
-    available: !!prInfo && prIsOpen && cliReady,
-    reason: prIsMerged ? `${prLabel} already merged` : !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
-    loading: cliReady && !prLoaded,
-  });
-
-  // Merge — disabled for already-merged PRs
-  actions.push({
-    key: 'm', label: `Merge ${prLabel} (squash)`,
-    available: !!prInfo && prIsOpen && cliReady,
-    reason: prIsMerged ? `${prLabel} already merged` : !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
-    loading: cliReady && !prLoaded,
-  });
-
-  // CI
-  actions.push({
-    key: 'i', label: 'Check CI status',
-    available: cliReady && (!!prInfo || platform === 'gitlab'),
-    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded && platform !== 'gitlab' ? `No open ${prLabel}` : null,
-    loading: cliReady && !prLoaded && platform !== 'gitlab',
-  });
-
-  // Calculate height
-  let contentLines = 0;
-  contentLines += 2; // spacing + branch name
-  contentLines += 1; // separator
-  contentLines += actions.length;
-  contentLines += 1; // separator
-
-  // Status info
-  const statusInfoLines = [];
-  if (prInfo) {
-    let prStatus = `${prLabel} #${prInfo.number}: ${truncate(prInfo.title, innerW - 20)}`;
-    const badges = [];
-    if (prIsMerged) badges.push('merged');
-    if (prInfo.approved) badges.push('approved');
-    if (prInfo.checksPass) badges.push('checks pass');
-    if (prInfo.checksFail) badges.push('checks fail');
-    if (badges.length) prStatus += ` [${badges.join(', ')}]`;
-    statusInfoLines.push({ color: prIsMerged ? 'magenta' : 'green', text: prStatus });
-  } else if (loading) {
-    statusInfoLines.push({ color: 'gray', text: `Loading ${prLabel} info...` });
-  } else if (cliReady) {
-    statusInfoLines.push({ color: 'gray', text: `No ${prLabel} for this branch` });
-  }
-
-  if (isClaudeBranch) {
-    if (sessionUrl) {
-      const shortSession = sessionUrl.replace('https://claude.ai/code/', '');
-      statusInfoLines.push({ color: 'magenta', text: `Session: ${truncate(shortSession, innerW - 10)}` });
-    } else if (!loading) {
-      statusInfoLines.push({ color: 'gray', text: 'Claude branch (no session URL in commits)' });
-    }
-  }
-
-  contentLines += statusInfoLines.length;
-
-  // Setup hints
-  const hints = [];
-  if (!hasCli) {
-    if (platform === 'gitlab') {
-      hints.push(`Install glab: https://gitlab.com/gitlab-org/cli`);
-      hints.push(`Then run: glab auth login`);
-    } else {
-      hints.push(`Install gh:   https://cli.github.com`);
-      hints.push(`Then run: gh auth login`);
-    }
-  } else if (!cliAuthed) {
-    hints.push(`${cliTool} is installed but not authenticated`);
-    hints.push(`Run: ${cliTool} auth login`);
-  }
-
-  if (hints.length > 0) {
-    contentLines += 1;
-    contentLines += hints.length;
-  }
-
-  contentLines += 2; // blank + close instructions
-
-  const height = contentLines + 3;
-  const col = Math.floor((terminalWidth - width) / 2);
-  const row = Math.floor((terminalHeight - height) / 2);
-
-  // Draw box
-  const borderColor = ansi.brightCyan;
-  write(ansi.moveTo(row, col));
-  write(borderColor + ansi.bold);
-  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
-
-  for (let i = 1; i < height - 1; i++) {
-    write(ansi.moveTo(row + i, col));
-    write(borderColor + box.dVertical + ansi.reset + ' '.repeat(width - 2) + borderColor + box.dVertical + ansi.reset);
-  }
-
-  write(ansi.moveTo(row + height - 1, col));
-  write(borderColor + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
-  write(ansi.reset);
-
-  // Title
-  const title = ' Branch Actions ';
-  write(ansi.moveTo(row, col + 2));
-  write(borderColor + ansi.bold + title + ansi.reset);
-
-  let r = row + 2;
-
-  // Branch name with type indicator
-  write(ansi.moveTo(r, col + 3));
-  write(ansi.white + ansi.bold + truncate(branch.name, innerW - 10) + ansi.reset);
-  if (isClaudeBranch) {
-    write(ansi.magenta + ' [Claude]' + ansi.reset);
-  }
-  r++;
-
-  // Separator
-  r++;
-
-  // Actions list — all always visible
-  for (const action of actions) {
-    write(ansi.moveTo(r, col + 3));
-    if (action.loading) {
-      write(ansi.gray + '[' + action.key + '] ' + action.label + '  ' + ansi.dim + ansi.cyan + 'loading...' + ansi.reset);
-    } else if (action.available) {
-      write(ansi.brightCyan + '[' + action.key + ']' + ansi.reset + ' ' + action.label);
-    } else {
-      write(ansi.gray + '[' + action.key + '] ' + action.label);
-      if (action.reason) {
-        write('  ' + ansi.dim + ansi.yellow + action.reason + ansi.reset);
-      }
-      write(ansi.reset);
-    }
-    r++;
-  }
-
-  // Separator
-  r++;
-
-  // Status info
-  for (const info of statusInfoLines) {
-    write(ansi.moveTo(r, col + 3));
-    write(ansi[info.color] + truncate(info.text, innerW) + ansi.reset);
-    r++;
-  }
-
-  // Setup hints
-  if (hints.length > 0) {
-    r++;
-    for (const hint of hints) {
-      write(ansi.moveTo(r, col + 3));
-      write(ansi.yellow + truncate(hint, innerW) + ansi.reset);
-      r++;
-    }
-  }
-
-  // Close instructions
-  write(ansi.moveTo(row + height - 2, col + Math.floor((width - 18) / 2)));
-  write(ansi.gray + 'Press [Esc] to close' + ansi.reset);
+// renderFooter, renderFlash, renderErrorToast, renderPreview, renderHistory
+// — now delegated to renderer module (src/ui/renderer.js)
+
+// renderLogView, renderInfo, renderActionModal
+// — now delegated to renderer module (src/ui/renderer.js)
+
+// Build a state snapshot from the current globals for the renderer
+function getRenderState() {
+  const s = store.getState();
+  s.clientCount = clients.size;
+  return s;
 }
 
 function render() {
@@ -2081,17 +1076,21 @@ function render() {
   write(ansi.moveToTop);
   write(ansi.clearScreen);
 
+  const state = getRenderState();
+  const { casinoModeEnabled, terminalWidth, terminalHeight } = state;
+
   // Casino mode: top marquee border
   if (casinoModeEnabled) {
     write(ansi.moveTo(1, 1));
     write(casino.renderMarqueeLine(terminalWidth, 'top'));
   }
 
-  renderHeader();
-  const logStart = renderBranchList();
-  const statsStart = renderActivityLog(logStart);
+  // Delegate to extracted renderer module
+  renderer.renderHeader(state, write);
+  const logStart = renderer.renderBranchList(state, write);
+  const statsStart = renderer.renderActivityLog(state, write, logStart);
   renderCasinoStats(statsStart);
-  renderFooter();
+  renderer.renderFooter(state, write);
 
   // Casino mode: full border (top, bottom, left, right)
   if (casinoModeEnabled) {
@@ -2114,7 +1113,6 @@ function render() {
   if (casinoModeEnabled && casino.isSlotsActive()) {
     const slotDisplay = casino.getSlotReelDisplay();
     if (slotDisplay) {
-      // Row 3: below header (row 1 is marquee, row 2 is header)
       const resultLabel = casino.getSlotResultLabel();
       let leftLabel, rightLabel;
 
@@ -2123,7 +1121,6 @@ function render() {
         rightLabel = '';
       } else if (resultLabel) {
         leftLabel = ansi.bgBrightGreen + ansi.black + ansi.bold + ' RESULT ' + ansi.reset;
-        // Flash effect for jackpots, use result color for text
         const flash = resultLabel.isJackpot && (Math.floor(Date.now() / 150) % 2 === 0);
         const bgColor = flash ? ansi.bgBrightYellow : ansi.bgWhite;
         rightLabel = ' ' + bgColor + resultLabel.color + ansi.bold + ' ' + resultLabel.text + ' ' + ansi.reset;
@@ -2133,7 +1130,7 @@ function render() {
       }
 
       const fullDisplay = leftLabel + ' ' + slotDisplay + rightLabel;
-      const col = Math.floor((terminalWidth - 70) / 2); // Center the display
+      const col = Math.floor((terminalWidth - 70) / 2);
       write(ansi.moveTo(3, Math.max(2, col)));
       write(fullDisplay);
     }
@@ -2159,44 +1156,45 @@ function render() {
     }
   }
 
-  if (flashMessage) {
-    renderFlash();
+  // Delegate modal/overlay rendering to extracted renderer
+  if (state.flashMessage) {
+    renderer.renderFlash(state, write);
   }
 
-  if (previewMode && previewData) {
-    renderPreview();
+  if (state.previewMode && state.previewData) {
+    renderer.renderPreview(state, write);
   }
 
-  if (historyMode) {
-    renderHistory();
+  if (state.historyMode) {
+    renderer.renderHistory(state, write);
   }
 
-  if (infoMode) {
-    renderInfo();
+  if (state.infoMode) {
+    renderer.renderInfo(state, write);
   }
 
-  if (logViewMode) {
-    renderLogView();
+  if (state.logViewMode) {
+    renderer.renderLogView(state, write);
   }
 
-  if (actionMode) {
-    renderActionModal();
+  if (state.actionMode) {
+    renderer.renderActionModal(state, write);
   }
 
   // Error toast renders on top of everything for maximum visibility
-  if (errorToast) {
-    renderErrorToast();
+  if (state.errorToast) {
+    renderer.renderErrorToast(state, write);
   }
 }
 
 function showFlash(message) {
   if (flashTimeout) clearTimeout(flashTimeout);
 
-  flashMessage = message;
+  store.setState({ flashMessage: message });
   render();
 
   flashTimeout = setTimeout(() => {
-    flashMessage = null;
+    store.setState({ flashMessage: null });
     render();
   }, 3000);
 }
@@ -2206,8 +1204,8 @@ function hideFlash() {
     clearTimeout(flashTimeout);
     flashTimeout = null;
   }
-  if (flashMessage) {
-    flashMessage = null;
+  if (store.get('flashMessage')) {
+    store.setState({ flashMessage: null });
     render();
   }
 }
@@ -2215,12 +1213,12 @@ function hideFlash() {
 function showErrorToast(title, message, hint = null, duration = 8000) {
   if (errorToastTimeout) clearTimeout(errorToastTimeout);
 
-  errorToast = { title, message, hint };
+  store.setState({ errorToast: { title, message, hint } });
   playSound(); // Alert sound for errors
   render();
 
   errorToastTimeout = setTimeout(() => {
-    errorToast = null;
+    store.setState({ errorToast: null });
     render();
   }, duration);
 }
@@ -2230,8 +1228,8 @@ function hideErrorToast() {
     clearTimeout(errorToastTimeout);
     errorToastTimeout = null;
   }
-  if (errorToast) {
-    errorToast = null;
+  if (store.get('errorToast')) {
+    store.setState({ errorToast: null });
     render();
   }
 }
@@ -2245,12 +1243,12 @@ async function getCurrentBranch() {
     const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD');
     // Check for detached HEAD state
     if (stdout === 'HEAD') {
-      isDetachedHead = true;
+      store.setState({ isDetachedHead: true });
       // Get the short commit hash instead
       const { stdout: commitHash } = await execAsync('git rev-parse --short HEAD');
       return `HEAD@${commitHash}`;
     }
-    isDetachedHead = false;
+    store.setState({ isDetachedHead: false });
     return stdout;
   } catch (e) {
     return null;
@@ -2276,46 +1274,7 @@ async function hasUncommittedChanges() {
   }
 }
 
-function isAuthError(errorMessage) {
-  const authErrors = [
-    'Authentication failed',
-    'could not read Username',
-    'could not read Password',
-    'Permission denied',
-    'invalid credentials',
-    'authorization failed',
-    'fatal: Authentication',
-    'HTTP 401',
-    'HTTP 403',
-  ];
-  const msg = (errorMessage || '').toLowerCase();
-  return authErrors.some(err => msg.includes(err.toLowerCase()));
-}
-
-function isMergeConflict(errorMessage) {
-  const conflictIndicators = [
-    'CONFLICT',
-    'Automatic merge failed',
-    'fix conflicts',
-    'Merge conflict',
-  ];
-  return conflictIndicators.some(ind => (errorMessage || '').includes(ind));
-}
-
-function isNetworkError(errorMessage) {
-  const networkErrors = [
-    'Could not resolve host',
-    'unable to access',
-    'Connection refused',
-    'Network is unreachable',
-    'Connection timed out',
-    'Failed to connect',
-    'no route to host',
-    'Temporary failure in name resolution',
-  ];
-  const msg = (errorMessage || '').toLowerCase();
-  return networkErrors.some(err => msg.includes(err.toLowerCase()));
-}
+// isAuthError, isMergeConflict, isNetworkError imported from src/utils/errors.js
 
 async function getAllBranches() {
   try {
@@ -2409,7 +1368,7 @@ async function switchToBranch(branchName, recordHistory = true) {
       return { success: false, reason: 'dirty' };
     }
 
-    const previousBranch = currentBranch;
+    const previousBranch = store.get('currentBranch');
 
     addLog(`Switching to ${safeBranchName}...`, 'update');
     render();
@@ -2423,19 +1382,18 @@ async function switchToBranch(branchName, recordHistory = true) {
       await execAsync(`git checkout -b "${safeBranchName}" "${REMOTE_NAME}/${safeBranchName}"`);
     }
 
-    currentBranch = safeBranchName;
-    isDetachedHead = false; // Successfully switched to branch
+    store.setState({ currentBranch: safeBranchName, isDetachedHead: false });
 
     // Clear NEW flag when branch becomes current
-    const branchInfo = branches.find(b => b.name === safeBranchName);
+    const branchInfo = store.get('branches').find(b => b.name === safeBranchName);
     if (branchInfo && branchInfo.isNew) {
       branchInfo.isNew = false;
     }
 
     // Record in history (for undo)
     if (recordHistory && previousBranch && previousBranch !== safeBranchName) {
-      switchHistory.unshift({ from: previousBranch, to: safeBranchName, timestamp: Date.now() });
-      if (switchHistory.length > MAX_HISTORY) switchHistory.pop();
+      const switchHistory = [{ from: previousBranch, to: safeBranchName, timestamp: Date.now() }, ...store.get('switchHistory')].slice(0, MAX_HISTORY);
+      store.setState({ switchHistory });
     }
 
     addLog(`Switched to ${safeBranchName}`, 'success');
@@ -2477,17 +1435,18 @@ async function switchToBranch(branchName, recordHistory = true) {
 }
 
 async function undoLastSwitch() {
-  if (switchHistory.length === 0) {
+  const currentHistory = store.get('switchHistory');
+  if (currentHistory.length === 0) {
     addLog('No switch history to undo', 'warning');
     return { success: false };
   }
 
-  const lastSwitch = switchHistory[0];
+  const lastSwitch = currentHistory[0];
   addLog(`Undoing: going back to ${lastSwitch.from}`, 'update');
 
   const result = await switchToBranch(lastSwitch.from, false);
   if (result.success) {
-    switchHistory.shift(); // Remove the undone entry
+    store.setState({ switchHistory: store.get('switchHistory').slice(1) });
     addLog(`Undone: back on ${lastSwitch.from}`, 'success');
   }
   return result;
@@ -2521,7 +1480,7 @@ async function pullCurrentBranch() {
     addLog(`Pull failed: ${errMsg}`, 'error');
 
     if (isMergeConflict(errMsg)) {
-      hasMergeConflict = true;
+      store.setState({ hasMergeConflict: true });
       showErrorToast(
         'Merge Conflict!',
         'Git pull resulted in merge conflicts that need manual resolution.',
@@ -2555,12 +1514,11 @@ async function pullCurrentBranch() {
 // ============================================================================
 
 async function pollGitChanges() {
-  if (isPolling) return;
-  isPolling = true;
-  pollingStatus = 'fetching';
+  if (store.get('isPolling')) return;
+  store.setState({ isPolling: true, pollingStatus: 'fetching' });
 
   // Casino mode: start slot reels spinning (no sound - too annoying)
-  if (casinoModeEnabled) {
+  if (store.get('casinoModeEnabled')) {
     casino.startSlotReels(render);
   }
 
@@ -2570,25 +1528,28 @@ async function pollGitChanges() {
 
   try {
     const newCurrentBranch = await getCurrentBranch();
+    const prevCurrentBranch = store.get('currentBranch');
 
-    if (currentBranch && newCurrentBranch !== currentBranch) {
-      addLog(`Branch switched externally: ${currentBranch} → ${newCurrentBranch}`, 'warning');
+    if (prevCurrentBranch && newCurrentBranch !== prevCurrentBranch) {
+      addLog(`Branch switched externally: ${prevCurrentBranch} → ${newCurrentBranch}`, 'warning');
       notifyClients();
     }
-    currentBranch = newCurrentBranch;
+    store.setState({ currentBranch: newCurrentBranch });
 
     const allBranches = await getAllBranches();
 
     // Track fetch duration
-    lastFetchDuration = Date.now() - fetchStartTime;
+    const lastFetchDuration = Date.now() - fetchStartTime;
+    store.setState({ lastFetchDuration });
 
     // Check for slow fetches
     if (lastFetchDuration > 30000 && !verySlowFetchWarningShown) {
       addLog(`⚠ Fetches taking ${Math.round(lastFetchDuration / 1000)}s - network may be slow`, 'warning');
       verySlowFetchWarningShown = true;
       // Slow down polling
-      adaptivePollInterval = Math.min(adaptivePollInterval * 2, 60000);
-      addLog(`Polling interval increased to ${adaptivePollInterval / 1000}s`, 'info');
+      const newInterval = Math.min(store.get('adaptivePollInterval') * 2, 60000);
+      store.setState({ adaptivePollInterval: newInterval });
+      addLog(`Polling interval increased to ${newInterval / 1000}s`, 'info');
       restartPolling();
     } else if (lastFetchDuration > 15000 && !slowFetchWarningShown) {
       addLog(`Fetches taking ${Math.round(lastFetchDuration / 1000)}s`, 'warning');
@@ -2597,21 +1558,22 @@ async function pollGitChanges() {
       // Reset warnings if fetches are fast again
       slowFetchWarningShown = false;
       verySlowFetchWarningShown = false;
-      if (adaptivePollInterval > GIT_POLL_INTERVAL) {
-        adaptivePollInterval = GIT_POLL_INTERVAL;
-        addLog(`Polling interval restored to ${adaptivePollInterval / 1000}s`, 'info');
+      if (store.get('adaptivePollInterval') > GIT_POLL_INTERVAL) {
+        store.setState({ adaptivePollInterval: GIT_POLL_INTERVAL });
+        addLog(`Polling interval restored to ${GIT_POLL_INTERVAL / 1000}s`, 'info');
         restartPolling();
       }
     }
 
     // Network success - reset failure counter
-    consecutiveNetworkFailures = 0;
-    if (isOffline) {
-      isOffline = false;
+    if (store.get('isOffline')) {
       addLog('Connection restored', 'success');
     }
+    store.setState({ consecutiveNetworkFailures: 0, isOffline: false });
+
     const fetchedBranchNames = new Set(allBranches.map(b => b.name));
     const now = Date.now();
+    const currentBranches = store.get('branches');
 
     // Detect NEW branches (not seen before)
     const newBranchList = [];
@@ -2623,7 +1585,7 @@ async function pollGitChanges() {
         newBranchList.push(branch);
       } else {
         // Preserve isNew flag from previous poll cycle for branches not yet switched to
-        const prevBranch = branches.find(b => b.name === branch.name);
+        const prevBranch = currentBranches.find(b => b.name === branch.name);
         if (prevBranch && prevBranch.isNew) {
           branch.isNew = true;
           branch.newAt = prevBranch.newAt;
@@ -2636,7 +1598,7 @@ async function pollGitChanges() {
     for (const knownName of knownBranchNames) {
       if (!fetchedBranchNames.has(knownName)) {
         // This branch was deleted from remote
-        const existingInList = branches.find(b => b.name === knownName);
+        const existingInList = currentBranches.find(b => b.name === knownName);
         if (existingInList && !existingInList.isDeleted) {
           existingInList.isDeleted = true;
           existingInList.deletedAt = now;
@@ -2651,14 +1613,15 @@ async function pollGitChanges() {
     // Note: isNew flag is only cleared when branch becomes current (see below)
 
     // Keep deleted branches in the list (don't remove them)
-    const filteredBranches = allBranches;
+    const pollFilteredBranches = allBranches;
 
     // Detect updates on other branches (for flash notification)
     const updatedBranches = [];
-    for (const branch of filteredBranches) {
+    const currentBranchName = store.get('currentBranch');
+    for (const branch of pollFilteredBranches) {
       if (branch.isDeleted) continue;
       const prevCommit = previousBranchStates.get(branch.name);
-      if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranch) {
+      if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {
         updatedBranches.push(branch);
         branch.justUpdated = true;
       }
@@ -2666,6 +1629,7 @@ async function pollGitChanges() {
     }
 
     // Flash and sound for updates or new branches
+    const casinoOn = store.get('casinoModeEnabled');
     const notifyBranches = [...updatedBranches, ...newBranchList];
     if (notifyBranches.length > 0) {
       for (const branch of updatedBranches) {
@@ -2673,7 +1637,7 @@ async function pollGitChanges() {
       }
 
       // Casino mode: add funny commentary
-      if (casinoModeEnabled) {
+      if (casinoOn) {
         addLog(`🎰 ${getCasinoMessage('win')}`, 'success');
       }
 
@@ -2682,7 +1646,7 @@ async function pollGitChanges() {
       playSound();
 
       // Casino mode: trigger win effect based on number of updated branches
-      if (casinoModeEnabled) {
+      if (casinoOn) {
         // Estimate line changes: more branches = bigger "win"
         // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
         const estimatedLines = notifyBranches.length * 100;
@@ -2694,21 +1658,23 @@ async function pollGitChanges() {
         }
         casino.recordPoll(true);
       }
-    } else if (casinoModeEnabled) {
+    } else if (casinoOn) {
       // No updates - stop reels and show result briefly
       casino.stopSlotReels(false, render);
       casino.recordPoll(false);
     }
 
     // Remember which branch was selected before updating the list
-    const previouslySelectedName = selectedBranchName || (branches[selectedIndex] ? branches[selectedIndex].name : null);
+    const { selectedBranchName: prevSelName, selectedIndex: prevSelIdx } = store.getState();
+    const previouslySelectedName = prevSelName || (currentBranches[prevSelIdx] ? currentBranches[prevSelIdx].name : null);
 
     // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
-    filteredBranches.sort((a, b) => {
+    const prStatusMap = store.get('branchPrStatusMap');
+    pollFilteredBranches.sort((a, b) => {
       const aIsBase = isBaseBranch(a.name);
       const bIsBase = isBaseBranch(b.name);
-      const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
-      const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
+      const aMerged = !aIsBase && prStatusMap.has(a.name) && prStatusMap.get(a.name).state === 'MERGED';
+      const bMerged = !bIsBase && prStatusMap.has(b.name) && prStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
       if (!a.isDeleted && b.isDeleted) return -1;
       if (aMerged && !bMerged && !b.isDeleted) return 1;
@@ -2719,23 +1685,24 @@ async function pollGitChanges() {
     });
 
     // Store all branches (no limit) - visibleBranchCount controls display
-    branches = filteredBranches;
-
     // Restore selection to the same branch (by name) after reordering
+    let newSelectedIndex = prevSelIdx;
+    let newSelectedName = prevSelName;
     if (previouslySelectedName) {
-      const newIndex = branches.findIndex(b => b.name === previouslySelectedName);
-      if (newIndex >= 0) {
-        selectedIndex = newIndex;
-        selectedBranchName = previouslySelectedName;
+      const foundIdx = pollFilteredBranches.findIndex(b => b.name === previouslySelectedName);
+      if (foundIdx >= 0) {
+        newSelectedIndex = foundIdx;
+        newSelectedName = previouslySelectedName;
       } else {
         // Branch fell off the list, keep index at bottom or clamp
-        selectedIndex = Math.min(selectedIndex, Math.max(0, branches.length - 1));
-        selectedBranchName = branches[selectedIndex] ? branches[selectedIndex].name : null;
+        newSelectedIndex = Math.min(prevSelIdx, Math.max(0, pollFilteredBranches.length - 1));
+        newSelectedName = pollFilteredBranches[newSelectedIndex] ? pollFilteredBranches[newSelectedIndex].name : null;
       }
-    } else if (selectedIndex >= branches.length) {
-      selectedIndex = Math.max(0, branches.length - 1);
-      selectedBranchName = branches[selectedIndex] ? branches[selectedIndex].name : null;
+    } else if (prevSelIdx >= pollFilteredBranches.length) {
+      newSelectedIndex = Math.max(0, pollFilteredBranches.length - 1);
+      newSelectedName = pollFilteredBranches[newSelectedIndex] ? pollFilteredBranches[newSelectedIndex].name : null;
     }
+    store.setState({ branches: pollFilteredBranches, selectedIndex: newSelectedIndex, selectedBranchName: newSelectedName });
 
     // Background PR status fetch (throttled to every PR_STATUS_POLL_INTERVAL)
     const now2 = Date.now();
@@ -2743,7 +1710,7 @@ async function pollGitChanges() {
       prStatusFetchInFlight = true;
       fetchAllPrStatuses().then(map => {
         if (map) {
-          branchPrStatusMap = map;
+          store.setState({ branchPrStatusMap: map });
           render(); // re-render to show updated PR indicators
         }
         lastPrStatusFetch = Date.now();
@@ -2754,28 +1721,29 @@ async function pollGitChanges() {
     }
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
-    const currentInfo = branches.find(b => b.name === currentBranch);
-    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !hasMergeConflict) {
-      addLog(`Auto-pulling changes for ${currentBranch}...`, 'update');
+    const autoPullBranchName = store.get('currentBranch');
+    const currentInfo = store.get('branches').find(b => b.name === autoPullBranchName);
+    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !store.get('hasMergeConflict')) {
+      addLog(`Auto-pulling changes for ${autoPullBranchName}...`, 'update');
       render();
 
       // Save the old commit for diff calculation (casino mode)
       const oldCommit = currentInfo.commit;
 
       try {
-        await execAsync(`git pull "${REMOTE_NAME}" "${currentBranch}"`);
-        addLog(`Pulled successfully from ${currentBranch}`, 'success');
+        await execAsync(`git pull "${REMOTE_NAME}" "${autoPullBranchName}"`);
+        addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
-        hasMergeConflict = false;
+        store.setState({ hasMergeConflict: false });
         // Update the stored commit to the new one
         const newCommit = await execAsync('git rev-parse --short HEAD');
         currentInfo.commit = newCommit.stdout.trim();
-        previousBranchStates.set(currentBranch, newCommit.stdout.trim());
+        previousBranchStates.set(autoPullBranchName, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
 
         // Casino mode: calculate actual diff and trigger win effect
-        if (casinoModeEnabled && oldCommit) {
+        if (store.get('casinoModeEnabled') && oldCommit) {
           const diffStats = await getDiffStats(oldCommit, 'HEAD');
           const totalLines = diffStats.added + diffStats.deleted;
           if (totalLines > 0) {
@@ -2790,7 +1758,7 @@ async function pollGitChanges() {
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
         if (isMergeConflict(errMsg)) {
-          hasMergeConflict = true;
+          store.setState({ hasMergeConflict: true });
           addLog(`MERGE CONFLICT detected!`, 'error');
           addLog(`Resolve conflicts manually, then commit`, 'warning');
           showErrorToast(
@@ -2799,7 +1767,7 @@ async function pollGitChanges() {
             'Run: git status to see conflicts'
           );
           // Casino mode: trigger loss effect
-          if (casinoModeEnabled) {
+          if (store.get('casinoModeEnabled')) {
             casino.triggerLoss('MERGE CONFLICT!', render);
             casinoSounds.playLoss();
             addLog(`💀 ${getCasinoMessage('loss')}`, 'error');
@@ -2823,16 +1791,16 @@ async function pollGitChanges() {
       }
     }
 
-    pollingStatus = 'idle';
+    store.setState({ pollingStatus: 'idle' });
     // Casino mode: stop slot reels if still spinning (already handled above, just cleanup)
-    if (casinoModeEnabled && casino.isSlotSpinning()) {
+    if (store.get('casinoModeEnabled') && casino.isSlotSpinning()) {
       casino.stopSlotReels(false, render);
     }
   } catch (err) {
     const errMsg = err.stderr || err.message || String(err);
 
     // Casino mode: stop slot reels and show loss on error
-    if (casinoModeEnabled) {
+    if (store.get('casinoModeEnabled')) {
       casino.stopSlotReels(false, render);
       casino.triggerLoss('BUST!', render);
       casinoSounds.playLoss();
@@ -2840,17 +1808,18 @@ async function pollGitChanges() {
 
     // Handle different error types
     if (isNetworkError(errMsg)) {
-      consecutiveNetworkFailures++;
-      if (consecutiveNetworkFailures >= 3 && !isOffline) {
-        isOffline = true;
-        addLog(`Network unavailable (${consecutiveNetworkFailures} failures)`, 'error');
+      const failures = store.get('consecutiveNetworkFailures') + 1;
+      store.setState({ consecutiveNetworkFailures: failures });
+      if (failures >= 3 && !store.get('isOffline')) {
+        store.setState({ isOffline: true });
+        addLog(`Network unavailable (${failures} failures)`, 'error');
         showErrorToast(
           'Network Unavailable',
           'Cannot connect to the remote repository. Git operations will fail until connection is restored.',
           'Check your internet connection'
         );
       }
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
     } else if (isAuthError(errMsg)) {
       addLog(`Authentication error - check credentials`, 'error');
       addLog(`Try: git config credential.helper store`, 'warning');
@@ -2859,13 +1828,13 @@ async function pollGitChanges() {
         'Failed to authenticate with the remote repository.',
         'Run: git config credential.helper store'
       );
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
     } else {
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
       addLog(`Polling error: ${errMsg}`, 'error');
     }
   } finally {
-    isPolling = false;
+    store.setState({ isPolling: false });
     render();
   }
 }
@@ -2874,7 +1843,7 @@ function restartPolling() {
   if (pollIntervalId) {
     clearInterval(pollIntervalId);
   }
-  pollIntervalId = setInterval(pollGitChanges, adaptivePollInterval);
+  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
 }
 
 // ============================================================================
@@ -3011,17 +1980,18 @@ function setupFileWatcher() {
 // Keyboard Input
 // ============================================================================
 
-function applySearchFilter() {
-  if (!searchQuery) {
-    filteredBranches = null;
-    return;
-  }
-  const query = searchQuery.toLowerCase();
-  filteredBranches = branches.filter(b => b.name.toLowerCase().includes(query));
-  // Reset selection if out of bounds
-  if (selectedIndex >= filteredBranches.length) {
-    selectedIndex = Math.max(0, filteredBranches.length - 1);
-  }
+// applySearchFilter — replaced by filterBranches import (src/ui/renderer.js)
+
+// Apply state updates from action handlers to store
+function applyUpdates(updates) {
+  if (!updates) return false;
+  store.setState(updates);
+  return true;
+}
+
+// Build current state snapshot for action handlers
+function getActionState() {
+  return store.getState();
 }
 
 function setupKeyboardInput() {
@@ -3032,25 +2002,11 @@ function setupKeyboardInput() {
   process.stdin.setEncoding('utf8');
 
   process.stdin.on('data', async (key) => {
-    // Handle search mode input
-    if (searchMode) {
-      if (key === '\u001b' || key === '\r' || key === '\n') { // Escape or Enter exits search
-        searchMode = false;
-        if (key === '\u001b') {
-          // Escape clears search
-          searchQuery = '';
-          filteredBranches = null;
-        }
-        render();
-        return;
-      } else if (key === '\u007f' || key === '\b') { // Backspace
-        searchQuery = searchQuery.slice(0, -1);
-        applySearchFilter();
-        render();
-        return;
-      } else if (key.length === 1 && key >= ' ' && key <= '~') { // Printable chars
-        searchQuery += key;
-        applySearchFilter();
+    // Handle search mode input via actions module
+    if (store.get('searchMode')) {
+      const searchResult = actions.handleSearchInput(getActionState(), key);
+      if (searchResult) {
+        applyUpdates(searchResult);
         render();
         return;
       }
@@ -3061,24 +2017,23 @@ function setupKeyboardInput() {
     }
 
     // Handle modal modes
-    if (previewMode) {
+    if (store.get('previewMode')) {
       if (key === 'v' || key === '\u001b' || key === '\r' || key === '\n') {
-        previewMode = false;
-        previewData = null;
+        applyUpdates(actions.togglePreview(getActionState()));
         render();
         return;
       }
       return; // Ignore other keys in preview mode
     }
 
-    if (historyMode) {
+    if (store.get('historyMode')) {
       if (key === 'h' || key === '\u001b') {
-        historyMode = false;
+        applyUpdates(actions.toggleHistory(getActionState()));
         render();
         return;
       }
       if (key === 'u') {
-        historyMode = false;
+        store.setState({ historyMode: false });
         await undoLastSwitch();
         await pollGitChanges();
         return;
@@ -3086,44 +2041,38 @@ function setupKeyboardInput() {
       return; // Ignore other keys in history mode
     }
 
-    if (infoMode) {
+    if (store.get('infoMode')) {
       if (key === 'i' || key === '\u001b') {
-        infoMode = false;
+        applyUpdates(actions.toggleInfo(getActionState()));
         render();
         return;
       }
       return; // Ignore other keys in info mode
     }
 
-    if (logViewMode) {
+    if (store.get('logViewMode')) {
       if (key === 'l' || key === '\u001b') {
-        logViewMode = false;
-        logScrollOffset = 0;
+        applyUpdates(actions.toggleLogView(getActionState()));
         render();
         return;
       }
       if (key === '1') { // Switch to activity tab
-        logViewTab = 'activity';
-        logScrollOffset = 0;
+        applyUpdates(actions.switchLogTab(getActionState(), 'activity'));
         render();
         return;
       }
       if (key === '2') { // Switch to server tab
-        logViewTab = 'server';
-        logScrollOffset = 0;
+        applyUpdates(actions.switchLogTab(getActionState(), 'server'));
         render();
         return;
       }
-      // Get current log data for scroll bounds
-      const currentLogData = logViewTab === 'server' ? serverLogBuffer : activityLog;
-      const maxScroll = Math.max(0, currentLogData.length - 10);
       if (key === '\u001b[A' || key === 'k') { // Up - scroll
-        logScrollOffset = Math.min(logScrollOffset + 1, maxScroll);
+        applyUpdates(actions.scrollLog(getActionState(), 'up'));
         render();
         return;
       }
       if (key === '\u001b[B' || key === 'j') { // Down - scroll
-        logScrollOffset = Math.max(0, logScrollOffset - 1);
+        applyUpdates(actions.scrollLog(getActionState(), 'down'));
         render();
         return;
       }
@@ -3135,16 +2084,15 @@ function setupKeyboardInput() {
       return; // Ignore other keys in log view mode
     }
 
-    if (actionMode) {
+    if (store.get('actionMode')) {
       if (key === '\u001b') { // Escape to close
-        actionMode = false;
-        actionData = null;
-        actionLoading = false;
+        applyUpdates(actions.closeActionModal(getActionState()));
         render();
         return;
       }
-      if (!actionData) return;
-      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = actionData;
+      const currentActionData = store.get('actionData');
+      if (!currentActionData) return;
+      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = currentActionData;
       const cliReady = (platform === 'gitlab') ? (hasGlab && glabAuthed) : (hasGh && ghAuthed);
       const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
 
@@ -3185,13 +2133,12 @@ function setupKeyboardInput() {
             addLog(`${prLabel} created: ${(result.stdout || '').trim().split('\n').pop()}`, 'success');
             // Invalidate cache and refresh modal data
             prInfoCache.delete(aBranch.name);
-            actionData = gatherLocalActionData(aBranch);
-            actionLoading = true;
+            const refreshedData = gatherLocalActionData(aBranch);
+            store.setState({ actionData: refreshedData, actionLoading: true });
             render();
-            loadAsyncActionData(aBranch, actionData).then((fullData) => {
-              if (actionMode && actionData && actionData.branch.name === aBranch.name) {
-                actionData = fullData;
-                actionLoading = false;
+            loadAsyncActionData(aBranch, refreshedData).then((fullData) => {
+              if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === aBranch.name) {
+                store.setState({ actionData: fullData, actionLoading: false });
                 render();
               }
             }).catch(() => {});
@@ -3243,9 +2190,7 @@ function setupKeyboardInput() {
             await execAsync(`gh pr merge ${prInfo.number} --squash --delete-branch 2>&1`);
           }
           addLog(`${prLabel} #${prInfo.number} merged`, 'success');
-          actionMode = false;
-          actionData = null;
-          actionLoading = false;
+          store.setState({ actionMode: false, actionData: null, actionLoading: false });
           prInfoCache.delete(aBranch.name);
           // Force-refresh bulk PR statuses so inline indicators update immediately
           lastPrStatusFetch = 0;
@@ -3296,7 +2241,7 @@ function setupKeyboardInput() {
     }
 
     // Dismiss flash on any key
-    if (flashMessage) {
+    if (store.get('flashMessage')) {
       hideFlash();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
@@ -3304,46 +2249,42 @@ function setupKeyboardInput() {
     }
 
     // Dismiss error toast on any key
-    if (errorToast) {
+    if (store.get('errorToast')) {
       hideErrorToast();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
     }
 
-    const displayBranches = filteredBranches !== null ? filteredBranches : branches;
+    const { filteredBranches: currentFiltered, branches: currentBranchList, selectedIndex: curSelIdx } = store.getState();
+    const displayBranches = currentFiltered !== null ? currentFiltered : currentBranchList;
+    const actionState = getActionState();
 
     switch (key) {
       case '\u001b[A': // Up arrow
-      case 'k':
-        if (selectedIndex > 0) {
-          selectedIndex--;
-          selectedBranchName = displayBranches[selectedIndex] ? displayBranches[selectedIndex].name : null;
-          render();
-        }
+      case 'k': {
+        const result = actions.moveUp(actionState);
+        if (result) { applyUpdates(result); render(); }
         break;
+      }
 
       case '\u001b[B': // Down arrow
-      case 'j':
-        if (selectedIndex < displayBranches.length - 1) {
-          selectedIndex++;
-          selectedBranchName = displayBranches[selectedIndex] ? displayBranches[selectedIndex].name : null;
-          render();
-        }
+      case 'j': {
+        const result = actions.moveDown(actionState);
+        if (result) { applyUpdates(result); render(); }
         break;
+      }
 
       case '\r': // Enter
       case '\n':
-        if (displayBranches.length > 0 && selectedIndex < displayBranches.length) {
-          const branch = displayBranches[selectedIndex];
+        if (displayBranches.length > 0 && curSelIdx < displayBranches.length) {
+          const branch = displayBranches[curSelIdx];
           if (branch.isDeleted) {
             addLog(`Cannot switch to deleted branch: ${branch.name}`, 'error');
             render();
-          } else if (branch.name !== currentBranch) {
+          } else if (branch.name !== store.get('currentBranch')) {
             // Clear search when switching
-            searchQuery = '';
-            filteredBranches = null;
-            searchMode = false;
+            store.setState({ searchQuery: '', filteredBranches: null, searchMode: false });
             await switchToBranch(branch.name);
             await pollGitChanges();
           }
@@ -3351,30 +2292,28 @@ function setupKeyboardInput() {
         break;
 
       case 'v': // Preview pane
-        if (displayBranches.length > 0 && selectedIndex < displayBranches.length) {
-          const branch = displayBranches[selectedIndex];
+        if (displayBranches.length > 0 && curSelIdx < displayBranches.length) {
+          const branch = displayBranches[curSelIdx];
           addLog(`Loading preview for ${branch.name}...`, 'info');
           render();
-          previewData = await getPreviewData(branch.name);
-          previewMode = true;
+          const pvData = await getPreviewData(branch.name);
+          store.setState({ previewData: pvData, previewMode: true });
           render();
         }
         break;
 
       case '/': // Search mode
-        searchMode = true;
-        searchQuery = '';
-        selectedIndex = 0;
+        applyUpdates(actions.enterSearchMode(actionState));
         render();
         break;
 
       case 'h': // History
-        historyMode = true;
+        applyUpdates(actions.toggleHistory(actionState));
         render();
         break;
 
       case 'i': // Server info
-        infoMode = true;
+        applyUpdates(actions.toggleInfo(actionState));
         render();
         break;
 
@@ -3403,13 +2342,11 @@ function setupKeyboardInput() {
         }
         break;
 
-      case 'l': // View server logs
-        if (!NO_SERVER) {
-          logViewMode = true;
-          logScrollOffset = 0;
-          render();
-        }
+      case 'l': { // View server logs
+        const logResult = actions.toggleLogView(actionState);
+        if (logResult) { applyUpdates(logResult); render(); }
         break;
+      }
 
       case 'o': // Open live server in browser
         if (!NO_SERVER) {
@@ -3421,26 +2358,24 @@ function setupKeyboardInput() {
         break;
 
       case 'b': { // Branch action modal
-        const branch = displayBranches.length > 0 && selectedIndex < displayBranches.length
-          ? displayBranches[selectedIndex] : null;
+        const branch = displayBranches.length > 0 && curSelIdx < displayBranches.length
+          ? displayBranches[curSelIdx] : null;
         if (branch) {
           // Phase 1: Open modal instantly with local/cached data
-          actionData = gatherLocalActionData(branch);
-          actionMode = true;
-          actionLoading = !actionData.prLoaded;
+          const localData = gatherLocalActionData(branch);
+          store.setState({ actionData: localData, actionMode: true, actionLoading: !localData.prLoaded });
           render();
 
           // Phase 2: Load async data (session URL, PR info) in background
-          loadAsyncActionData(branch, actionData).then((fullData) => {
+          loadAsyncActionData(branch, localData).then((fullData) => {
             // Only update if modal is still open for the same branch
-            if (actionMode && actionData && actionData.branch.name === branch.name) {
-              actionData = fullData;
-              actionLoading = false;
+            if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
+              store.setState({ actionData: fullData, actionLoading: false });
               render();
             }
           }).catch(() => {
-            if (actionMode && actionData && actionData.branch.name === branch.name) {
-              actionLoading = false;
+            if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
+              store.setState({ actionLoading: false });
               render();
             }
           });
@@ -3458,71 +2393,79 @@ function setupKeyboardInput() {
         render();
         break;
 
-      case 's':
-        soundEnabled = !soundEnabled;
-        addLog(`Sound notifications ${soundEnabled ? 'enabled' : 'disabled'}`, 'info');
-        if (soundEnabled) playSound();
+      case 's': {
+        applyUpdates(actions.toggleSound(actionState));
+        addLog(`Sound notifications ${store.get('soundEnabled') ? 'enabled' : 'disabled'}`, 'info');
+        if (store.get('soundEnabled')) playSound();
         render();
         break;
+      }
 
-      case 'c': // Toggle casino mode
-        casinoModeEnabled = casino.toggle();
-        addLog(`Casino mode ${casinoModeEnabled ? '🎰 ENABLED' : 'disabled'}`, casinoModeEnabled ? 'success' : 'info');
-        if (casinoModeEnabled) {
+      case 'c': { // Toggle casino mode
+        const newCasinoState = casino.toggle();
+        store.setState({ casinoModeEnabled: newCasinoState });
+        addLog(`Casino mode ${newCasinoState ? '🎰 ENABLED' : 'disabled'}`, newCasinoState ? 'success' : 'info');
+        if (newCasinoState) {
           addLog(`Have you noticed this game has that 'variable rewards' thing going on? 🤔😉`, 'info');
-          if (soundEnabled) {
+          if (store.get('soundEnabled')) {
             casinoSounds.playJackpot();
           }
         }
         render();
         break;
+      }
 
       // Number keys to set visible branch count
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9':
-        visibleBranchCount = parseInt(key, 10);
-        addLog(`Showing ${visibleBranchCount} branches`, 'info');
+        applyUpdates(actions.setVisibleBranchCount(actionState, parseInt(key, 10)));
+        addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
         render();
         break;
 
       case '0': // 0 = 10 branches
-        visibleBranchCount = 10;
-        addLog(`Showing ${visibleBranchCount} branches`, 'info');
+        applyUpdates(actions.setVisibleBranchCount(actionState, 10));
+        addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
         render();
         break;
 
       case '+':
-      case '=': // = key (same key as + without shift)
-        if (visibleBranchCount < getMaxBranchesForScreen()) {
-          visibleBranchCount++;
-          addLog(`Showing ${visibleBranchCount} branches`, 'info');
+      case '=': { // = key (same key as + without shift)
+        const incResult = actions.increaseVisibleBranches(actionState, getMaxBranchesForScreen());
+        if (incResult) {
+          applyUpdates(incResult);
+          addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
           render();
         }
         break;
+      }
 
       case '-':
-      case '_': // _ key (same key as - with shift)
-        if (visibleBranchCount > 1) {
-          visibleBranchCount--;
-          addLog(`Showing ${visibleBranchCount} branches`, 'info');
+      case '_': { // _ key (same key as - with shift)
+        const decResult = actions.decreaseVisibleBranches(actionState);
+        if (decResult) {
+          applyUpdates(decResult);
+          addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
           render();
         }
         break;
+      }
 
       case 'q':
       case '\u0003': // Ctrl+C
         await shutdown();
         break;
 
-      case '\u001b': // Escape - clear search if active, otherwise quit
-        if (searchQuery || filteredBranches) {
-          searchQuery = '';
-          filteredBranches = null;
-          render();
-        } else {
+      case '\u001b': { // Escape - clear search if active, otherwise quit
+        const escResult = actions.handleEscape(actionState);
+        if (escResult && escResult._quit) {
           await shutdown();
+        } else if (escResult) {
+          applyUpdates(escResult);
+          render();
         }
         break;
+      }
     }
   });
 }
@@ -3621,27 +2564,28 @@ async function start() {
   }
 
   // Get initial state
-  currentBranch = await getCurrentBranch();
+  const initBranch = await getCurrentBranch();
+  store.setState({ currentBranch: initBranch });
 
   // Warn if in detached HEAD state
-  if (isDetachedHead) {
+  if (store.get('isDetachedHead')) {
     addLog(`Warning: In detached HEAD state`, 'warning');
   }
-  branches = await getAllBranches();
+  const initBranches = await getAllBranches();
+  store.setState({ branches: initBranches });
 
   // Initialize previous states and known branches
-  for (const branch of branches) {
+  for (const branch of initBranches) {
     previousBranchStates.set(branch.name, branch.commit);
     knownBranchNames.add(branch.name);
   }
 
   // Find current branch in list and select it
-  const currentIndex = branches.findIndex(b => b.name === currentBranch);
+  const currentIndex = initBranches.findIndex(b => b.name === initBranch);
   if (currentIndex >= 0) {
-    selectedIndex = currentIndex;
-    selectedBranchName = currentBranch;
-  } else if (branches.length > 0) {
-    selectedBranchName = branches[0].name;
+    store.setState({ selectedIndex: currentIndex, selectedBranchName: initBranch });
+  } else if (initBranches.length > 0) {
+    store.setState({ selectedBranchName: initBranches[0].name });
   }
 
   // Load sparklines and action cache in background
@@ -3650,7 +2594,7 @@ async function start() {
     // Once env is known, kick off initial PR status fetch
     fetchAllPrStatuses().then(map => {
       if (map) {
-        branchPrStatusMap = map;
+        store.setState({ branchPrStatusMap: map });
         lastPrStatusFetch = Date.now();
         render();
       }
@@ -3658,13 +2602,14 @@ async function start() {
   }).catch(() => {});
 
   // Start server based on mode
+  const startBranchName = store.get('currentBranch');
   if (SERVER_MODE === 'none') {
     addLog(`Running in no-server mode (branch monitoring only)`, 'info');
-    addLog(`Current branch: ${currentBranch}`, 'info');
+    addLog(`Current branch: ${startBranchName}`, 'info');
     render();
   } else if (SERVER_MODE === 'command') {
     addLog(`Command mode: ${SERVER_COMMAND}`, 'info');
-    addLog(`Current branch: ${currentBranch}`, 'info');
+    addLog(`Current branch: ${startBranchName}`, 'info');
     render();
     // Start the user's dev server
     startServerProcess();
@@ -3673,7 +2618,7 @@ async function start() {
     server.listen(PORT, () => {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
-      addLog(`Current branch: ${currentBranch}`, 'info');
+      addLog(`Current branch: ${store.get('currentBranch')}`, 'info');
       // Add server log entries for static server
       addServerLog(`Static server started on http://localhost:${PORT}`);
       addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
@@ -3707,7 +2652,7 @@ async function start() {
   });
 
   // Start polling with adaptive interval
-  pollIntervalId = setInterval(pollGitChanges, adaptivePollInterval);
+  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
 
   // Initial render
   render();

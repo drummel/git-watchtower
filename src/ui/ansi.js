@@ -386,6 +386,94 @@ function style(text, ...styles) {
   return styles.join('') + text + ansi.reset;
 }
 
+/**
+ * Pad a string on the right, truncating if too long (uses raw string length)
+ * @param {string} str - String to pad
+ * @param {number} len - Target length
+ * @returns {string}
+ */
+function padRight(str, len) {
+  if (str.length >= len) return str.substring(0, len);
+  return str + ' '.repeat(len - str.length);
+}
+
+/**
+ * Pad a string on the left, truncating if too long (uses raw string length)
+ * @param {string} str - String to pad
+ * @param {number} len - Target length
+ * @returns {string}
+ */
+function padLeft(str, len) {
+  if (str.length >= len) return str.substring(0, len);
+  return ' '.repeat(len - str.length) + str;
+}
+
+/**
+ * Calculate maximum branches that fit on screen
+ * @param {number} terminalHeight - Terminal height in rows
+ * @param {number} [maxLogEntries=10] - Max activity log entries shown
+ * @returns {number}
+ */
+function getMaxBranchesForScreen(terminalHeight, maxLogEntries = 10) {
+  // header(2) + branch box + log box(~12) + footer(2)
+  // Each branch takes 2 rows, plus 4 for box borders
+  const availableHeight = terminalHeight - 2 - maxLogEntries - 5 - 2;
+  return Math.max(1, Math.floor(availableHeight / 2));
+}
+
+/**
+ * Draw a box at a specific position (returns ANSI string)
+ * @param {number} row - Starting row
+ * @param {number} col - Starting column
+ * @param {number} width - Box width
+ * @param {number} height - Box height
+ * @param {string} [title=''] - Optional title
+ * @param {string} [titleColor] - ANSI color code for title
+ * @returns {string} ANSI escape sequence string for the box
+ */
+function drawBox(row, col, width, height, title = '', titleColor = ansi.cyan) {
+  let out = '';
+  // Top border
+  out += ansi.moveTo(row, col);
+  out += ansi.gray + box.topLeft + box.horizontal.repeat(width - 2) + box.topRight + ansi.reset;
+
+  // Title
+  if (title) {
+    out += ansi.moveTo(row, col + 2);
+    out += ansi.gray + ' ' + titleColor + title + ansi.gray + ' ' + ansi.reset;
+  }
+
+  // Sides
+  for (let i = 1; i < height - 1; i++) {
+    out += ansi.moveTo(row + i, col);
+    out += ansi.gray + box.vertical + ansi.reset;
+    out += ansi.moveTo(row + i, col + width - 1);
+    out += ansi.gray + box.vertical + ansi.reset;
+  }
+
+  // Bottom border
+  out += ansi.moveTo(row + height - 1, col);
+  out += ansi.gray + box.bottomLeft + box.horizontal.repeat(width - 2) + box.bottomRight + ansi.reset;
+  return out;
+}
+
+/**
+ * Clear a rectangular area (returns ANSI string)
+ * @param {number} row - Starting row
+ * @param {number} col - Starting column
+ * @param {number} width - Area width
+ * @param {number} height - Area height
+ * @returns {string}
+ */
+function clearArea(row, col, width, height) {
+  let out = '';
+  for (let i = 0; i < height; i++) {
+    out += ansi.moveTo(row + i, col);
+    out += ' '.repeat(width);
+  }
+  return out;
+}
+
 module.exports = {
   ansi,
   box,
@@ -396,6 +484,11 @@ module.exports = {
   visibleLength,
   truncate,
   pad,
+  padRight,
+  padLeft,
+  getMaxBranchesForScreen,
+  drawBox,
+  clearArea,
   wordWrap,
   horizontalLine,
   style,
