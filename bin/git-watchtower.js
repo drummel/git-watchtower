@@ -810,11 +810,12 @@ function detectPlatform(webUrl) {
 }
 
 // Get PR info for a branch using gh or glab CLI
+// Queries all states (open, merged, closed) so merged PRs are visible in the action modal
 async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   if (platform === 'github' && hasGh) {
     try {
       const { stdout } = await execAsync(
-        `gh pr list --head "${branchName}" --json number,title,state,reviewDecision,statusCheckRollup --limit 1`
+        `gh pr list --head "${branchName}" --state all --json number,title,state,reviewDecision,statusCheckRollup --limit 1`
       );
       const prs = JSON.parse(stdout);
       if (prs.length > 0) {
@@ -837,7 +838,7 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   if (platform === 'gitlab' && hasGlab) {
     try {
       const { stdout } = await execAsync(
-        `glab mr list --source-branch="${branchName}" --output json 2>/dev/null`
+        `glab mr list --source-branch="${branchName}" --state all --output json 2>/dev/null`
       );
       const mrs = JSON.parse(stdout);
       if (mrs.length > 0) {
@@ -845,7 +846,7 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
         return {
           number: mr.iid,
           title: mr.title,
-          state: mr.state,
+          state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
           approved: false,
           checksPass: false,
           checksFail: false,
@@ -869,6 +870,59 @@ async function checkCliAuth(cmd) {
   } catch (e) {
     return false;
   }
+}
+
+// Bulk-fetch PR statuses for all branches in a single gh/glab call.
+// Returns Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
+async function fetchAllPrStatuses() {
+  if (!cachedEnv) return null;
+  const { platform, hasGh, ghAuthed, hasGlab, glabAuthed } = cachedEnv;
+
+  if (platform === 'github' && hasGh && ghAuthed) {
+    try {
+      const { stdout } = await execAsync(
+        'gh pr list --state all --json headRefName,number,title,state --limit 200'
+      );
+      const prs = JSON.parse(stdout);
+      const map = new Map();
+      for (const pr of prs) {
+        const existing = map.get(pr.headRefName);
+        // Prefer the most recent PR (highest number) per branch
+        if (!existing || pr.number > existing.number) {
+          map.set(pr.headRefName, {
+            state: pr.state, // OPEN, MERGED, CLOSED
+            number: pr.number,
+            title: pr.title,
+          });
+        }
+      }
+      return map;
+    } catch (e) { /* gh error */ }
+  }
+
+  if (platform === 'gitlab' && hasGlab && glabAuthed) {
+    try {
+      const { stdout } = await execAsync(
+        'glab mr list --state all --output json 2>/dev/null'
+      );
+      const mrs = JSON.parse(stdout);
+      const map = new Map();
+      for (const mr of mrs) {
+        const branchName = mr.source_branch;
+        const existing = map.get(branchName);
+        if (!existing || mr.iid > existing.number) {
+          map.set(branchName, {
+            state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
+            number: mr.iid,
+            title: mr.title,
+          });
+        }
+      }
+      return map;
+    } catch (e) { /* glab error */ }
+  }
+
+  return null;
 }
 
 // One-time environment detection (called at startup)
@@ -1203,6 +1257,16 @@ let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, pla
 // Per-branch PR info cache: Map<branchName, { commit, prInfo }>
 // Invalidated when the branch's commit hash changes
 const prInfoCache = new Map();
+
+// Bulk PR status map: Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
+// Updated in background every PR_STATUS_POLL_INTERVAL ms
+let branchPrStatusMap = new Map();
+let lastPrStatusFetch = 0;
+const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
+let prStatusFetchInFlight = false;
+
+// Default/base branches that should never get "merged" treatment — they're merge targets
+const BASE_BRANCH_RE = /^(main|master|develop|development|staging|production|trunk|release)$/;
 
 // Session history for undo
 const switchHistory = [];
@@ -1681,6 +1745,11 @@ function renderBranchList() {
     const isCurrent = branch.name === currentBranch;
     const timeAgo = formatTimeAgo(branch.date);
     const sparkline = sparklineCache.get(branch.name) || '       ';
+    const prStatus = branchPrStatusMap.get(branch.name); // { state, number, title } or undefined
+    // Never treat default/base branches as "merged" — they're merge targets, not sources
+    const isBaseBranch = BASE_BRANCH_RE.test(branch.name);
+    const isMerged = !isBaseBranch && prStatus && prStatus.state === 'MERGED';
+    const hasOpenPr = prStatus && prStatus.state === 'OPEN';
 
     // Branch name line
     write(ansi.moveTo(row, 2));
@@ -1702,6 +1771,10 @@ function renderBranchList() {
     if (branch.isDeleted) {
       write(ansi.gray + ansi.dim + displayName + ansi.reset);
       if (isSelected) write(ansi.inverse);
+    } else if (isMerged && !isCurrent) {
+      // Merged branches get dimmed styling (like deleted, but in magenta tint)
+      write(ansi.dim + ansi.fg256(103) + displayName + ansi.reset);
+      if (isSelected) write(ansi.inverse);
     } else if (isCurrent) {
       write(ansi.green + ansi.bold + displayName + ansi.reset);
       if (isSelected) write(ansi.inverse);
@@ -1717,14 +1790,32 @@ function renderBranchList() {
 
     // Sparkline (7 chars)
     if (isSelected) write(ansi.reset);
-    write(ansi.fg256(39) + sparkline + ansi.reset); // Nice blue color
+    if (isMerged && !isCurrent) {
+      write(ansi.dim + ansi.fg256(60) + sparkline + ansi.reset); // Dimmed sparkline for merged
+    } else {
+      write(ansi.fg256(39) + sparkline + ansi.reset); // Nice blue color
+    }
     if (isSelected) write(ansi.inverse);
-    write(' ');
+
+    // PR status dot indicator (1 char)
+    if (isSelected) write(ansi.reset);
+    if (isMerged) {
+      write(ansi.dim + ansi.magenta + '●' + ansi.reset);
+    } else if (hasOpenPr) {
+      write(ansi.brightGreen + '●' + ansi.reset);
+    } else {
+      write(' ');
+    }
+    if (isSelected) write(ansi.inverse);
 
     // Status badge
     if (branch.isDeleted) {
       if (isSelected) write(ansi.reset);
       write(ansi.red + ansi.dim + '✗ DELETED' + ansi.reset);
+      if (isSelected) write(ansi.inverse);
+    } else if (isMerged && !isCurrent && !branch.isNew && !branch.hasUpdates) {
+      if (isSelected) write(ansi.reset);
+      write(ansi.dim + ansi.magenta + '✓ MERGED ' + ansi.reset);
       if (isSelected) write(ansi.inverse);
     } else if (isCurrent) {
       if (isSelected) write(ansi.reset);
@@ -1753,10 +1844,25 @@ function renderBranchList() {
 
     // Commit info line
     write(ansi.moveTo(row, 2));
-    write('      └─ ');
-    write(ansi.cyan + (branch.commit || '???????') + ansi.reset);
-    write(' • ');
-    write(ansi.gray + truncate(branch.subject || 'No commit message', contentWidth - 22) + ansi.reset);
+    if (isMerged && !isCurrent) {
+      // Dimmed commit line for merged branches, with PR number
+      write(ansi.dim + '      └─ ' + ansi.reset);
+      write(ansi.dim + ansi.cyan + (branch.commit || '???????') + ansi.reset);
+      write(ansi.dim + ' • ' + ansi.reset);
+      const prTag = ansi.dim + ansi.magenta + '#' + prStatus.number + ansi.reset + ansi.dim + ' ';
+      write(prTag + ansi.gray + ansi.dim + truncate(branch.subject || 'No commit message', contentWidth - 28) + ansi.reset);
+    } else {
+      write('      └─ ');
+      write(ansi.cyan + (branch.commit || '???????') + ansi.reset);
+      write(' • ');
+      if (hasOpenPr) {
+        // Show PR number inline for open PRs
+        const prTag = ansi.brightGreen + '#' + prStatus.number + ansi.reset + ' ';
+        write(prTag + ansi.gray + truncate(branch.subject || 'No commit message', contentWidth - 28) + ansi.reset);
+      } else {
+        write(ansi.gray + truncate(branch.subject || 'No commit message', contentWidth - 22) + ansi.reset);
+      }
+    }
 
     row++;
   }
@@ -2320,6 +2426,8 @@ function renderActionModal() {
   });
 
   // PR: create or view depending on state
+  const prIsMerged = prInfo && (prInfo.state === 'MERGED' || prInfo.state === 'merged');
+  const prIsOpen = prInfo && (prInfo.state === 'OPEN' || prInfo.state === 'open');
   if (prInfo) {
     actions.push({ key: 'p', label: `View ${prLabel} #${prInfo.number}`, available: !!webUrl, reason: null });
   } else {
@@ -2335,23 +2443,23 @@ function renderActionModal() {
   actions.push({
     key: 'd', label: `View ${prLabel} diff on ${platformLabel}`,
     available: !!prInfo && !!webUrl,
-    reason: !prInfo && prLoaded ? `No open ${prLabel}` : !webUrl ? 'Could not parse remote URL' : null,
+    reason: !prInfo && prLoaded ? `No ${prLabel}` : !webUrl ? 'Could not parse remote URL' : null,
     loading: !prLoaded && (cliReady || !!webUrl),
   });
 
-  // Approve
+  // Approve — disabled for merged PRs
   actions.push({
     key: 'a', label: `Approve ${prLabel}`,
-    available: !!prInfo && cliReady,
-    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
+    available: !!prInfo && prIsOpen && cliReady,
+    reason: prIsMerged ? `${prLabel} already merged` : !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
     loading: cliReady && !prLoaded,
   });
 
-  // Merge
+  // Merge — disabled for already-merged PRs
   actions.push({
     key: 'm', label: `Merge ${prLabel} (squash)`,
-    available: !!prInfo && cliReady,
-    reason: !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
+    available: !!prInfo && prIsOpen && cliReady,
+    reason: prIsMerged ? `${prLabel} already merged` : !hasCli ? `Requires ${cliTool} CLI` : !cliAuthed ? `Run: ${cliTool} auth login` : !prInfo && prLoaded ? `No open ${prLabel}` : null,
     loading: cliReady && !prLoaded,
   });
 
@@ -2375,15 +2483,16 @@ function renderActionModal() {
   if (prInfo) {
     let prStatus = `${prLabel} #${prInfo.number}: ${truncate(prInfo.title, innerW - 20)}`;
     const badges = [];
+    if (prIsMerged) badges.push('merged');
     if (prInfo.approved) badges.push('approved');
     if (prInfo.checksPass) badges.push('checks pass');
     if (prInfo.checksFail) badges.push('checks fail');
     if (badges.length) prStatus += ` [${badges.join(', ')}]`;
-    statusInfoLines.push({ color: 'green', text: prStatus });
+    statusInfoLines.push({ color: prIsMerged ? 'magenta' : 'green', text: prStatus });
   } else if (loading) {
     statusInfoLines.push({ color: 'gray', text: `Loading ${prLabel} info...` });
   } else if (cliReady) {
-    statusInfoLines.push({ color: 'gray', text: `No open ${prLabel} for this branch` });
+    statusInfoLines.push({ color: 'gray', text: `No ${prLabel} for this branch` });
   }
 
   if (isClaudeBranch) {
@@ -3127,10 +3236,16 @@ async function pollGitChanges() {
     // Remember which branch was selected before updating the list
     const previouslySelectedName = selectedBranchName || (branches[selectedIndex] ? branches[selectedIndex].name : null);
 
-    // Sort: new branches first, then by date, deleted branches at the bottom
+    // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
     filteredBranches.sort((a, b) => {
+      const aIsBase = BASE_BRANCH_RE.test(a.name);
+      const bIsBase = BASE_BRANCH_RE.test(b.name);
+      const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
+      const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
       if (!a.isDeleted && b.isDeleted) return -1;
+      if (aMerged && !bMerged && !b.isDeleted) return 1;
+      if (!aMerged && bMerged && !a.isDeleted) return -1;
       if (a.isNew && !b.isNew) return -1;
       if (!a.isNew && b.isNew) return 1;
       return b.date - a.date;
@@ -3153,6 +3268,22 @@ async function pollGitChanges() {
     } else if (selectedIndex >= branches.length) {
       selectedIndex = Math.max(0, branches.length - 1);
       selectedBranchName = branches[selectedIndex] ? branches[selectedIndex].name : null;
+    }
+
+    // Background PR status fetch (throttled to every PR_STATUS_POLL_INTERVAL)
+    const now2 = Date.now();
+    if (!prStatusFetchInFlight && cachedEnv && (now2 - lastPrStatusFetch > PR_STATUS_POLL_INTERVAL)) {
+      prStatusFetchInFlight = true;
+      fetchAllPrStatuses().then(map => {
+        if (map) {
+          branchPrStatusMap = map;
+          render(); // re-render to show updated PR indicators
+        }
+        lastPrStatusFetch = Date.now();
+        prStatusFetchInFlight = false;
+      }).catch(() => {
+        prStatusFetchInFlight = false;
+      });
     }
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
@@ -3649,6 +3780,8 @@ function setupKeyboardInput() {
           actionData = null;
           actionLoading = false;
           prInfoCache.delete(aBranch.name);
+          // Force-refresh bulk PR statuses so inline indicators update immediately
+          lastPrStatusFetch = 0;
           await pollGitChanges();
         } catch (e) {
           const msg = (e && e.stderr) || (e && e.message) || String(e);
@@ -4046,7 +4179,16 @@ async function start() {
 
   // Load sparklines and action cache in background
   refreshAllSparklines().catch(() => {});
-  initActionCache().catch(() => {});
+  initActionCache().then(() => {
+    // Once env is known, kick off initial PR status fetch
+    fetchAllPrStatuses().then(map => {
+      if (map) {
+        branchPrStatusMap = map;
+        lastPrStatusFetch = Date.now();
+        render();
+      }
+    }).catch(() => {});
+  }).catch(() => {});
 
   // Start server based on mode
   if (SERVER_MODE === 'none') {
