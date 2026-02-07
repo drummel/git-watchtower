@@ -89,15 +89,29 @@ function getInitialState() {
     currentBranch: null,
     selectedIndex: 0,
     selectedBranchName: null,
+    filteredBranches: null,
     isDetachedHead: false,
     hasMergeConflict: false,
 
-    // UI mode state
+    // UI mode (legacy — used by setMode/getFilteredBranches)
     mode: 'normal',
+
+    // UI mode flags
+    searchMode: false,
     searchQuery: '',
-    flashMessage: null,
+    previewMode: false,
     previewData: null,
-    logScrollOffset: 0,
+    historyMode: false,
+    infoMode: false,
+    logViewMode: false,
+    logViewTab: 'server',
+    actionMode: false,
+    actionData: null,
+    actionLoading: false,
+
+    // Notifications
+    flashMessage: null,
+    errorToast: null,
 
     // Activity tracking
     activityLog: [],
@@ -109,11 +123,14 @@ function getInitialState() {
     isOffline: false,
     lastFetchDuration: 0,
     consecutiveNetworkFailures: 0,
+    adaptivePollInterval: 5000,
 
     // Server state
     serverRunning: false,
     serverCrashed: false,
     serverLogs: [],
+    serverLogBuffer: [],
+    logScrollOffset: 0,
 
     // Terminal state
     terminalWidth: process.stdout.columns || 80,
@@ -122,6 +139,19 @@ function getInitialState() {
     // Settings (can be overridden by config)
     visibleBranchCount: 7,
     soundEnabled: true,
+    casinoModeEnabled: false,
+
+    // Caches (Maps — shallow-copied by getState())
+    sparklineCache: new Map(),
+    branchPrStatusMap: new Map(),
+
+    // Config (set once at startup, treated as read-only after)
+    serverMode: 'static',
+    noServer: false,
+    port: 3000,
+    maxLogEntries: 10,
+    projectName: '',
+    clientCount: 0,
   };
 }
 
@@ -432,8 +462,8 @@ class Store {
    * @returns {Branch[]}
    */
   getFilteredBranches() {
-    const { branches, searchQuery, mode } = this.state;
-    if (mode !== 'search' || !searchQuery) {
+    const { branches, searchQuery, mode, searchMode } = this.state;
+    if ((!searchMode && mode !== 'search') || !searchQuery) {
       return branches;
     }
     const query = searchQuery.toLowerCase();

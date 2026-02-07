@@ -86,6 +86,10 @@ const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
 const { getDefaultConfig, migrateConfig } = require('../src/config/schema');
 const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, CONFIG_FILE_NAME } = require('../src/config/loader');
 
+// Centralized state store
+const { Store } = require('../src/state/store');
+const store = new Store();
+
 const PROJECT_ROOT = process.cwd();
 
 function loadConfig() {
@@ -363,19 +367,8 @@ let AUTO_PULL = true;
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
 
-// Dynamic settings
-let visibleBranchCount = 7;
-let soundEnabled = true;
-let casinoModeEnabled = false;
-
 // Server process management (for command mode)
 let serverProcess = null;
-let serverLogBuffer = [];         // In-memory log buffer
-let serverRunning = false;
-let serverCrashed = false;
-let logViewMode = false;          // Viewing logs modal
-let logViewTab = 'server';        // 'activity' or 'server'
-let logScrollOffset = 0;          // Scroll position in log view
 
 function applyConfig(config) {
   // Server settings
@@ -391,28 +384,35 @@ function applyConfig(config) {
   AUTO_PULL = config.autoPull !== false;
   GIT_POLL_INTERVAL = config.gitPollInterval || parseInt(process.env.GIT_POLL_INTERVAL, 10) || 5000;
 
-  // UI settings
-  visibleBranchCount = config.visibleBranches || 7;
-  soundEnabled = config.soundEnabled !== false;
+  // UI settings via store
+  const casinoEnabled = config.casinoMode === true;
+  store.setState({
+    visibleBranchCount: config.visibleBranches || 7,
+    soundEnabled: config.soundEnabled !== false,
+    casinoModeEnabled: casinoEnabled,
+    serverMode: SERVER_MODE,
+    noServer: NO_SERVER,
+    port: PORT,
+    maxLogEntries: MAX_LOG_ENTRIES,
+    projectName: path.basename(PROJECT_ROOT),
+    adaptivePollInterval: GIT_POLL_INTERVAL,
+  });
 
   // Casino mode
-  casinoModeEnabled = config.casinoMode === true;
-  if (casinoModeEnabled) {
+  if (casinoEnabled) {
     casino.enable();
   }
 }
 
 // Server log management
 function addServerLog(line, isError = false) {
-  const timestamp = new Date().toLocaleTimeString();
-  serverLogBuffer.push({ timestamp, line, isError });
-  if (serverLogBuffer.length > MAX_SERVER_LOG_LINES) {
-    serverLogBuffer.shift();
-  }
+  const entry = { timestamp: new Date().toLocaleTimeString(), line, isError };
+  const serverLogBuffer = [...store.get('serverLogBuffer'), entry].slice(-MAX_SERVER_LOG_LINES);
+  store.setState({ serverLogBuffer });
 }
 
 function clearServerLog() {
-  serverLogBuffer = [];
+  store.setState({ serverLogBuffer: [] });
 }
 
 // openInBrowser imported from src/utils/browser.js
@@ -609,8 +609,7 @@ function startServerProcess() {
   }
 
   clearServerLog();
-  serverCrashed = false;
-  serverRunning = false;
+  store.setState({ serverCrashed: false, serverRunning: false });
 
   addLog(`Starting: ${SERVER_COMMAND}`, 'update');
   addServerLog(`$ ${SERVER_COMMAND}`);
@@ -631,7 +630,7 @@ function startServerProcess() {
 
   try {
     serverProcess = spawn(cmd, args, spawnOptions);
-    serverRunning = true;
+    store.setState({ serverRunning: true });
 
     serverProcess.stdout.on('data', (data) => {
       const lines = data.toString().split('\n').filter(Boolean);
@@ -644,17 +643,16 @@ function startServerProcess() {
     });
 
     serverProcess.on('error', (err) => {
-      serverRunning = false;
-      serverCrashed = true;
+      store.setState({ serverRunning: false, serverCrashed: true });
       addServerLog(`Error: ${err.message}`, true);
       addLog(`Server error: ${err.message}`, 'error');
       render();
     });
 
     serverProcess.on('close', (code) => {
-      serverRunning = false;
+      store.setState({ serverRunning: false });
       if (code !== 0 && code !== null) {
-        serverCrashed = true;
+        store.setState({ serverCrashed: true });
         addServerLog(`Process exited with code ${code}`, true);
         addLog(`Server exited with code ${code}`, 'error');
       } else {
@@ -667,7 +665,7 @@ function startServerProcess() {
 
     addLog(`Server started (pid: ${serverProcess.pid})`, 'success');
   } catch (err) {
-    serverCrashed = true;
+    store.setState({ serverCrashed: true });
     addServerLog(`Failed to start: ${err.message}`, true);
     addLog(`Failed to start server: ${err.message}`, 'error');
   }
@@ -692,7 +690,7 @@ function stopServerProcess() {
   }
 
   serverProcess = null;
-  serverRunning = false;
+  store.setState({ serverRunning: false });
 }
 
 function restartServerProcess() {
@@ -705,17 +703,9 @@ function restartServerProcess() {
 }
 
 // Network and polling state
-let consecutiveNetworkFailures = 0;
-let isOffline = false;
-let lastFetchDuration = 0;
 let slowFetchWarningShown = false;
 let verySlowFetchWarningShown = false;
-let adaptivePollInterval = GIT_POLL_INTERVAL;
 let pollIntervalId = null;
-
-// Git state
-let isDetachedHead = false;
-let hasMergeConflict = false;
 
 // ANSI escape codes and box drawing imported from src/ui/ansi.js
 const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
@@ -733,45 +723,16 @@ const actions = require('../src/ui/actions');
 // Diff stats parsing imported from src/git/commands.js
 const { parseDiffStats } = require('../src/git/commands');
 
-// State
-let branches = [];
-let selectedIndex = 0;
-let selectedBranchName = null; // Track selection by name, not just index
-let currentBranch = null;
+// State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
 let knownBranchNames = new Set(); // Track known branches to detect NEW ones
-let isPolling = false;
-let pollingStatus = 'idle';
-let terminalWidth = process.stdout.columns || 80;
-let terminalHeight = process.stdout.rows || 24;
 
 // SSE clients for live reload
 const clients = new Set();
 
-// Activity log entries
-const activityLog = [];
-
-// Flash state
-let flashMessage = null;
+// Flash/error toast timers
 let flashTimeout = null;
-
-// Error toast state (more prominent than activity log)
-let errorToast = null;
 let errorToastTimeout = null;
-
-// Preview pane state
-let previewMode = false;
-let previewData = null;
-
-// Search/filter state
-let searchMode = false;
-let searchQuery = '';
-let filteredBranches = null;
-
-// Branch action modal state
-let actionMode = false;
-let actionData = null; // { branch, sessionUrl, prInfo, hasGh, hasGlab, webUrl, isClaudeBranch, ... }
-let actionLoading = false; // true while PR info is being fetched asynchronously
 
 // Cached environment info (populated once at startup, doesn't change during session)
 let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
@@ -780,21 +741,15 @@ let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, pla
 // Invalidated when the branch's commit hash changes
 const prInfoCache = new Map();
 
-// Bulk PR status map: Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
-// Updated in background every PR_STATUS_POLL_INTERVAL ms
-let branchPrStatusMap = new Map();
 let lastPrStatusFetch = 0;
 const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
 let prStatusFetchInFlight = false;
 
 // BASE_BRANCH_RE and isBaseBranch imported from src/git/pr.js
 
-// Session history for undo
-const switchHistory = [];
 const MAX_HISTORY = 20;
 
-// Sparkline cache (conservative - only update on manual fetch)
-const sparklineCache = new Map(); // branch name -> sparkline string
+// Sparkline timing
 let lastSparklineUpdate = 0;
 const SPARKLINE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -870,7 +825,7 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
 // padRight, padLeft imported from src/ui/ansi.js
 
 function getMaxBranchesForScreen() {
-  return calcMaxBranches(terminalHeight, MAX_LOG_ENTRIES);
+  return calcMaxBranches(store.get('terminalHeight'), MAX_LOG_ENTRIES);
 }
 
 // Casino mode funny messages
@@ -915,12 +870,16 @@ function getCasinoMessage(type) {
 }
 
 function addLog(message, type = 'info') {
-  const timestamp = new Date().toLocaleTimeString();
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
-
-  activityLog.unshift({ timestamp, message, icon: icons[type] || '○', color: colors[type] || 'white' });
-  if (activityLog.length > MAX_LOG_ENTRIES) activityLog.pop();
+  const entry = {
+    message, type,
+    timestamp: new Date().toLocaleTimeString(),
+    icon: icons[type] || '○',
+    color: colors[type] || 'white',
+  };
+  const activityLog = [entry, ...store.get('activityLog')].slice(0, MAX_LOG_ENTRIES);
+  store.setState({ activityLog });
 }
 
 // generateSparkline uses uiSparkline from src/ui/ansi.js
@@ -931,7 +890,7 @@ function generateSparkline(commitCounts) {
 
 async function getBranchSparkline(branchName) {
   // Check cache first
-  const cached = sparklineCache.get(branchName);
+  const cached = store.get('sparklineCache').get(branchName);
   if (cached && (Date.now() - lastSparklineUpdate) < SPARKLINE_CACHE_TTL) {
     return cached;
   }
@@ -945,7 +904,8 @@ async function refreshAllSparklines() {
   }
 
   try {
-    for (const branch of branches.slice(0, 20)) { // Limit to top 20
+    const currentBranches = store.get('branches');
+    for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
       if (branch.isDeleted) continue;
 
       // Get commit counts for last 7 days
@@ -971,7 +931,7 @@ async function refreshAllSparklines() {
       }
 
       const counts = Array.from(dayCounts.values());
-      sparklineCache.set(branch.name, generateSparkline(counts));
+      store.get('sparklineCache').set(branch.name, generateSparkline(counts));
     }
     lastSparklineUpdate = now;
   } catch (e) {
@@ -1010,7 +970,7 @@ async function getPreviewData(branchName) {
 
 // playSound delegates to extracted src/utils/sound.js
 function playSound() {
-  if (!soundEnabled) return;
+  if (!store.get('soundEnabled')) return;
   playSoundEffect({ cwd: PROJECT_ROOT });
 }
 
@@ -1035,8 +995,10 @@ function restoreTerminalTitle() {
 }
 
 function updateTerminalSize() {
-  terminalWidth = process.stdout.columns || 80;
-  terminalHeight = process.stdout.rows || 24;
+  store.setState({
+    terminalWidth: process.stdout.columns || 80,
+    terminalHeight: process.stdout.rows || 24,
+  });
 }
 
 function drawBox(row, col, width, height, title = '', titleColor = ansi.cyan) {
@@ -1052,13 +1014,13 @@ function clearArea(row, col, width, height) {
 // renderBranchList, renderActivityLog — now delegated to renderer module (src/ui/renderer.js)
 
 function renderCasinoStats(startRow) {
-  if (!casinoModeEnabled) return startRow;
+  if (!store.get('casinoModeEnabled')) return startRow;
 
-  const boxWidth = terminalWidth;
+  const boxWidth = store.get('terminalWidth');
   const height = 6; // Box with two content lines
 
   // Don't draw if not enough space
-  if (startRow + height > terminalHeight - 3) return startRow;
+  if (startRow + height > store.get('terminalHeight') - 3) return startRow;
 
   drawBox(startRow, 1, boxWidth, height, '🎰 CASINO WINNINGS 🎰', ansi.brightMagenta);
 
@@ -1097,58 +1059,14 @@ function renderCasinoStats(startRow) {
 // renderFooter, renderFlash, renderErrorToast, renderPreview, renderHistory
 // — now delegated to renderer module (src/ui/renderer.js)
 
-let historyMode = false;
-let infoMode = false;
-
 // renderLogView, renderInfo, renderActionModal
 // — now delegated to renderer module (src/ui/renderer.js)
 
 // Build a state snapshot from the current globals for the renderer
 function getRenderState() {
-  return {
-    terminalWidth,
-    terminalHeight,
-    branches,
-    currentBranch,
-    selectedIndex,
-    selectedBranchName,
-    filteredBranches,
-    sparklineCache,
-    branchPrStatusMap,
-    searchMode,
-    searchQuery,
-    previewMode,
-    previewData,
-    historyMode,
-    infoMode,
-    logViewMode,
-    logViewTab,
-    actionMode,
-    actionData,
-    actionLoading,
-    flashMessage,
-    errorToast,
-    pollingStatus,
-    isOffline,
-    isDetachedHead,
-    hasMergeConflict,
-    serverMode: SERVER_MODE,
-    noServer: NO_SERVER,
-    port: PORT,
-    serverRunning,
-    serverCrashed,
-    serverLogBuffer,
-    logScrollOffset,
-    visibleBranchCount,
-    soundEnabled,
-    casinoModeEnabled,
-    activityLog,
-    switchHistory,
-    maxLogEntries: MAX_LOG_ENTRIES,
-    adaptivePollInterval,
-    clientCount: clients.size,
-    projectName: path.basename(PROJECT_ROOT),
-  };
+  const s = store.getState();
+  s.clientCount = clients.size;
+  return s;
 }
 
 function render() {
@@ -1159,6 +1077,7 @@ function render() {
   write(ansi.clearScreen);
 
   const state = getRenderState();
+  const { casinoModeEnabled, terminalWidth, terminalHeight } = state;
 
   // Casino mode: top marquee border
   if (casinoModeEnabled) {
@@ -1238,32 +1157,32 @@ function render() {
   }
 
   // Delegate modal/overlay rendering to extracted renderer
-  if (flashMessage) {
+  if (state.flashMessage) {
     renderer.renderFlash(state, write);
   }
 
-  if (previewMode && previewData) {
+  if (state.previewMode && state.previewData) {
     renderer.renderPreview(state, write);
   }
 
-  if (historyMode) {
+  if (state.historyMode) {
     renderer.renderHistory(state, write);
   }
 
-  if (infoMode) {
+  if (state.infoMode) {
     renderer.renderInfo(state, write);
   }
 
-  if (logViewMode) {
+  if (state.logViewMode) {
     renderer.renderLogView(state, write);
   }
 
-  if (actionMode) {
+  if (state.actionMode) {
     renderer.renderActionModal(state, write);
   }
 
   // Error toast renders on top of everything for maximum visibility
-  if (errorToast) {
+  if (state.errorToast) {
     renderer.renderErrorToast(state, write);
   }
 }
@@ -1271,11 +1190,11 @@ function render() {
 function showFlash(message) {
   if (flashTimeout) clearTimeout(flashTimeout);
 
-  flashMessage = message;
+  store.setState({ flashMessage: message });
   render();
 
   flashTimeout = setTimeout(() => {
-    flashMessage = null;
+    store.setState({ flashMessage: null });
     render();
   }, 3000);
 }
@@ -1285,8 +1204,8 @@ function hideFlash() {
     clearTimeout(flashTimeout);
     flashTimeout = null;
   }
-  if (flashMessage) {
-    flashMessage = null;
+  if (store.get('flashMessage')) {
+    store.setState({ flashMessage: null });
     render();
   }
 }
@@ -1294,12 +1213,12 @@ function hideFlash() {
 function showErrorToast(title, message, hint = null, duration = 8000) {
   if (errorToastTimeout) clearTimeout(errorToastTimeout);
 
-  errorToast = { title, message, hint };
+  store.setState({ errorToast: { title, message, hint } });
   playSound(); // Alert sound for errors
   render();
 
   errorToastTimeout = setTimeout(() => {
-    errorToast = null;
+    store.setState({ errorToast: null });
     render();
   }, duration);
 }
@@ -1309,8 +1228,8 @@ function hideErrorToast() {
     clearTimeout(errorToastTimeout);
     errorToastTimeout = null;
   }
-  if (errorToast) {
-    errorToast = null;
+  if (store.get('errorToast')) {
+    store.setState({ errorToast: null });
     render();
   }
 }
@@ -1324,12 +1243,12 @@ async function getCurrentBranch() {
     const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD');
     // Check for detached HEAD state
     if (stdout === 'HEAD') {
-      isDetachedHead = true;
+      store.setState({ isDetachedHead: true });
       // Get the short commit hash instead
       const { stdout: commitHash } = await execAsync('git rev-parse --short HEAD');
       return `HEAD@${commitHash}`;
     }
-    isDetachedHead = false;
+    store.setState({ isDetachedHead: false });
     return stdout;
   } catch (e) {
     return null;
@@ -1449,7 +1368,7 @@ async function switchToBranch(branchName, recordHistory = true) {
       return { success: false, reason: 'dirty' };
     }
 
-    const previousBranch = currentBranch;
+    const previousBranch = store.get('currentBranch');
 
     addLog(`Switching to ${safeBranchName}...`, 'update');
     render();
@@ -1463,19 +1382,18 @@ async function switchToBranch(branchName, recordHistory = true) {
       await execAsync(`git checkout -b "${safeBranchName}" "${REMOTE_NAME}/${safeBranchName}"`);
     }
 
-    currentBranch = safeBranchName;
-    isDetachedHead = false; // Successfully switched to branch
+    store.setState({ currentBranch: safeBranchName, isDetachedHead: false });
 
     // Clear NEW flag when branch becomes current
-    const branchInfo = branches.find(b => b.name === safeBranchName);
+    const branchInfo = store.get('branches').find(b => b.name === safeBranchName);
     if (branchInfo && branchInfo.isNew) {
       branchInfo.isNew = false;
     }
 
     // Record in history (for undo)
     if (recordHistory && previousBranch && previousBranch !== safeBranchName) {
-      switchHistory.unshift({ from: previousBranch, to: safeBranchName, timestamp: Date.now() });
-      if (switchHistory.length > MAX_HISTORY) switchHistory.pop();
+      const switchHistory = [{ from: previousBranch, to: safeBranchName, timestamp: Date.now() }, ...store.get('switchHistory')].slice(0, MAX_HISTORY);
+      store.setState({ switchHistory });
     }
 
     addLog(`Switched to ${safeBranchName}`, 'success');
@@ -1517,17 +1435,18 @@ async function switchToBranch(branchName, recordHistory = true) {
 }
 
 async function undoLastSwitch() {
-  if (switchHistory.length === 0) {
+  const currentHistory = store.get('switchHistory');
+  if (currentHistory.length === 0) {
     addLog('No switch history to undo', 'warning');
     return { success: false };
   }
 
-  const lastSwitch = switchHistory[0];
+  const lastSwitch = currentHistory[0];
   addLog(`Undoing: going back to ${lastSwitch.from}`, 'update');
 
   const result = await switchToBranch(lastSwitch.from, false);
   if (result.success) {
-    switchHistory.shift(); // Remove the undone entry
+    store.setState({ switchHistory: store.get('switchHistory').slice(1) });
     addLog(`Undone: back on ${lastSwitch.from}`, 'success');
   }
   return result;
@@ -1561,7 +1480,7 @@ async function pullCurrentBranch() {
     addLog(`Pull failed: ${errMsg}`, 'error');
 
     if (isMergeConflict(errMsg)) {
-      hasMergeConflict = true;
+      store.setState({ hasMergeConflict: true });
       showErrorToast(
         'Merge Conflict!',
         'Git pull resulted in merge conflicts that need manual resolution.',
@@ -1595,12 +1514,11 @@ async function pullCurrentBranch() {
 // ============================================================================
 
 async function pollGitChanges() {
-  if (isPolling) return;
-  isPolling = true;
-  pollingStatus = 'fetching';
+  if (store.get('isPolling')) return;
+  store.setState({ isPolling: true, pollingStatus: 'fetching' });
 
   // Casino mode: start slot reels spinning (no sound - too annoying)
-  if (casinoModeEnabled) {
+  if (store.get('casinoModeEnabled')) {
     casino.startSlotReels(render);
   }
 
@@ -1610,25 +1528,28 @@ async function pollGitChanges() {
 
   try {
     const newCurrentBranch = await getCurrentBranch();
+    const prevCurrentBranch = store.get('currentBranch');
 
-    if (currentBranch && newCurrentBranch !== currentBranch) {
-      addLog(`Branch switched externally: ${currentBranch} → ${newCurrentBranch}`, 'warning');
+    if (prevCurrentBranch && newCurrentBranch !== prevCurrentBranch) {
+      addLog(`Branch switched externally: ${prevCurrentBranch} → ${newCurrentBranch}`, 'warning');
       notifyClients();
     }
-    currentBranch = newCurrentBranch;
+    store.setState({ currentBranch: newCurrentBranch });
 
     const allBranches = await getAllBranches();
 
     // Track fetch duration
-    lastFetchDuration = Date.now() - fetchStartTime;
+    const lastFetchDuration = Date.now() - fetchStartTime;
+    store.setState({ lastFetchDuration });
 
     // Check for slow fetches
     if (lastFetchDuration > 30000 && !verySlowFetchWarningShown) {
       addLog(`⚠ Fetches taking ${Math.round(lastFetchDuration / 1000)}s - network may be slow`, 'warning');
       verySlowFetchWarningShown = true;
       // Slow down polling
-      adaptivePollInterval = Math.min(adaptivePollInterval * 2, 60000);
-      addLog(`Polling interval increased to ${adaptivePollInterval / 1000}s`, 'info');
+      const newInterval = Math.min(store.get('adaptivePollInterval') * 2, 60000);
+      store.setState({ adaptivePollInterval: newInterval });
+      addLog(`Polling interval increased to ${newInterval / 1000}s`, 'info');
       restartPolling();
     } else if (lastFetchDuration > 15000 && !slowFetchWarningShown) {
       addLog(`Fetches taking ${Math.round(lastFetchDuration / 1000)}s`, 'warning');
@@ -1637,21 +1558,22 @@ async function pollGitChanges() {
       // Reset warnings if fetches are fast again
       slowFetchWarningShown = false;
       verySlowFetchWarningShown = false;
-      if (adaptivePollInterval > GIT_POLL_INTERVAL) {
-        adaptivePollInterval = GIT_POLL_INTERVAL;
-        addLog(`Polling interval restored to ${adaptivePollInterval / 1000}s`, 'info');
+      if (store.get('adaptivePollInterval') > GIT_POLL_INTERVAL) {
+        store.setState({ adaptivePollInterval: GIT_POLL_INTERVAL });
+        addLog(`Polling interval restored to ${GIT_POLL_INTERVAL / 1000}s`, 'info');
         restartPolling();
       }
     }
 
     // Network success - reset failure counter
-    consecutiveNetworkFailures = 0;
-    if (isOffline) {
-      isOffline = false;
+    if (store.get('isOffline')) {
       addLog('Connection restored', 'success');
     }
+    store.setState({ consecutiveNetworkFailures: 0, isOffline: false });
+
     const fetchedBranchNames = new Set(allBranches.map(b => b.name));
     const now = Date.now();
+    const currentBranches = store.get('branches');
 
     // Detect NEW branches (not seen before)
     const newBranchList = [];
@@ -1663,7 +1585,7 @@ async function pollGitChanges() {
         newBranchList.push(branch);
       } else {
         // Preserve isNew flag from previous poll cycle for branches not yet switched to
-        const prevBranch = branches.find(b => b.name === branch.name);
+        const prevBranch = currentBranches.find(b => b.name === branch.name);
         if (prevBranch && prevBranch.isNew) {
           branch.isNew = true;
           branch.newAt = prevBranch.newAt;
@@ -1676,7 +1598,7 @@ async function pollGitChanges() {
     for (const knownName of knownBranchNames) {
       if (!fetchedBranchNames.has(knownName)) {
         // This branch was deleted from remote
-        const existingInList = branches.find(b => b.name === knownName);
+        const existingInList = currentBranches.find(b => b.name === knownName);
         if (existingInList && !existingInList.isDeleted) {
           existingInList.isDeleted = true;
           existingInList.deletedAt = now;
@@ -1691,14 +1613,15 @@ async function pollGitChanges() {
     // Note: isNew flag is only cleared when branch becomes current (see below)
 
     // Keep deleted branches in the list (don't remove them)
-    const filteredBranches = allBranches;
+    const pollFilteredBranches = allBranches;
 
     // Detect updates on other branches (for flash notification)
     const updatedBranches = [];
-    for (const branch of filteredBranches) {
+    const currentBranchName = store.get('currentBranch');
+    for (const branch of pollFilteredBranches) {
       if (branch.isDeleted) continue;
       const prevCommit = previousBranchStates.get(branch.name);
-      if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranch) {
+      if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {
         updatedBranches.push(branch);
         branch.justUpdated = true;
       }
@@ -1706,6 +1629,7 @@ async function pollGitChanges() {
     }
 
     // Flash and sound for updates or new branches
+    const casinoOn = store.get('casinoModeEnabled');
     const notifyBranches = [...updatedBranches, ...newBranchList];
     if (notifyBranches.length > 0) {
       for (const branch of updatedBranches) {
@@ -1713,7 +1637,7 @@ async function pollGitChanges() {
       }
 
       // Casino mode: add funny commentary
-      if (casinoModeEnabled) {
+      if (casinoOn) {
         addLog(`🎰 ${getCasinoMessage('win')}`, 'success');
       }
 
@@ -1722,7 +1646,7 @@ async function pollGitChanges() {
       playSound();
 
       // Casino mode: trigger win effect based on number of updated branches
-      if (casinoModeEnabled) {
+      if (casinoOn) {
         // Estimate line changes: more branches = bigger "win"
         // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
         const estimatedLines = notifyBranches.length * 100;
@@ -1734,21 +1658,23 @@ async function pollGitChanges() {
         }
         casino.recordPoll(true);
       }
-    } else if (casinoModeEnabled) {
+    } else if (casinoOn) {
       // No updates - stop reels and show result briefly
       casino.stopSlotReels(false, render);
       casino.recordPoll(false);
     }
 
     // Remember which branch was selected before updating the list
-    const previouslySelectedName = selectedBranchName || (branches[selectedIndex] ? branches[selectedIndex].name : null);
+    const { selectedBranchName: prevSelName, selectedIndex: prevSelIdx } = store.getState();
+    const previouslySelectedName = prevSelName || (currentBranches[prevSelIdx] ? currentBranches[prevSelIdx].name : null);
 
     // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
-    filteredBranches.sort((a, b) => {
+    const prStatusMap = store.get('branchPrStatusMap');
+    pollFilteredBranches.sort((a, b) => {
       const aIsBase = isBaseBranch(a.name);
       const bIsBase = isBaseBranch(b.name);
-      const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
-      const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
+      const aMerged = !aIsBase && prStatusMap.has(a.name) && prStatusMap.get(a.name).state === 'MERGED';
+      const bMerged = !bIsBase && prStatusMap.has(b.name) && prStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
       if (!a.isDeleted && b.isDeleted) return -1;
       if (aMerged && !bMerged && !b.isDeleted) return 1;
@@ -1759,23 +1685,24 @@ async function pollGitChanges() {
     });
 
     // Store all branches (no limit) - visibleBranchCount controls display
-    branches = filteredBranches;
-
     // Restore selection to the same branch (by name) after reordering
+    let newSelectedIndex = prevSelIdx;
+    let newSelectedName = prevSelName;
     if (previouslySelectedName) {
-      const newIndex = branches.findIndex(b => b.name === previouslySelectedName);
-      if (newIndex >= 0) {
-        selectedIndex = newIndex;
-        selectedBranchName = previouslySelectedName;
+      const foundIdx = pollFilteredBranches.findIndex(b => b.name === previouslySelectedName);
+      if (foundIdx >= 0) {
+        newSelectedIndex = foundIdx;
+        newSelectedName = previouslySelectedName;
       } else {
         // Branch fell off the list, keep index at bottom or clamp
-        selectedIndex = Math.min(selectedIndex, Math.max(0, branches.length - 1));
-        selectedBranchName = branches[selectedIndex] ? branches[selectedIndex].name : null;
+        newSelectedIndex = Math.min(prevSelIdx, Math.max(0, pollFilteredBranches.length - 1));
+        newSelectedName = pollFilteredBranches[newSelectedIndex] ? pollFilteredBranches[newSelectedIndex].name : null;
       }
-    } else if (selectedIndex >= branches.length) {
-      selectedIndex = Math.max(0, branches.length - 1);
-      selectedBranchName = branches[selectedIndex] ? branches[selectedIndex].name : null;
+    } else if (prevSelIdx >= pollFilteredBranches.length) {
+      newSelectedIndex = Math.max(0, pollFilteredBranches.length - 1);
+      newSelectedName = pollFilteredBranches[newSelectedIndex] ? pollFilteredBranches[newSelectedIndex].name : null;
     }
+    store.setState({ branches: pollFilteredBranches, selectedIndex: newSelectedIndex, selectedBranchName: newSelectedName });
 
     // Background PR status fetch (throttled to every PR_STATUS_POLL_INTERVAL)
     const now2 = Date.now();
@@ -1783,7 +1710,7 @@ async function pollGitChanges() {
       prStatusFetchInFlight = true;
       fetchAllPrStatuses().then(map => {
         if (map) {
-          branchPrStatusMap = map;
+          store.setState({ branchPrStatusMap: map });
           render(); // re-render to show updated PR indicators
         }
         lastPrStatusFetch = Date.now();
@@ -1794,28 +1721,29 @@ async function pollGitChanges() {
     }
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
-    const currentInfo = branches.find(b => b.name === currentBranch);
-    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !hasMergeConflict) {
-      addLog(`Auto-pulling changes for ${currentBranch}...`, 'update');
+    const autoPullBranchName = store.get('currentBranch');
+    const currentInfo = store.get('branches').find(b => b.name === autoPullBranchName);
+    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !store.get('hasMergeConflict')) {
+      addLog(`Auto-pulling changes for ${autoPullBranchName}...`, 'update');
       render();
 
       // Save the old commit for diff calculation (casino mode)
       const oldCommit = currentInfo.commit;
 
       try {
-        await execAsync(`git pull "${REMOTE_NAME}" "${currentBranch}"`);
-        addLog(`Pulled successfully from ${currentBranch}`, 'success');
+        await execAsync(`git pull "${REMOTE_NAME}" "${autoPullBranchName}"`);
+        addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
-        hasMergeConflict = false;
+        store.setState({ hasMergeConflict: false });
         // Update the stored commit to the new one
         const newCommit = await execAsync('git rev-parse --short HEAD');
         currentInfo.commit = newCommit.stdout.trim();
-        previousBranchStates.set(currentBranch, newCommit.stdout.trim());
+        previousBranchStates.set(autoPullBranchName, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
 
         // Casino mode: calculate actual diff and trigger win effect
-        if (casinoModeEnabled && oldCommit) {
+        if (store.get('casinoModeEnabled') && oldCommit) {
           const diffStats = await getDiffStats(oldCommit, 'HEAD');
           const totalLines = diffStats.added + diffStats.deleted;
           if (totalLines > 0) {
@@ -1830,7 +1758,7 @@ async function pollGitChanges() {
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
         if (isMergeConflict(errMsg)) {
-          hasMergeConflict = true;
+          store.setState({ hasMergeConflict: true });
           addLog(`MERGE CONFLICT detected!`, 'error');
           addLog(`Resolve conflicts manually, then commit`, 'warning');
           showErrorToast(
@@ -1839,7 +1767,7 @@ async function pollGitChanges() {
             'Run: git status to see conflicts'
           );
           // Casino mode: trigger loss effect
-          if (casinoModeEnabled) {
+          if (store.get('casinoModeEnabled')) {
             casino.triggerLoss('MERGE CONFLICT!', render);
             casinoSounds.playLoss();
             addLog(`💀 ${getCasinoMessage('loss')}`, 'error');
@@ -1863,16 +1791,16 @@ async function pollGitChanges() {
       }
     }
 
-    pollingStatus = 'idle';
+    store.setState({ pollingStatus: 'idle' });
     // Casino mode: stop slot reels if still spinning (already handled above, just cleanup)
-    if (casinoModeEnabled && casino.isSlotSpinning()) {
+    if (store.get('casinoModeEnabled') && casino.isSlotSpinning()) {
       casino.stopSlotReels(false, render);
     }
   } catch (err) {
     const errMsg = err.stderr || err.message || String(err);
 
     // Casino mode: stop slot reels and show loss on error
-    if (casinoModeEnabled) {
+    if (store.get('casinoModeEnabled')) {
       casino.stopSlotReels(false, render);
       casino.triggerLoss('BUST!', render);
       casinoSounds.playLoss();
@@ -1880,17 +1808,18 @@ async function pollGitChanges() {
 
     // Handle different error types
     if (isNetworkError(errMsg)) {
-      consecutiveNetworkFailures++;
-      if (consecutiveNetworkFailures >= 3 && !isOffline) {
-        isOffline = true;
-        addLog(`Network unavailable (${consecutiveNetworkFailures} failures)`, 'error');
+      const failures = store.get('consecutiveNetworkFailures') + 1;
+      store.setState({ consecutiveNetworkFailures: failures });
+      if (failures >= 3 && !store.get('isOffline')) {
+        store.setState({ isOffline: true });
+        addLog(`Network unavailable (${failures} failures)`, 'error');
         showErrorToast(
           'Network Unavailable',
           'Cannot connect to the remote repository. Git operations will fail until connection is restored.',
           'Check your internet connection'
         );
       }
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
     } else if (isAuthError(errMsg)) {
       addLog(`Authentication error - check credentials`, 'error');
       addLog(`Try: git config credential.helper store`, 'warning');
@@ -1899,13 +1828,13 @@ async function pollGitChanges() {
         'Failed to authenticate with the remote repository.',
         'Run: git config credential.helper store'
       );
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
     } else {
-      pollingStatus = 'error';
+      store.setState({ pollingStatus: 'error' });
       addLog(`Polling error: ${errMsg}`, 'error');
     }
   } finally {
-    isPolling = false;
+    store.setState({ isPolling: false });
     render();
   }
 }
@@ -1914,7 +1843,7 @@ function restartPolling() {
   if (pollIntervalId) {
     clearInterval(pollIntervalId);
   }
-  pollIntervalId = setInterval(pollGitChanges, adaptivePollInterval);
+  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
 }
 
 // ============================================================================
@@ -2053,65 +1982,16 @@ function setupFileWatcher() {
 
 // applySearchFilter — replaced by filterBranches import (src/ui/renderer.js)
 
-// Apply state updates from action handlers to global variables
+// Apply state updates from action handlers to store
 function applyUpdates(updates) {
   if (!updates) return false;
-  for (const [key, value] of Object.entries(updates)) {
-    switch (key) {
-      case 'selectedIndex': selectedIndex = value; break;
-      case 'selectedBranchName': selectedBranchName = value; break;
-      case 'searchMode': searchMode = value; break;
-      case 'searchQuery': searchQuery = value; break;
-      case 'filteredBranches': filteredBranches = value; break;
-      case 'previewMode': previewMode = value; break;
-      case 'previewData': previewData = value; break;
-      case 'historyMode': historyMode = value; break;
-      case 'infoMode': infoMode = value; break;
-      case 'logViewMode': logViewMode = value; break;
-      case 'logViewTab': logViewTab = value; break;
-      case 'logScrollOffset': logScrollOffset = value; break;
-      case 'actionMode': actionMode = value; break;
-      case 'actionData': actionData = value; break;
-      case 'actionLoading': actionLoading = value; break;
-      case 'flashMessage': flashMessage = value; break;
-      case 'errorToast': errorToast = value; break;
-      case 'soundEnabled': soundEnabled = value; break;
-      case 'visibleBranchCount': visibleBranchCount = value; break;
-    }
-  }
+  store.setState(updates);
   return true;
 }
 
 // Build current state snapshot for action handlers
 function getActionState() {
-  return {
-    branches,
-    selectedIndex,
-    selectedBranchName,
-    currentBranch,
-    filteredBranches,
-    searchMode,
-    searchQuery,
-    previewMode,
-    previewData,
-    historyMode,
-    infoMode,
-    logViewMode,
-    logViewTab,
-    logScrollOffset,
-    actionMode,
-    actionData,
-    actionLoading,
-    flashMessage,
-    errorToast,
-    visibleBranchCount,
-    soundEnabled,
-    casinoModeEnabled,
-    serverMode: SERVER_MODE,
-    noServer: NO_SERVER,
-    serverLogBuffer,
-    activityLog,
-  };
+  return store.getState();
 }
 
 function setupKeyboardInput() {
@@ -2123,7 +2003,7 @@ function setupKeyboardInput() {
 
   process.stdin.on('data', async (key) => {
     // Handle search mode input via actions module
-    if (searchMode) {
+    if (store.get('searchMode')) {
       const searchResult = actions.handleSearchInput(getActionState(), key);
       if (searchResult) {
         applyUpdates(searchResult);
@@ -2137,7 +2017,7 @@ function setupKeyboardInput() {
     }
 
     // Handle modal modes
-    if (previewMode) {
+    if (store.get('previewMode')) {
       if (key === 'v' || key === '\u001b' || key === '\r' || key === '\n') {
         applyUpdates(actions.togglePreview(getActionState()));
         render();
@@ -2146,14 +2026,14 @@ function setupKeyboardInput() {
       return; // Ignore other keys in preview mode
     }
 
-    if (historyMode) {
+    if (store.get('historyMode')) {
       if (key === 'h' || key === '\u001b') {
         applyUpdates(actions.toggleHistory(getActionState()));
         render();
         return;
       }
       if (key === 'u') {
-        historyMode = false;
+        store.setState({ historyMode: false });
         await undoLastSwitch();
         await pollGitChanges();
         return;
@@ -2161,7 +2041,7 @@ function setupKeyboardInput() {
       return; // Ignore other keys in history mode
     }
 
-    if (infoMode) {
+    if (store.get('infoMode')) {
       if (key === 'i' || key === '\u001b') {
         applyUpdates(actions.toggleInfo(getActionState()));
         render();
@@ -2170,7 +2050,7 @@ function setupKeyboardInput() {
       return; // Ignore other keys in info mode
     }
 
-    if (logViewMode) {
+    if (store.get('logViewMode')) {
       if (key === 'l' || key === '\u001b') {
         applyUpdates(actions.toggleLogView(getActionState()));
         render();
@@ -2204,14 +2084,15 @@ function setupKeyboardInput() {
       return; // Ignore other keys in log view mode
     }
 
-    if (actionMode) {
+    if (store.get('actionMode')) {
       if (key === '\u001b') { // Escape to close
         applyUpdates(actions.closeActionModal(getActionState()));
         render();
         return;
       }
-      if (!actionData) return;
-      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = actionData;
+      const currentActionData = store.get('actionData');
+      if (!currentActionData) return;
+      const { branch: aBranch, sessionUrl, prInfo, hasGh, hasGlab, ghAuthed, glabAuthed, webUrl, platform, prLoaded } = currentActionData;
       const cliReady = (platform === 'gitlab') ? (hasGlab && glabAuthed) : (hasGh && ghAuthed);
       const prLabel = platform === 'gitlab' ? 'MR' : 'PR';
 
@@ -2252,13 +2133,12 @@ function setupKeyboardInput() {
             addLog(`${prLabel} created: ${(result.stdout || '').trim().split('\n').pop()}`, 'success');
             // Invalidate cache and refresh modal data
             prInfoCache.delete(aBranch.name);
-            actionData = gatherLocalActionData(aBranch);
-            actionLoading = true;
+            const refreshedData = gatherLocalActionData(aBranch);
+            store.setState({ actionData: refreshedData, actionLoading: true });
             render();
-            loadAsyncActionData(aBranch, actionData).then((fullData) => {
-              if (actionMode && actionData && actionData.branch.name === aBranch.name) {
-                actionData = fullData;
-                actionLoading = false;
+            loadAsyncActionData(aBranch, refreshedData).then((fullData) => {
+              if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === aBranch.name) {
+                store.setState({ actionData: fullData, actionLoading: false });
                 render();
               }
             }).catch(() => {});
@@ -2310,9 +2190,7 @@ function setupKeyboardInput() {
             await execAsync(`gh pr merge ${prInfo.number} --squash --delete-branch 2>&1`);
           }
           addLog(`${prLabel} #${prInfo.number} merged`, 'success');
-          actionMode = false;
-          actionData = null;
-          actionLoading = false;
+          store.setState({ actionMode: false, actionData: null, actionLoading: false });
           prInfoCache.delete(aBranch.name);
           // Force-refresh bulk PR statuses so inline indicators update immediately
           lastPrStatusFetch = 0;
@@ -2363,7 +2241,7 @@ function setupKeyboardInput() {
     }
 
     // Dismiss flash on any key
-    if (flashMessage) {
+    if (store.get('flashMessage')) {
       hideFlash();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
@@ -2371,14 +2249,15 @@ function setupKeyboardInput() {
     }
 
     // Dismiss error toast on any key
-    if (errorToast) {
+    if (store.get('errorToast')) {
       hideErrorToast();
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
     }
 
-    const displayBranches = filteredBranches !== null ? filteredBranches : branches;
+    const { filteredBranches: currentFiltered, branches: currentBranchList, selectedIndex: curSelIdx } = store.getState();
+    const displayBranches = currentFiltered !== null ? currentFiltered : currentBranchList;
     const actionState = getActionState();
 
     switch (key) {
@@ -2398,16 +2277,14 @@ function setupKeyboardInput() {
 
       case '\r': // Enter
       case '\n':
-        if (displayBranches.length > 0 && selectedIndex < displayBranches.length) {
-          const branch = displayBranches[selectedIndex];
+        if (displayBranches.length > 0 && curSelIdx < displayBranches.length) {
+          const branch = displayBranches[curSelIdx];
           if (branch.isDeleted) {
             addLog(`Cannot switch to deleted branch: ${branch.name}`, 'error');
             render();
-          } else if (branch.name !== currentBranch) {
+          } else if (branch.name !== store.get('currentBranch')) {
             // Clear search when switching
-            searchQuery = '';
-            filteredBranches = null;
-            searchMode = false;
+            store.setState({ searchQuery: '', filteredBranches: null, searchMode: false });
             await switchToBranch(branch.name);
             await pollGitChanges();
           }
@@ -2415,12 +2292,12 @@ function setupKeyboardInput() {
         break;
 
       case 'v': // Preview pane
-        if (displayBranches.length > 0 && selectedIndex < displayBranches.length) {
-          const branch = displayBranches[selectedIndex];
+        if (displayBranches.length > 0 && curSelIdx < displayBranches.length) {
+          const branch = displayBranches[curSelIdx];
           addLog(`Loading preview for ${branch.name}...`, 'info');
           render();
-          previewData = await getPreviewData(branch.name);
-          previewMode = true;
+          const pvData = await getPreviewData(branch.name);
+          store.setState({ previewData: pvData, previewMode: true });
           render();
         }
         break;
@@ -2481,26 +2358,24 @@ function setupKeyboardInput() {
         break;
 
       case 'b': { // Branch action modal
-        const branch = displayBranches.length > 0 && selectedIndex < displayBranches.length
-          ? displayBranches[selectedIndex] : null;
+        const branch = displayBranches.length > 0 && curSelIdx < displayBranches.length
+          ? displayBranches[curSelIdx] : null;
         if (branch) {
           // Phase 1: Open modal instantly with local/cached data
-          actionData = gatherLocalActionData(branch);
-          actionMode = true;
-          actionLoading = !actionData.prLoaded;
+          const localData = gatherLocalActionData(branch);
+          store.setState({ actionData: localData, actionMode: true, actionLoading: !localData.prLoaded });
           render();
 
           // Phase 2: Load async data (session URL, PR info) in background
-          loadAsyncActionData(branch, actionData).then((fullData) => {
+          loadAsyncActionData(branch, localData).then((fullData) => {
             // Only update if modal is still open for the same branch
-            if (actionMode && actionData && actionData.branch.name === branch.name) {
-              actionData = fullData;
-              actionLoading = false;
+            if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
+              store.setState({ actionData: fullData, actionLoading: false });
               render();
             }
           }).catch(() => {
-            if (actionMode && actionData && actionData.branch.name === branch.name) {
-              actionLoading = false;
+            if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
+              store.setState({ actionLoading: false });
               render();
             }
           });
@@ -2520,35 +2395,37 @@ function setupKeyboardInput() {
 
       case 's': {
         applyUpdates(actions.toggleSound(actionState));
-        addLog(`Sound notifications ${soundEnabled ? 'enabled' : 'disabled'}`, 'info');
-        if (soundEnabled) playSound();
+        addLog(`Sound notifications ${store.get('soundEnabled') ? 'enabled' : 'disabled'}`, 'info');
+        if (store.get('soundEnabled')) playSound();
         render();
         break;
       }
 
-      case 'c': // Toggle casino mode
-        casinoModeEnabled = casino.toggle();
-        addLog(`Casino mode ${casinoModeEnabled ? '🎰 ENABLED' : 'disabled'}`, casinoModeEnabled ? 'success' : 'info');
-        if (casinoModeEnabled) {
+      case 'c': { // Toggle casino mode
+        const newCasinoState = casino.toggle();
+        store.setState({ casinoModeEnabled: newCasinoState });
+        addLog(`Casino mode ${newCasinoState ? '🎰 ENABLED' : 'disabled'}`, newCasinoState ? 'success' : 'info');
+        if (newCasinoState) {
           addLog(`Have you noticed this game has that 'variable rewards' thing going on? 🤔😉`, 'info');
-          if (soundEnabled) {
+          if (store.get('soundEnabled')) {
             casinoSounds.playJackpot();
           }
         }
         render();
         break;
+      }
 
       // Number keys to set visible branch count
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9':
         applyUpdates(actions.setVisibleBranchCount(actionState, parseInt(key, 10)));
-        addLog(`Showing ${visibleBranchCount} branches`, 'info');
+        addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
         render();
         break;
 
       case '0': // 0 = 10 branches
         applyUpdates(actions.setVisibleBranchCount(actionState, 10));
-        addLog(`Showing ${visibleBranchCount} branches`, 'info');
+        addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
         render();
         break;
 
@@ -2557,7 +2434,7 @@ function setupKeyboardInput() {
         const incResult = actions.increaseVisibleBranches(actionState, getMaxBranchesForScreen());
         if (incResult) {
           applyUpdates(incResult);
-          addLog(`Showing ${visibleBranchCount} branches`, 'info');
+          addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
           render();
         }
         break;
@@ -2568,7 +2445,7 @@ function setupKeyboardInput() {
         const decResult = actions.decreaseVisibleBranches(actionState);
         if (decResult) {
           applyUpdates(decResult);
-          addLog(`Showing ${visibleBranchCount} branches`, 'info');
+          addLog(`Showing ${store.get('visibleBranchCount')} branches`, 'info');
           render();
         }
         break;
@@ -2687,27 +2564,28 @@ async function start() {
   }
 
   // Get initial state
-  currentBranch = await getCurrentBranch();
+  const initBranch = await getCurrentBranch();
+  store.setState({ currentBranch: initBranch });
 
   // Warn if in detached HEAD state
-  if (isDetachedHead) {
+  if (store.get('isDetachedHead')) {
     addLog(`Warning: In detached HEAD state`, 'warning');
   }
-  branches = await getAllBranches();
+  const initBranches = await getAllBranches();
+  store.setState({ branches: initBranches });
 
   // Initialize previous states and known branches
-  for (const branch of branches) {
+  for (const branch of initBranches) {
     previousBranchStates.set(branch.name, branch.commit);
     knownBranchNames.add(branch.name);
   }
 
   // Find current branch in list and select it
-  const currentIndex = branches.findIndex(b => b.name === currentBranch);
+  const currentIndex = initBranches.findIndex(b => b.name === initBranch);
   if (currentIndex >= 0) {
-    selectedIndex = currentIndex;
-    selectedBranchName = currentBranch;
-  } else if (branches.length > 0) {
-    selectedBranchName = branches[0].name;
+    store.setState({ selectedIndex: currentIndex, selectedBranchName: initBranch });
+  } else if (initBranches.length > 0) {
+    store.setState({ selectedBranchName: initBranches[0].name });
   }
 
   // Load sparklines and action cache in background
@@ -2716,7 +2594,7 @@ async function start() {
     // Once env is known, kick off initial PR status fetch
     fetchAllPrStatuses().then(map => {
       if (map) {
-        branchPrStatusMap = map;
+        store.setState({ branchPrStatusMap: map });
         lastPrStatusFetch = Date.now();
         render();
       }
@@ -2724,13 +2602,14 @@ async function start() {
   }).catch(() => {});
 
   // Start server based on mode
+  const startBranchName = store.get('currentBranch');
   if (SERVER_MODE === 'none') {
     addLog(`Running in no-server mode (branch monitoring only)`, 'info');
-    addLog(`Current branch: ${currentBranch}`, 'info');
+    addLog(`Current branch: ${startBranchName}`, 'info');
     render();
   } else if (SERVER_MODE === 'command') {
     addLog(`Command mode: ${SERVER_COMMAND}`, 'info');
-    addLog(`Current branch: ${currentBranch}`, 'info');
+    addLog(`Current branch: ${startBranchName}`, 'info');
     render();
     // Start the user's dev server
     startServerProcess();
@@ -2739,7 +2618,7 @@ async function start() {
     server.listen(PORT, () => {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
-      addLog(`Current branch: ${currentBranch}`, 'info');
+      addLog(`Current branch: ${store.get('currentBranch')}`, 'info');
       // Add server log entries for static server
       addServerLog(`Static server started on http://localhost:${PORT}`);
       addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
@@ -2773,7 +2652,7 @@ async function start() {
   });
 
   // Start polling with adaptive interval
-  pollIntervalId = setInterval(pollGitChanges, adaptivePollInterval);
+  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
 
   // Initial render
   render();
