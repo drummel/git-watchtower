@@ -72,6 +72,7 @@ const { openInBrowser: openUrl } = require('../src/utils/browser');
 const { playSound: playSoundEffect } = require('../src/utils/sound');
 const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
 const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
+const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
 // ============================================================================
 // Security & Validation
@@ -548,30 +549,14 @@ async function hasCommand(cmd) {
 
 // detectPlatform imported from src/git/remote.js
 
-// Get PR info for a branch using gh or glab CLI
-// Queries all states (open, merged, closed) so merged PRs are visible in the action modal
+// Get PR info for a branch using gh or glab CLI (parsing delegated to src/git/pr.js)
 async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   if (platform === 'github' && hasGh) {
     try {
       const { stdout } = await execAsync(
         `gh pr list --head "${branchName}" --state all --json number,title,state,reviewDecision,statusCheckRollup --limit 1`
       );
-      const prs = JSON.parse(stdout);
-      if (prs.length > 0) {
-        const pr = prs[0];
-        const checks = pr.statusCheckRollup || [];
-        const checksPass = checks.length > 0 && checks.every(c => c.conclusion === 'SUCCESS');
-        const checksFail = checks.some(c => c.conclusion === 'FAILURE');
-        return {
-          number: pr.number,
-          title: pr.title,
-          state: pr.state,
-          approved: pr.reviewDecision === 'APPROVED',
-          checksPass,
-          checksFail,
-          checksCount: checks.length,
-        };
-      }
+      return parseGitHubPr(JSON.parse(stdout));
     } catch (e) { /* gh not authed or other error */ }
   }
   if (platform === 'gitlab' && hasGlab) {
@@ -579,19 +564,7 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
       const { stdout } = await execAsync(
         `glab mr list --source-branch="${branchName}" --state all --output json 2>/dev/null`
       );
-      const mrs = JSON.parse(stdout);
-      if (mrs.length > 0) {
-        const mr = mrs[0];
-        return {
-          number: mr.iid,
-          title: mr.title,
-          state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
-          approved: false,
-          checksPass: false,
-          checksFail: false,
-          checksCount: 0,
-        };
-      }
+      return parseGitLabMr(JSON.parse(stdout));
     } catch (e) { /* glab not authed or other error */ }
   }
   return null;
@@ -611,8 +584,7 @@ async function checkCliAuth(cmd) {
   }
 }
 
-// Bulk-fetch PR statuses for all branches in a single gh/glab call.
-// Returns Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
+// Bulk-fetch PR statuses for all branches (parsing delegated to src/git/pr.js)
 async function fetchAllPrStatuses() {
   if (!cachedEnv) return null;
   const { platform, hasGh, ghAuthed, hasGlab, glabAuthed } = cachedEnv;
@@ -622,20 +594,7 @@ async function fetchAllPrStatuses() {
       const { stdout } = await execAsync(
         'gh pr list --state all --json headRefName,number,title,state --limit 200'
       );
-      const prs = JSON.parse(stdout);
-      const map = new Map();
-      for (const pr of prs) {
-        const existing = map.get(pr.headRefName);
-        // Prefer the most recent PR (highest number) per branch
-        if (!existing || pr.number > existing.number) {
-          map.set(pr.headRefName, {
-            state: pr.state, // OPEN, MERGED, CLOSED
-            number: pr.number,
-            title: pr.title,
-          });
-        }
-      }
-      return map;
+      return parseGitHubPrList(JSON.parse(stdout));
     } catch (e) { /* gh error */ }
   }
 
@@ -644,20 +603,7 @@ async function fetchAllPrStatuses() {
       const { stdout } = await execAsync(
         'glab mr list --state all --output json 2>/dev/null'
       );
-      const mrs = JSON.parse(stdout);
-      const map = new Map();
-      for (const mr of mrs) {
-        const branchName = mr.source_branch;
-        const existing = map.get(branchName);
-        if (!existing || mr.iid > existing.number) {
-          map.set(branchName, {
-            state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
-            number: mr.iid,
-            title: mr.title,
-          });
-        }
-      }
-      return map;
+      return parseGitLabMrList(JSON.parse(stdout));
     } catch (e) { /* glab error */ }
   }
 
@@ -1004,8 +950,7 @@ let lastPrStatusFetch = 0;
 const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
 let prStatusFetchInFlight = false;
 
-// Default/base branches that should never get "merged" treatment — they're merge targets
-const BASE_BRANCH_RE = /^(main|master|develop|development|staging|production|trunk|release)$/;
+// BASE_BRANCH_RE and isBaseBranch imported from src/git/pr.js
 
 // Session history for undo
 const switchHistory = [];
@@ -1452,8 +1397,8 @@ function renderBranchList() {
     const sparkline = sparklineCache.get(branch.name) || '       ';
     const prStatus = branchPrStatusMap.get(branch.name); // { state, number, title } or undefined
     // Never treat default/base branches as "merged" — they're merge targets, not sources
-    const isBaseBranch = BASE_BRANCH_RE.test(branch.name);
-    const isMerged = !isBaseBranch && prStatus && prStatus.state === 'MERGED';
+    const isBranchBase = isBaseBranch(branch.name);
+    const isMerged = !isBranchBase && prStatus && prStatus.state === 'MERGED';
     const hasOpenPr = prStatus && prStatus.state === 'OPEN';
 
     // Branch name line
@@ -2943,8 +2888,8 @@ async function pollGitChanges() {
 
     // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
     filteredBranches.sort((a, b) => {
-      const aIsBase = BASE_BRANCH_RE.test(a.name);
-      const bIsBase = BASE_BRANCH_RE.test(b.name);
+      const aIsBase = isBaseBranch(a.name);
+      const bIsBase = isBaseBranch(b.name);
       const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
       const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
