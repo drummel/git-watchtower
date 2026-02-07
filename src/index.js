@@ -31,6 +31,13 @@ const configLoader = require('./config/loader');
 // Server management
 const serverProcess = require('./server/process');
 
+// CLI and utilities
+const cliArgs = require('./cli/args');
+const timeUtils = require('./utils/time');
+const browserUtils = require('./utils/browser');
+const soundUtils = require('./utils/sound');
+const gitRemote = require('./git/remote');
+
 module.exports = {
   // Async utilities
   Mutex: asyncUtils.Mutex,
@@ -118,4 +125,22 @@ module.exports = {
   // Server process management
   ProcessManager: serverProcess.ProcessManager,
   parseCommand: serverProcess.parseCommand,
+
+  // CLI argument parsing
+  parseArgs: cliArgs.parseArgs,
+  applyCliArgsToConfig: cliArgs.applyCliArgsToConfig,
+  getHelpText: cliArgs.getHelpText,
+  CLI_PACKAGE_VERSION: cliArgs.PACKAGE_VERSION,
+
+  // Utility modules
+  formatTimeAgo: timeUtils.formatTimeAgo,
+  openInBrowser: browserUtils.openInBrowser,
+  playSound: soundUtils.playSound,
+
+  // Git remote URL utilities
+  parseRemoteUrl: gitRemote.parseRemoteUrl,
+  buildBranchUrl: gitRemote.buildBranchUrl,
+  detectPlatform: gitRemote.detectPlatform,
+  buildWebUrl: gitRemote.buildWebUrl,
+  extractSessionUrl: gitRemote.extractSessionUrl,
 };

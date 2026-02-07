@@ -66,119 +66,34 @@ const casinoSounds = require('../src/casino/sounds');
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
 
-// Package info for --version
-const PACKAGE_VERSION = '1.0.0';
+// Extracted modules
+const { formatTimeAgo } = require('../src/utils/time');
+const { openInBrowser: openUrl } = require('../src/utils/browser');
+const { playSound: playSoundEffect } = require('../src/utils/sound');
+const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
+const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
+const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
 // ============================================================================
-// Security & Validation
+// Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
-
-// Valid git branch name pattern (conservative)
-const VALID_BRANCH_PATTERN = /^[a-zA-Z0-9_\-./]+$/;
-
-function isValidBranchName(name) {
-  if (!name || typeof name !== 'string') return false;
-  if (name.length > 255) return false;
-  if (!VALID_BRANCH_PATTERN.test(name)) return false;
-  // Reject dangerous patterns
-  if (name.includes('..')) return false;
-  if (name.startsWith('-')) return false;
-  if (name.startsWith('/') || name.endsWith('/')) return false;
-  return true;
-}
-
-function sanitizeBranchName(name) {
-  if (!isValidBranchName(name)) {
-    throw new Error(`Invalid branch name: ${name}`);
-  }
-  return name;
-}
-
-async function checkGitAvailable() {
-  return new Promise((resolve) => {
-    exec('git --version', (error) => {
-      resolve(!error);
-    });
-  });
-}
+const { isValidBranchName, sanitizeBranchName } = require('../src/git/branch');
+const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
 
 // ============================================================================
-// Configuration File Support
+// Configuration (imports from src/config/, inline wizard kept here)
 // ============================================================================
+const { getDefaultConfig, migrateConfig } = require('../src/config/schema');
+const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, CONFIG_FILE_NAME } = require('../src/config/loader');
 
-const CONFIG_FILE_NAME = '.watchtowerrc.json';
 const PROJECT_ROOT = process.cwd();
 
-function getConfigPath() {
-  return path.join(PROJECT_ROOT, CONFIG_FILE_NAME);
-}
-
 function loadConfig() {
-  const configPath = getConfigPath();
-  if (fs.existsSync(configPath)) {
-    try {
-      const content = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(content);
-    } catch (e) {
-      console.error(`Warning: Could not parse ${CONFIG_FILE_NAME}: ${e.message}`);
-      return null;
-    }
-  }
-  return null;
+  return loadConfigFile(PROJECT_ROOT);
 }
 
 function saveConfig(config) {
-  const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-}
-
-function getDefaultConfig() {
-  return {
-    // Server settings
-    server: {
-      mode: 'static',           // 'static' | 'command' | 'none'
-      staticDir: 'public',      // Directory for static mode
-      command: '',              // Command for command mode (e.g., 'npm run dev')
-      port: 3000,               // Port for static mode / display for command mode
-      restartOnSwitch: true,    // Restart server on branch switch (command mode)
-    },
-    // Git settings
-    remoteName: 'origin',       // Git remote name
-    autoPull: true,             // Auto-pull when current branch has updates
-    gitPollInterval: 5000,      // Polling interval in ms
-    // UI settings
-    soundEnabled: true,
-    visibleBranches: 7,
-  };
-}
-
-// Migrate old config format to new format
-function migrateConfig(config) {
-  if (config.server) return config; // Already new format
-
-  // Convert old format to new
-  const newConfig = getDefaultConfig();
-
-  if (config.noServer) {
-    newConfig.server.mode = 'none';
-  }
-  if (config.port) {
-    newConfig.server.port = config.port;
-  }
-  if (config.staticDir) {
-    newConfig.server.staticDir = config.staticDir;
-  }
-  if (config.gitPollInterval) {
-    newConfig.gitPollInterval = config.gitPollInterval;
-  }
-  if (typeof config.soundEnabled === 'boolean') {
-    newConfig.soundEnabled = config.soundEnabled;
-  }
-  if (config.visibleBranches) {
-    newConfig.visibleBranches = config.visibleBranches;
-  }
-
-  return newConfig;
+  saveConfigFile(config, PROJECT_ROOT);
 }
 
 async function promptUser(question, defaultValue = '') {
@@ -402,7 +317,7 @@ async function ensureConfig(cliArgs) {
   // Check if --init flag was passed (force reconfiguration)
   if (cliArgs.init) {
     const config = await runConfigurationWizard();
-    return applyCliArgsToConfig(config, cliArgs);
+    return mergeCliArgs(config, cliArgs);
   }
 
   // Load existing config
@@ -424,191 +339,16 @@ async function ensureConfig(cliArgs) {
   }
 
   // Merge CLI args over config (CLI takes precedence)
-  return applyCliArgsToConfig(config, cliArgs);
+  return mergeCliArgs(config, cliArgs);
 }
 
-function applyCliArgsToConfig(config, cliArgs) {
-  // Server settings
-  if (cliArgs.mode !== null) {
-    config.server.mode = cliArgs.mode;
-  }
-  if (cliArgs.noServer) {
-    config.server.mode = 'none';
-  }
-  if (cliArgs.port !== null) {
-    config.server.port = cliArgs.port;
-  }
-  if (cliArgs.staticDir !== null) {
-    config.server.staticDir = cliArgs.staticDir;
-  }
-  if (cliArgs.command !== null) {
-    config.server.command = cliArgs.command;
-  }
-  if (cliArgs.restartOnSwitch !== null) {
-    config.server.restartOnSwitch = cliArgs.restartOnSwitch;
-  }
+// mergeCliArgs imported from src/cli/args.js as mergeCliArgs
 
-  // Git settings
-  if (cliArgs.remote !== null) {
-    config.remoteName = cliArgs.remote;
-  }
-  if (cliArgs.autoPull !== null) {
-    config.autoPull = cliArgs.autoPull;
-  }
-  if (cliArgs.pollInterval !== null) {
-    config.gitPollInterval = cliArgs.pollInterval;
-  }
-
-  // UI settings
-  if (cliArgs.sound !== null) {
-    config.soundEnabled = cliArgs.sound;
-  }
-  if (cliArgs.visibleBranches !== null) {
-    config.visibleBranches = cliArgs.visibleBranches;
-  }
-
-  return config;
-}
-
-// Parse CLI arguments
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const result = {
-    // Server settings
-    mode: null,
-    noServer: false,
-    port: null,
-    staticDir: null,
-    command: null,
-    restartOnSwitch: null,
-    // Git settings
-    remote: null,
-    autoPull: null,
-    pollInterval: null,
-    // UI settings
-    sound: null,
-    visibleBranches: null,
-    // Actions
-    init: false,
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    // Server settings
-    if (args[i] === '--mode' || args[i] === '-m') {
-      const mode = args[i + 1];
-      if (['static', 'command', 'none'].includes(mode)) {
-        result.mode = mode;
-      }
-      i++;
-    } else if (args[i] === '--port' || args[i] === '-p') {
-      const portValue = parseInt(args[i + 1], 10);
-      if (!isNaN(portValue) && portValue > 0 && portValue < 65536) {
-        result.port = portValue;
-      }
-      i++;
-    } else if (args[i] === '--no-server' || args[i] === '-n') {
-      result.noServer = true;
-    } else if (args[i] === '--static-dir') {
-      result.staticDir = args[i + 1];
-      i++;
-    } else if (args[i] === '--command' || args[i] === '-c') {
-      result.command = args[i + 1];
-      i++;
-    } else if (args[i] === '--restart-on-switch') {
-      result.restartOnSwitch = true;
-    } else if (args[i] === '--no-restart-on-switch') {
-      result.restartOnSwitch = false;
-    }
-    // Git settings
-    else if (args[i] === '--remote' || args[i] === '-r') {
-      result.remote = args[i + 1];
-      i++;
-    } else if (args[i] === '--auto-pull') {
-      result.autoPull = true;
-    } else if (args[i] === '--no-auto-pull') {
-      result.autoPull = false;
-    } else if (args[i] === '--poll-interval') {
-      const interval = parseInt(args[i + 1], 10);
-      if (!isNaN(interval) && interval > 0) {
-        result.pollInterval = interval;
-      }
-      i++;
-    }
-    // UI settings
-    else if (args[i] === '--sound') {
-      result.sound = true;
-    } else if (args[i] === '--no-sound') {
-      result.sound = false;
-    } else if (args[i] === '--visible-branches') {
-      const count = parseInt(args[i + 1], 10);
-      if (!isNaN(count) && count > 0) {
-        result.visibleBranches = count;
-      }
-      i++;
-    }
-    // Actions and info
-    else if (args[i] === '--init') {
-      result.init = true;
-    } else if (args[i] === '--version' || args[i] === '-v') {
-      console.log(`git-watchtower v${PACKAGE_VERSION}`);
-      process.exit(0);
-    } else if (args[i] === '--help' || args[i] === '-h') {
-      console.log(`
-Git Watchtower v${PACKAGE_VERSION} - Branch Monitor & Dev Server
-
-Usage:
-  git-watchtower [options]
-
-Server Options:
-  -m, --mode <mode>       Server mode: static, command, or none
-  -p, --port <port>       Server port (default: 3000)
-  -n, --no-server         Shorthand for --mode none
-  --static-dir <dir>      Directory for static file serving (default: public)
-  -c, --command <cmd>     Command to run in command mode (e.g., "npm run dev")
-  --restart-on-switch     Restart server on branch switch (default)
-  --no-restart-on-switch  Don't restart server on branch switch
-
-Git Options:
-  -r, --remote <name>     Git remote name (default: origin)
-  --auto-pull             Auto-pull on branch switch (default)
-  --no-auto-pull          Don't auto-pull on branch switch
-  --poll-interval <ms>    Git polling interval in ms (default: 5000)
-
-UI Options:
-  --sound                 Enable sound notifications (default)
-  --no-sound              Disable sound notifications
-  --visible-branches <n>  Number of branches to display (default: 7)
-
-General:
-  --init                  Run the configuration wizard
-  -v, --version           Show version number
-  -h, --help              Show this help message
-
-Server Modes:
-  static   Serve static files with live reload (default)
-  command  Run your own dev server (Next.js, Vite, Nuxt, etc.)
-  none     Branch monitoring only
-
-Configuration:
-  On first run, Git Watchtower will prompt you to configure settings.
-  Settings are saved to .watchtowerrc.json in your project directory.
-  CLI options override config file settings for the current session.
-
-Examples:
-  git-watchtower                              # Start with config or defaults
-  git-watchtower --init                       # Re-run configuration wizard
-  git-watchtower --no-server                  # Branch monitoring only
-  git-watchtower -p 8080                      # Override port
-  git-watchtower -m command -c "npm run dev"  # Use custom dev server
-  git-watchtower --no-sound --poll-interval 10000
-`);
-      process.exit(0);
-    }
-  }
-  return result;
-}
-
-const cliArgs = parseArgs();
+// CLI argument parsing delegated to src/cli/args.js
+const cliArgs = parseCliArgs(process.argv.slice(2), {
+  onVersion: (v) => { console.log(`git-watchtower v${v}`); process.exit(0); },
+  onHelp: (v) => { console.log(getHelpText(v)); process.exit(0); },
+});
 
 // Configuration - these will be set after config is loaded
 let SERVER_MODE = 'static';      // 'static' | 'command' | 'none'
@@ -675,99 +415,21 @@ function clearServerLog() {
   serverLogBuffer = [];
 }
 
-// Open URL in default browser (cross-platform)
+// openInBrowser imported from src/utils/browser.js
 function openInBrowser(url) {
-  const platform = process.platform;
-  let command;
-
-  if (platform === 'darwin') {
-    command = `open "${url}"`;
-  } else if (platform === 'win32') {
-    command = `start "" "${url}"`;
-  } else {
-    // Linux and other Unix-like systems
-    command = `xdg-open "${url}"`;
-  }
-
-  exec(command, (error) => {
-    if (error) {
-      addLog(`Failed to open browser: ${error.message}`, 'error');
-    }
+  openUrl(url, (error) => {
+    addLog(`Failed to open browser: ${error.message}`, 'error');
   });
 }
 
-// Parse a git remote URL into { host, path } components
-// Supports SSH (git@host:path), HTTPS, and ssh:// protocol formats
-function parseRemoteUrl(remoteUrl) {
-  const url = remoteUrl.trim();
-
-  // SSH format: git@host:user/repo.git
-  const sshMatch = url.match(/^[\w-]+@([^:]+):(.+?)(?:\.git)?$/);
-  if (sshMatch) return { host: sshMatch[1], path: sshMatch[2] };
-
-  // HTTPS/HTTP format: https://host/path.git
-  const httpMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-  if (httpMatch) return { host: httpMatch[1], path: httpMatch[2] };
-
-  // ssh:// format: ssh://git@host/user/repo.git or ssh://git@host:port/user/repo.git
-  const sshProtoMatch = url.match(/^ssh:\/\/[\w-]+@([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?$/);
-  if (sshProtoMatch) return { host: sshProtoMatch[1], path: sshProtoMatch[2] };
-
-  return null;
-}
-
-// Build a branch URL for the appropriate git hosting service
-// Each service has its own URL format for viewing branches
-function buildBranchUrl(baseUrl, host, branchName) {
-  const branch = encodeURIComponent(branchName);
-
-  // Azure DevOps: dev.azure.com/org/project/_git/repo or org.visualstudio.com
-  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) {
-    return `${baseUrl}?version=GB${branch}`;
-  }
-
-  // Bitbucket Cloud
-  if (host === 'bitbucket.org') {
-    return `${baseUrl}/src/${branch}`;
-  }
-
-  // AWS CodeCommit
-  if (host.match(/codecommit\..+\.amazonaws\.com/)) {
-    return `${baseUrl}/browse/refs/heads/${branch}`;
-  }
-
-  // SourceHut
-  if (host === 'git.sr.ht') {
-    return `${baseUrl}/tree/${branch}`;
-  }
-
-  // GitHub, GitLab, Codeberg, Gitea, Forgejo, Gogs, and self-hosted instances
-  // All use /tree/<branch>
-  return `${baseUrl}/tree/${branch}`;
-}
+// parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl
+// imported from src/git/remote.js
 
 async function getRemoteWebUrl(branchName) {
   try {
     const { stdout } = await execAsync(`git remote get-url "${REMOTE_NAME}"`);
     const parsed = parseRemoteUrl(stdout);
-    if (!parsed) return null;
-
-    // Azure DevOps SSH uses org@ssh.dev.azure.com:v3/org/project/repo
-    // Normalize to the web URL format
-    let baseUrl;
-    if (parsed.host === 'ssh.dev.azure.com') {
-      // path is v3/org/project/repo -> web url is dev.azure.com/org/project/_git/repo
-      const parts = parsed.path.replace(/^v3\//, '').split('/');
-      if (parts.length >= 3) {
-        baseUrl = `https://dev.azure.com/${parts[0]}/${parts[1]}/_git/${parts.slice(2).join('/')}`;
-        if (branchName) return buildBranchUrl(baseUrl, 'dev.azure.com', branchName);
-        return baseUrl;
-      }
-    }
-
-    baseUrl = `https://${parsed.host}/${parsed.path}`;
-    if (branchName) return buildBranchUrl(baseUrl, parsed.host, branchName);
-    return baseUrl;
+    return buildWebUrl(parsed, branchName);
   } catch (e) {
     return null;
   }
@@ -779,8 +441,7 @@ async function getSessionUrl(branchName) {
     const { stdout } = await execAsync(
       `git log "${REMOTE_NAME}/${branchName}" -1 --format=%B 2>/dev/null || git log "${branchName}" -1 --format=%B 2>/dev/null`
     );
-    const match = stdout.match(/https:\/\/claude\.ai\/code\/session_[\w]+/);
-    return match ? match[0] : null;
+    return extractSessionUrl(stdout);
   } catch (e) {
     return null;
   }
@@ -796,43 +457,16 @@ async function hasCommand(cmd) {
   }
 }
 
-// Detect the git hosting platform from the remote URL
-function detectPlatform(webUrl) {
-  if (!webUrl) return null;
-  try {
-    const host = new URL(webUrl).hostname;
-    if (host === 'github.com' || host.includes('github')) return 'github';
-    if (host === 'gitlab.com' || host.includes('gitlab')) return 'gitlab';
-    if (host === 'bitbucket.org' || host.includes('bitbucket')) return 'bitbucket';
-    if (host === 'dev.azure.com' || host.includes('visualstudio.com')) return 'azure';
-  } catch (e) { /* ignore */ }
-  return 'github'; // default assumption for self-hosted
-}
+// detectPlatform imported from src/git/remote.js
 
-// Get PR info for a branch using gh or glab CLI
-// Queries all states (open, merged, closed) so merged PRs are visible in the action modal
+// Get PR info for a branch using gh or glab CLI (parsing delegated to src/git/pr.js)
 async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   if (platform === 'github' && hasGh) {
     try {
       const { stdout } = await execAsync(
         `gh pr list --head "${branchName}" --state all --json number,title,state,reviewDecision,statusCheckRollup --limit 1`
       );
-      const prs = JSON.parse(stdout);
-      if (prs.length > 0) {
-        const pr = prs[0];
-        const checks = pr.statusCheckRollup || [];
-        const checksPass = checks.length > 0 && checks.every(c => c.conclusion === 'SUCCESS');
-        const checksFail = checks.some(c => c.conclusion === 'FAILURE');
-        return {
-          number: pr.number,
-          title: pr.title,
-          state: pr.state,
-          approved: pr.reviewDecision === 'APPROVED',
-          checksPass,
-          checksFail,
-          checksCount: checks.length,
-        };
-      }
+      return parseGitHubPr(JSON.parse(stdout));
     } catch (e) { /* gh not authed or other error */ }
   }
   if (platform === 'gitlab' && hasGlab) {
@@ -840,19 +474,7 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
       const { stdout } = await execAsync(
         `glab mr list --source-branch="${branchName}" --state all --output json 2>/dev/null`
       );
-      const mrs = JSON.parse(stdout);
-      if (mrs.length > 0) {
-        const mr = mrs[0];
-        return {
-          number: mr.iid,
-          title: mr.title,
-          state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
-          approved: false,
-          checksPass: false,
-          checksFail: false,
-          checksCount: 0,
-        };
-      }
+      return parseGitLabMr(JSON.parse(stdout));
     } catch (e) { /* glab not authed or other error */ }
   }
   return null;
@@ -872,8 +494,7 @@ async function checkCliAuth(cmd) {
   }
 }
 
-// Bulk-fetch PR statuses for all branches in a single gh/glab call.
-// Returns Map<branchName, { state: 'OPEN'|'MERGED'|'CLOSED', number, title }>
+// Bulk-fetch PR statuses for all branches (parsing delegated to src/git/pr.js)
 async function fetchAllPrStatuses() {
   if (!cachedEnv) return null;
   const { platform, hasGh, ghAuthed, hasGlab, glabAuthed } = cachedEnv;
@@ -883,20 +504,7 @@ async function fetchAllPrStatuses() {
       const { stdout } = await execAsync(
         'gh pr list --state all --json headRefName,number,title,state --limit 200'
       );
-      const prs = JSON.parse(stdout);
-      const map = new Map();
-      for (const pr of prs) {
-        const existing = map.get(pr.headRefName);
-        // Prefer the most recent PR (highest number) per branch
-        if (!existing || pr.number > existing.number) {
-          map.set(pr.headRefName, {
-            state: pr.state, // OPEN, MERGED, CLOSED
-            number: pr.number,
-            title: pr.title,
-          });
-        }
-      }
-      return map;
+      return parseGitHubPrList(JSON.parse(stdout));
     } catch (e) { /* gh error */ }
   }
 
@@ -905,20 +513,7 @@ async function fetchAllPrStatuses() {
       const { stdout } = await execAsync(
         'glab mr list --state all --output json 2>/dev/null'
       );
-      const mrs = JSON.parse(stdout);
-      const map = new Map();
-      for (const mr of mrs) {
-        const branchName = mr.source_branch;
-        const existing = map.get(branchName);
-        if (!existing || mr.iid > existing.number) {
-          map.set(branchName, {
-            state: mr.state === 'merged' ? 'MERGED' : mr.state === 'opened' ? 'OPEN' : 'CLOSED',
-            number: mr.iid,
-            title: mr.title,
-          });
-        }
-      }
-      return map;
+      return parseGitLabMrList(JSON.parse(stdout));
     } catch (e) { /* glab error */ }
   }
 
@@ -1122,94 +717,11 @@ let pollIntervalId = null;
 let isDetachedHead = false;
 let hasMergeConflict = false;
 
-// ANSI escape codes
-const ESC = '\x1b';
-const CSI = `${ESC}[`;
+// ANSI escape codes and box drawing imported from src/ui/ansi.js
+const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi } = require('../src/ui/ansi');
 
-const ansi = {
-  // Screen
-  clearScreen: `${CSI}2J`,
-  clearLine: `${CSI}2K`,
-  moveTo: (row, col) => `${CSI}${row};${col}H`,
-  moveToTop: `${CSI}H`,
-  hideCursor: `${CSI}?25l`,
-  showCursor: `${CSI}?25h`,
-  saveScreen: `${CSI}?1049h`,
-  restoreScreen: `${CSI}?1049l`,
-
-  // Colors
-  reset: `${CSI}0m`,
-  bold: `${CSI}1m`,
-  dim: `${CSI}2m`,
-  italic: `${CSI}3m`,
-  underline: `${CSI}4m`,
-  inverse: `${CSI}7m`,
-  blink: `${CSI}5m`,
-
-  // Foreground colors
-  black: `${CSI}30m`,
-  red: `${CSI}31m`,
-  green: `${CSI}32m`,
-  yellow: `${CSI}33m`,
-  blue: `${CSI}34m`,
-  magenta: `${CSI}35m`,
-  cyan: `${CSI}36m`,
-  white: `${CSI}37m`,
-  gray: `${CSI}90m`,
-
-  // Bright foreground colors
-  brightRed: `${CSI}91m`,
-  brightGreen: `${CSI}92m`,
-  brightYellow: `${CSI}93m`,
-  brightBlue: `${CSI}94m`,
-  brightMagenta: `${CSI}95m`,
-  brightCyan: `${CSI}96m`,
-  brightWhite: `${CSI}97m`,
-
-  // Background colors
-  bgBlack: `${CSI}40m`,
-  bgRed: `${CSI}41m`,
-  bgGreen: `${CSI}42m`,
-  bgYellow: `${CSI}43m`,
-  bgBlue: `${CSI}44m`,
-  bgMagenta: `${CSI}45m`,
-  bgCyan: `${CSI}46m`,
-  bgWhite: `${CSI}47m`,
-
-  // Bright background colors
-  bgBrightRed: `${CSI}101m`,
-  bgBrightGreen: `${CSI}102m`,
-  bgBrightYellow: `${CSI}103m`,
-  bgBrightBlue: `${CSI}104m`,
-  bgBrightMagenta: `${CSI}105m`,
-  bgBrightCyan: `${CSI}106m`,
-  bgBrightWhite: `${CSI}107m`,
-
-  // 256 colors
-  fg256: (n) => `${CSI}38;5;${n}m`,
-  bg256: (n) => `${CSI}48;5;${n}m`,
-};
-
-// Box drawing characters
-const box = {
-  topLeft: '┌',
-  topRight: '┐',
-  bottomLeft: '└',
-  bottomRight: '┘',
-  horizontal: '─',
-  vertical: '│',
-  teeRight: '├',
-  teeLeft: '┤',
-  cross: '┼',
-
-  // Double line for flash
-  dTopLeft: '╔',
-  dTopRight: '╗',
-  dBottomLeft: '╚',
-  dBottomRight: '╝',
-  dHorizontal: '═',
-  dVertical: '║',
-};
+// Error detection utilities imported from src/utils/errors.js
+const { ErrorHandler } = require('../src/utils/errors');
 
 // State
 let branches = [];
@@ -1265,8 +777,7 @@ let lastPrStatusFetch = 0;
 const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
 let prStatusFetchInFlight = false;
 
-// Default/base branches that should never get "merged" treatment — they're merge targets
-const BASE_BRANCH_RE = /^(main|master|develop|development|staging|production|trunk|release)$/;
+// BASE_BRANCH_RE and isBaseBranch imported from src/git/pr.js
 
 // Session history for undo
 const switchHistory = [];
@@ -1353,27 +864,9 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
   }
 }
 
-function formatTimeAgo(date) {
-  const now = new Date();
-  const diffMs = now - date;
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
+// formatTimeAgo imported from src/utils/time.js
 
-  if (diffSec < 10) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDay === 1) return '1 day ago';
-  return `${diffDay} days ago`;
-}
-
-function truncate(str, maxLen) {
-  if (!str) return '';
-  if (str.length <= maxLen) return str;
-  return str.substring(0, maxLen - 3) + '...';
-}
+// truncate imported from src/ui/ansi.js
 
 function padRight(str, len) {
   if (str.length >= len) return str.substring(0, len);
@@ -1442,16 +935,10 @@ function addLog(message, type = 'info') {
   if (activityLog.length > MAX_LOG_ENTRIES) activityLog.pop();
 }
 
-// Sparkline characters (8 levels)
-const SPARKLINE_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
+// generateSparkline uses uiSparkline from src/ui/ansi.js
 function generateSparkline(commitCounts) {
   if (!commitCounts || commitCounts.length === 0) return '       ';
-  const max = Math.max(...commitCounts, 1);
-  return commitCounts.map(count => {
-    const level = Math.floor((count / max) * 7);
-    return SPARKLINE_CHARS[level];
-  }).join('');
+  return uiSparkline(commitCounts);
 }
 
 async function getBranchSparkline(branchName) {
@@ -1533,30 +1020,10 @@ async function getPreviewData(branchName) {
   }
 }
 
+// playSound delegates to extracted src/utils/sound.js
 function playSound() {
   if (!soundEnabled) return;
-
-  // Try to play a friendly system sound (non-blocking)
-  const { platform } = process;
-
-  if (platform === 'darwin') {
-    // macOS: Use afplay with a gentle system sound
-    // Options: Glass, Pop, Ping, Purr, Submarine, Tink, Blow, Bottle, Frog, Funk, Hero, Morse, Sosumi
-    exec('afplay /System/Library/Sounds/Pop.aiff 2>/dev/null', { cwd: PROJECT_ROOT });
-  } else if (platform === 'linux') {
-    // Linux: Try paplay (PulseAudio) or aplay (ALSA) with a system sound
-    // First try freedesktop sound theme, then fall back to terminal bell
-    exec(
-      'paplay /usr/share/sounds/freedesktop/stereo/message-new-instant.oga 2>/dev/null || ' +
-      'paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || ' +
-      'aplay /usr/share/sounds/sound-icons/prompt.wav 2>/dev/null || ' +
-      'printf "\\a"',
-      { cwd: PROJECT_ROOT }
-    );
-  } else {
-    // Windows or other: Terminal bell
-    process.stdout.write('\x07');
-  }
+  playSoundEffect({ cwd: PROJECT_ROOT });
 }
 
 // ============================================================================
@@ -1747,8 +1214,8 @@ function renderBranchList() {
     const sparkline = sparklineCache.get(branch.name) || '       ';
     const prStatus = branchPrStatusMap.get(branch.name); // { state, number, title } or undefined
     // Never treat default/base branches as "merged" — they're merge targets, not sources
-    const isBaseBranch = BASE_BRANCH_RE.test(branch.name);
-    const isMerged = !isBaseBranch && prStatus && prStatus.state === 'MERGED';
+    const isBranchBase = isBaseBranch(branch.name);
+    const isMerged = !isBranchBase && prStatus && prStatus.state === 'MERGED';
     const hasOpenPr = prStatus && prStatus.state === 'OPEN';
 
     // Branch name line
@@ -3238,8 +2705,8 @@ async function pollGitChanges() {
 
     // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
     filteredBranches.sort((a, b) => {
-      const aIsBase = BASE_BRANCH_RE.test(a.name);
-      const bIsBase = BASE_BRANCH_RE.test(b.name);
+      const aIsBase = isBaseBranch(a.name);
+      const bIsBase = isBaseBranch(b.name);
       const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
       const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
