@@ -66,8 +66,11 @@ const casinoSounds = require('../src/casino/sounds');
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
 
-// Package info for --version
-const PACKAGE_VERSION = '1.0.0';
+// Extracted modules
+const { formatTimeAgo } = require('../src/utils/time');
+const { openInBrowser: openUrl } = require('../src/utils/browser');
+const { playSound: playSoundEffect } = require('../src/utils/sound');
+const { parseArgs: parseCliArgs, mergeCliArgs: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
 
 // ============================================================================
 // Security & Validation
@@ -402,7 +405,7 @@ async function ensureConfig(cliArgs) {
   // Check if --init flag was passed (force reconfiguration)
   if (cliArgs.init) {
     const config = await runConfigurationWizard();
-    return applyCliArgsToConfig(config, cliArgs);
+    return mergeCliArgs(config, cliArgs);
   }
 
   // Load existing config
@@ -424,191 +427,16 @@ async function ensureConfig(cliArgs) {
   }
 
   // Merge CLI args over config (CLI takes precedence)
-  return applyCliArgsToConfig(config, cliArgs);
+  return mergeCliArgs(config, cliArgs);
 }
 
-function applyCliArgsToConfig(config, cliArgs) {
-  // Server settings
-  if (cliArgs.mode !== null) {
-    config.server.mode = cliArgs.mode;
-  }
-  if (cliArgs.noServer) {
-    config.server.mode = 'none';
-  }
-  if (cliArgs.port !== null) {
-    config.server.port = cliArgs.port;
-  }
-  if (cliArgs.staticDir !== null) {
-    config.server.staticDir = cliArgs.staticDir;
-  }
-  if (cliArgs.command !== null) {
-    config.server.command = cliArgs.command;
-  }
-  if (cliArgs.restartOnSwitch !== null) {
-    config.server.restartOnSwitch = cliArgs.restartOnSwitch;
-  }
+// mergeCliArgs imported from src/cli/args.js as mergeCliArgs
 
-  // Git settings
-  if (cliArgs.remote !== null) {
-    config.remoteName = cliArgs.remote;
-  }
-  if (cliArgs.autoPull !== null) {
-    config.autoPull = cliArgs.autoPull;
-  }
-  if (cliArgs.pollInterval !== null) {
-    config.gitPollInterval = cliArgs.pollInterval;
-  }
-
-  // UI settings
-  if (cliArgs.sound !== null) {
-    config.soundEnabled = cliArgs.sound;
-  }
-  if (cliArgs.visibleBranches !== null) {
-    config.visibleBranches = cliArgs.visibleBranches;
-  }
-
-  return config;
-}
-
-// Parse CLI arguments
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const result = {
-    // Server settings
-    mode: null,
-    noServer: false,
-    port: null,
-    staticDir: null,
-    command: null,
-    restartOnSwitch: null,
-    // Git settings
-    remote: null,
-    autoPull: null,
-    pollInterval: null,
-    // UI settings
-    sound: null,
-    visibleBranches: null,
-    // Actions
-    init: false,
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    // Server settings
-    if (args[i] === '--mode' || args[i] === '-m') {
-      const mode = args[i + 1];
-      if (['static', 'command', 'none'].includes(mode)) {
-        result.mode = mode;
-      }
-      i++;
-    } else if (args[i] === '--port' || args[i] === '-p') {
-      const portValue = parseInt(args[i + 1], 10);
-      if (!isNaN(portValue) && portValue > 0 && portValue < 65536) {
-        result.port = portValue;
-      }
-      i++;
-    } else if (args[i] === '--no-server' || args[i] === '-n') {
-      result.noServer = true;
-    } else if (args[i] === '--static-dir') {
-      result.staticDir = args[i + 1];
-      i++;
-    } else if (args[i] === '--command' || args[i] === '-c') {
-      result.command = args[i + 1];
-      i++;
-    } else if (args[i] === '--restart-on-switch') {
-      result.restartOnSwitch = true;
-    } else if (args[i] === '--no-restart-on-switch') {
-      result.restartOnSwitch = false;
-    }
-    // Git settings
-    else if (args[i] === '--remote' || args[i] === '-r') {
-      result.remote = args[i + 1];
-      i++;
-    } else if (args[i] === '--auto-pull') {
-      result.autoPull = true;
-    } else if (args[i] === '--no-auto-pull') {
-      result.autoPull = false;
-    } else if (args[i] === '--poll-interval') {
-      const interval = parseInt(args[i + 1], 10);
-      if (!isNaN(interval) && interval > 0) {
-        result.pollInterval = interval;
-      }
-      i++;
-    }
-    // UI settings
-    else if (args[i] === '--sound') {
-      result.sound = true;
-    } else if (args[i] === '--no-sound') {
-      result.sound = false;
-    } else if (args[i] === '--visible-branches') {
-      const count = parseInt(args[i + 1], 10);
-      if (!isNaN(count) && count > 0) {
-        result.visibleBranches = count;
-      }
-      i++;
-    }
-    // Actions and info
-    else if (args[i] === '--init') {
-      result.init = true;
-    } else if (args[i] === '--version' || args[i] === '-v') {
-      console.log(`git-watchtower v${PACKAGE_VERSION}`);
-      process.exit(0);
-    } else if (args[i] === '--help' || args[i] === '-h') {
-      console.log(`
-Git Watchtower v${PACKAGE_VERSION} - Branch Monitor & Dev Server
-
-Usage:
-  git-watchtower [options]
-
-Server Options:
-  -m, --mode <mode>       Server mode: static, command, or none
-  -p, --port <port>       Server port (default: 3000)
-  -n, --no-server         Shorthand for --mode none
-  --static-dir <dir>      Directory for static file serving (default: public)
-  -c, --command <cmd>     Command to run in command mode (e.g., "npm run dev")
-  --restart-on-switch     Restart server on branch switch (default)
-  --no-restart-on-switch  Don't restart server on branch switch
-
-Git Options:
-  -r, --remote <name>     Git remote name (default: origin)
-  --auto-pull             Auto-pull on branch switch (default)
-  --no-auto-pull          Don't auto-pull on branch switch
-  --poll-interval <ms>    Git polling interval in ms (default: 5000)
-
-UI Options:
-  --sound                 Enable sound notifications (default)
-  --no-sound              Disable sound notifications
-  --visible-branches <n>  Number of branches to display (default: 7)
-
-General:
-  --init                  Run the configuration wizard
-  -v, --version           Show version number
-  -h, --help              Show this help message
-
-Server Modes:
-  static   Serve static files with live reload (default)
-  command  Run your own dev server (Next.js, Vite, Nuxt, etc.)
-  none     Branch monitoring only
-
-Configuration:
-  On first run, Git Watchtower will prompt you to configure settings.
-  Settings are saved to .watchtowerrc.json in your project directory.
-  CLI options override config file settings for the current session.
-
-Examples:
-  git-watchtower                              # Start with config or defaults
-  git-watchtower --init                       # Re-run configuration wizard
-  git-watchtower --no-server                  # Branch monitoring only
-  git-watchtower -p 8080                      # Override port
-  git-watchtower -m command -c "npm run dev"  # Use custom dev server
-  git-watchtower --no-sound --poll-interval 10000
-`);
-      process.exit(0);
-    }
-  }
-  return result;
-}
-
-const cliArgs = parseArgs();
+// CLI argument parsing delegated to src/cli/args.js
+const cliArgs = parseCliArgs(process.argv.slice(2), {
+  onVersion: (v) => { console.log(`git-watchtower v${v}`); process.exit(0); },
+  onHelp: (v) => { console.log(getHelpText(v)); process.exit(0); },
+});
 
 // Configuration - these will be set after config is loaded
 let SERVER_MODE = 'static';      // 'static' | 'command' | 'none'
@@ -675,24 +503,10 @@ function clearServerLog() {
   serverLogBuffer = [];
 }
 
-// Open URL in default browser (cross-platform)
+// openInBrowser imported from src/utils/browser.js
 function openInBrowser(url) {
-  const platform = process.platform;
-  let command;
-
-  if (platform === 'darwin') {
-    command = `open "${url}"`;
-  } else if (platform === 'win32') {
-    command = `start "" "${url}"`;
-  } else {
-    // Linux and other Unix-like systems
-    command = `xdg-open "${url}"`;
-  }
-
-  exec(command, (error) => {
-    if (error) {
-      addLog(`Failed to open browser: ${error.message}`, 'error');
-    }
+  openUrl(url, (error) => {
+    addLog(`Failed to open browser: ${error.message}`, 'error');
   });
 }
 
@@ -1353,21 +1167,7 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
   }
 }
 
-function formatTimeAgo(date) {
-  const now = new Date();
-  const diffMs = now - date;
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffSec < 10) return 'just now';
-  if (diffSec < 60) return `${diffSec}s ago`;
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDay === 1) return '1 day ago';
-  return `${diffDay} days ago`;
-}
+// formatTimeAgo imported from src/utils/time.js
 
 function truncate(str, maxLen) {
   if (!str) return '';
@@ -1533,30 +1333,10 @@ async function getPreviewData(branchName) {
   }
 }
 
+// playSound delegates to extracted src/utils/sound.js
 function playSound() {
   if (!soundEnabled) return;
-
-  // Try to play a friendly system sound (non-blocking)
-  const { platform } = process;
-
-  if (platform === 'darwin') {
-    // macOS: Use afplay with a gentle system sound
-    // Options: Glass, Pop, Ping, Purr, Submarine, Tink, Blow, Bottle, Frog, Funk, Hero, Morse, Sosumi
-    exec('afplay /System/Library/Sounds/Pop.aiff 2>/dev/null', { cwd: PROJECT_ROOT });
-  } else if (platform === 'linux') {
-    // Linux: Try paplay (PulseAudio) or aplay (ALSA) with a system sound
-    // First try freedesktop sound theme, then fall back to terminal bell
-    exec(
-      'paplay /usr/share/sounds/freedesktop/stereo/message-new-instant.oga 2>/dev/null || ' +
-      'paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || ' +
-      'aplay /usr/share/sounds/sound-icons/prompt.wav 2>/dev/null || ' +
-      'printf "\\a"',
-      { cwd: PROJECT_ROOT }
-    );
-  } else {
-    // Windows or other: Terminal bell
-    process.stdout.write('\x07');
-  }
+  playSoundEffect({ cwd: PROJECT_ROOT });
 }
 
 // ============================================================================
