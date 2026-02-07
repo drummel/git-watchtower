@@ -1265,6 +1265,9 @@ let lastPrStatusFetch = 0;
 const PR_STATUS_POLL_INTERVAL = 60 * 1000; // 60 seconds
 let prStatusFetchInFlight = false;
 
+// Default/base branches that should never get "merged" treatment — they're merge targets
+const BASE_BRANCH_RE = /^(main|master|develop|development|staging|production|trunk|release)$/;
+
 // Session history for undo
 const switchHistory = [];
 const MAX_HISTORY = 20;
@@ -1743,7 +1746,9 @@ function renderBranchList() {
     const timeAgo = formatTimeAgo(branch.date);
     const sparkline = sparklineCache.get(branch.name) || '       ';
     const prStatus = branchPrStatusMap.get(branch.name); // { state, number, title } or undefined
-    const isMerged = prStatus && prStatus.state === 'MERGED';
+    // Never treat default/base branches as "merged" — they're merge targets, not sources
+    const isBaseBranch = BASE_BRANCH_RE.test(branch.name);
+    const isMerged = !isBaseBranch && prStatus && prStatus.state === 'MERGED';
     const hasOpenPr = prStatus && prStatus.state === 'OPEN';
 
     // Branch name line
@@ -3233,8 +3238,10 @@ async function pollGitChanges() {
 
     // Sort: new branches first, then by date, merged branches near bottom, deleted at bottom
     filteredBranches.sort((a, b) => {
-      const aMerged = branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
-      const bMerged = branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
+      const aIsBase = BASE_BRANCH_RE.test(a.name);
+      const bIsBase = BASE_BRANCH_RE.test(b.name);
+      const aMerged = !aIsBase && branchPrStatusMap.has(a.name) && branchPrStatusMap.get(a.name).state === 'MERGED';
+      const bMerged = !bIsBase && branchPrStatusMap.has(b.name) && branchPrStatusMap.get(b.name).state === 'MERGED';
       if (a.isDeleted && !b.isDeleted) return 1;
       if (!a.isDeleted && b.isDeleted) return -1;
       if (aMerged && !bMerged && !b.isDeleted) return 1;
