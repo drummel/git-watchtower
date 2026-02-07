@@ -75,115 +75,25 @@ const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSess
 const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
 // ============================================================================
-// Security & Validation
+// Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
-
-// Valid git branch name pattern (conservative)
-const VALID_BRANCH_PATTERN = /^[a-zA-Z0-9_\-./]+$/;
-
-function isValidBranchName(name) {
-  if (!name || typeof name !== 'string') return false;
-  if (name.length > 255) return false;
-  if (!VALID_BRANCH_PATTERN.test(name)) return false;
-  // Reject dangerous patterns
-  if (name.includes('..')) return false;
-  if (name.startsWith('-')) return false;
-  if (name.startsWith('/') || name.endsWith('/')) return false;
-  return true;
-}
-
-function sanitizeBranchName(name) {
-  if (!isValidBranchName(name)) {
-    throw new Error(`Invalid branch name: ${name}`);
-  }
-  return name;
-}
-
-async function checkGitAvailable() {
-  return new Promise((resolve) => {
-    exec('git --version', (error) => {
-      resolve(!error);
-    });
-  });
-}
+const { isValidBranchName, sanitizeBranchName } = require('../src/git/branch');
+const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
 
 // ============================================================================
-// Configuration File Support
+// Configuration (imports from src/config/, inline wizard kept here)
 // ============================================================================
+const { getDefaultConfig, migrateConfig } = require('../src/config/schema');
+const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, CONFIG_FILE_NAME } = require('../src/config/loader');
 
-const CONFIG_FILE_NAME = '.watchtowerrc.json';
 const PROJECT_ROOT = process.cwd();
 
-function getConfigPath() {
-  return path.join(PROJECT_ROOT, CONFIG_FILE_NAME);
-}
-
 function loadConfig() {
-  const configPath = getConfigPath();
-  if (fs.existsSync(configPath)) {
-    try {
-      const content = fs.readFileSync(configPath, 'utf8');
-      return JSON.parse(content);
-    } catch (e) {
-      console.error(`Warning: Could not parse ${CONFIG_FILE_NAME}: ${e.message}`);
-      return null;
-    }
-  }
-  return null;
+  return loadConfigFile(PROJECT_ROOT);
 }
 
 function saveConfig(config) {
-  const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
-}
-
-function getDefaultConfig() {
-  return {
-    // Server settings
-    server: {
-      mode: 'static',           // 'static' | 'command' | 'none'
-      staticDir: 'public',      // Directory for static mode
-      command: '',              // Command for command mode (e.g., 'npm run dev')
-      port: 3000,               // Port for static mode / display for command mode
-      restartOnSwitch: true,    // Restart server on branch switch (command mode)
-    },
-    // Git settings
-    remoteName: 'origin',       // Git remote name
-    autoPull: true,             // Auto-pull when current branch has updates
-    gitPollInterval: 5000,      // Polling interval in ms
-    // UI settings
-    soundEnabled: true,
-    visibleBranches: 7,
-  };
-}
-
-// Migrate old config format to new format
-function migrateConfig(config) {
-  if (config.server) return config; // Already new format
-
-  // Convert old format to new
-  const newConfig = getDefaultConfig();
-
-  if (config.noServer) {
-    newConfig.server.mode = 'none';
-  }
-  if (config.port) {
-    newConfig.server.port = config.port;
-  }
-  if (config.staticDir) {
-    newConfig.server.staticDir = config.staticDir;
-  }
-  if (config.gitPollInterval) {
-    newConfig.gitPollInterval = config.gitPollInterval;
-  }
-  if (typeof config.soundEnabled === 'boolean') {
-    newConfig.soundEnabled = config.soundEnabled;
-  }
-  if (config.visibleBranches) {
-    newConfig.visibleBranches = config.visibleBranches;
-  }
-
-  return newConfig;
+  saveConfigFile(config, PROJECT_ROOT);
 }
 
 async function promptUser(question, defaultValue = '') {
@@ -807,94 +717,11 @@ let pollIntervalId = null;
 let isDetachedHead = false;
 let hasMergeConflict = false;
 
-// ANSI escape codes
-const ESC = '\x1b';
-const CSI = `${ESC}[`;
+// ANSI escape codes and box drawing imported from src/ui/ansi.js
+const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi } = require('../src/ui/ansi');
 
-const ansi = {
-  // Screen
-  clearScreen: `${CSI}2J`,
-  clearLine: `${CSI}2K`,
-  moveTo: (row, col) => `${CSI}${row};${col}H`,
-  moveToTop: `${CSI}H`,
-  hideCursor: `${CSI}?25l`,
-  showCursor: `${CSI}?25h`,
-  saveScreen: `${CSI}?1049h`,
-  restoreScreen: `${CSI}?1049l`,
-
-  // Colors
-  reset: `${CSI}0m`,
-  bold: `${CSI}1m`,
-  dim: `${CSI}2m`,
-  italic: `${CSI}3m`,
-  underline: `${CSI}4m`,
-  inverse: `${CSI}7m`,
-  blink: `${CSI}5m`,
-
-  // Foreground colors
-  black: `${CSI}30m`,
-  red: `${CSI}31m`,
-  green: `${CSI}32m`,
-  yellow: `${CSI}33m`,
-  blue: `${CSI}34m`,
-  magenta: `${CSI}35m`,
-  cyan: `${CSI}36m`,
-  white: `${CSI}37m`,
-  gray: `${CSI}90m`,
-
-  // Bright foreground colors
-  brightRed: `${CSI}91m`,
-  brightGreen: `${CSI}92m`,
-  brightYellow: `${CSI}93m`,
-  brightBlue: `${CSI}94m`,
-  brightMagenta: `${CSI}95m`,
-  brightCyan: `${CSI}96m`,
-  brightWhite: `${CSI}97m`,
-
-  // Background colors
-  bgBlack: `${CSI}40m`,
-  bgRed: `${CSI}41m`,
-  bgGreen: `${CSI}42m`,
-  bgYellow: `${CSI}43m`,
-  bgBlue: `${CSI}44m`,
-  bgMagenta: `${CSI}45m`,
-  bgCyan: `${CSI}46m`,
-  bgWhite: `${CSI}47m`,
-
-  // Bright background colors
-  bgBrightRed: `${CSI}101m`,
-  bgBrightGreen: `${CSI}102m`,
-  bgBrightYellow: `${CSI}103m`,
-  bgBrightBlue: `${CSI}104m`,
-  bgBrightMagenta: `${CSI}105m`,
-  bgBrightCyan: `${CSI}106m`,
-  bgBrightWhite: `${CSI}107m`,
-
-  // 256 colors
-  fg256: (n) => `${CSI}38;5;${n}m`,
-  bg256: (n) => `${CSI}48;5;${n}m`,
-};
-
-// Box drawing characters
-const box = {
-  topLeft: '┌',
-  topRight: '┐',
-  bottomLeft: '└',
-  bottomRight: '┘',
-  horizontal: '─',
-  vertical: '│',
-  teeRight: '├',
-  teeLeft: '┤',
-  cross: '┼',
-
-  // Double line for flash
-  dTopLeft: '╔',
-  dTopRight: '╗',
-  dBottomLeft: '╚',
-  dBottomRight: '╝',
-  dHorizontal: '═',
-  dVertical: '║',
-};
+// Error detection utilities imported from src/utils/errors.js
+const { ErrorHandler } = require('../src/utils/errors');
 
 // State
 let branches = [];
@@ -1039,11 +866,7 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
 
 // formatTimeAgo imported from src/utils/time.js
 
-function truncate(str, maxLen) {
-  if (!str) return '';
-  if (str.length <= maxLen) return str;
-  return str.substring(0, maxLen - 3) + '...';
-}
+// truncate imported from src/ui/ansi.js
 
 function padRight(str, len) {
   if (str.length >= len) return str.substring(0, len);
@@ -1112,16 +935,10 @@ function addLog(message, type = 'info') {
   if (activityLog.length > MAX_LOG_ENTRIES) activityLog.pop();
 }
 
-// Sparkline characters (8 levels)
-const SPARKLINE_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
+// generateSparkline uses uiSparkline from src/ui/ansi.js
 function generateSparkline(commitCounts) {
   if (!commitCounts || commitCounts.length === 0) return '       ';
-  const max = Math.max(...commitCounts, 1);
-  return commitCounts.map(count => {
-    const level = Math.floor((count / max) * 7);
-    return SPARKLINE_CHARS[level];
-  }).join('');
+  return uiSparkline(commitCounts);
 }
 
 async function getBranchSparkline(branchName) {
