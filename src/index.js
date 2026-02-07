@@ -36,6 +36,7 @@ const cliArgs = require('./cli/args');
 const timeUtils = require('./utils/time');
 const browserUtils = require('./utils/browser');
 const soundUtils = require('./utils/sound');
+const gitRemote = require('./git/remote');
 
 module.exports = {
   // Async utilities
@@ -135,4 +136,11 @@ module.exports = {
   formatTimeAgo: timeUtils.formatTimeAgo,
   openInBrowser: browserUtils.openInBrowser,
   playSound: soundUtils.playSound,
+
+  // Git remote URL utilities
+  parseRemoteUrl: gitRemote.parseRemoteUrl,
+  buildBranchUrl: gitRemote.buildBranchUrl,
+  detectPlatform: gitRemote.detectPlatform,
+  buildWebUrl: gitRemote.buildWebUrl,
+  extractSessionUrl: gitRemote.extractSessionUrl,
 };

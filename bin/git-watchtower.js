@@ -70,7 +70,8 @@ const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitign
 const { formatTimeAgo } = require('../src/utils/time');
 const { openInBrowser: openUrl } = require('../src/utils/browser');
 const { playSound: playSoundEffect } = require('../src/utils/sound');
-const { parseArgs: parseCliArgs, mergeCliArgs: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
+const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
+const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
 
 // ============================================================================
 // Security & Validation
@@ -510,78 +511,14 @@ function openInBrowser(url) {
   });
 }
 
-// Parse a git remote URL into { host, path } components
-// Supports SSH (git@host:path), HTTPS, and ssh:// protocol formats
-function parseRemoteUrl(remoteUrl) {
-  const url = remoteUrl.trim();
-
-  // SSH format: git@host:user/repo.git
-  const sshMatch = url.match(/^[\w-]+@([^:]+):(.+?)(?:\.git)?$/);
-  if (sshMatch) return { host: sshMatch[1], path: sshMatch[2] };
-
-  // HTTPS/HTTP format: https://host/path.git
-  const httpMatch = url.match(/^https?:\/\/([^/]+)\/(.+?)(?:\.git)?$/);
-  if (httpMatch) return { host: httpMatch[1], path: httpMatch[2] };
-
-  // ssh:// format: ssh://git@host/user/repo.git or ssh://git@host:port/user/repo.git
-  const sshProtoMatch = url.match(/^ssh:\/\/[\w-]+@([^/:]+)(?::\d+)?\/(.+?)(?:\.git)?$/);
-  if (sshProtoMatch) return { host: sshProtoMatch[1], path: sshProtoMatch[2] };
-
-  return null;
-}
-
-// Build a branch URL for the appropriate git hosting service
-// Each service has its own URL format for viewing branches
-function buildBranchUrl(baseUrl, host, branchName) {
-  const branch = encodeURIComponent(branchName);
-
-  // Azure DevOps: dev.azure.com/org/project/_git/repo or org.visualstudio.com
-  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) {
-    return `${baseUrl}?version=GB${branch}`;
-  }
-
-  // Bitbucket Cloud
-  if (host === 'bitbucket.org') {
-    return `${baseUrl}/src/${branch}`;
-  }
-
-  // AWS CodeCommit
-  if (host.match(/codecommit\..+\.amazonaws\.com/)) {
-    return `${baseUrl}/browse/refs/heads/${branch}`;
-  }
-
-  // SourceHut
-  if (host === 'git.sr.ht') {
-    return `${baseUrl}/tree/${branch}`;
-  }
-
-  // GitHub, GitLab, Codeberg, Gitea, Forgejo, Gogs, and self-hosted instances
-  // All use /tree/<branch>
-  return `${baseUrl}/tree/${branch}`;
-}
+// parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl
+// imported from src/git/remote.js
 
 async function getRemoteWebUrl(branchName) {
   try {
     const { stdout } = await execAsync(`git remote get-url "${REMOTE_NAME}"`);
     const parsed = parseRemoteUrl(stdout);
-    if (!parsed) return null;
-
-    // Azure DevOps SSH uses org@ssh.dev.azure.com:v3/org/project/repo
-    // Normalize to the web URL format
-    let baseUrl;
-    if (parsed.host === 'ssh.dev.azure.com') {
-      // path is v3/org/project/repo -> web url is dev.azure.com/org/project/_git/repo
-      const parts = parsed.path.replace(/^v3\//, '').split('/');
-      if (parts.length >= 3) {
-        baseUrl = `https://dev.azure.com/${parts[0]}/${parts[1]}/_git/${parts.slice(2).join('/')}`;
-        if (branchName) return buildBranchUrl(baseUrl, 'dev.azure.com', branchName);
-        return baseUrl;
-      }
-    }
-
-    baseUrl = `https://${parsed.host}/${parsed.path}`;
-    if (branchName) return buildBranchUrl(baseUrl, parsed.host, branchName);
-    return baseUrl;
+    return buildWebUrl(parsed, branchName);
   } catch (e) {
     return null;
   }
@@ -593,8 +530,7 @@ async function getSessionUrl(branchName) {
     const { stdout } = await execAsync(
       `git log "${REMOTE_NAME}/${branchName}" -1 --format=%B 2>/dev/null || git log "${branchName}" -1 --format=%B 2>/dev/null`
     );
-    const match = stdout.match(/https:\/\/claude\.ai\/code\/session_[\w]+/);
-    return match ? match[0] : null;
+    return extractSessionUrl(stdout);
   } catch (e) {
     return null;
   }
@@ -610,18 +546,7 @@ async function hasCommand(cmd) {
   }
 }
 
-// Detect the git hosting platform from the remote URL
-function detectPlatform(webUrl) {
-  if (!webUrl) return null;
-  try {
-    const host = new URL(webUrl).hostname;
-    if (host === 'github.com' || host.includes('github')) return 'github';
-    if (host === 'gitlab.com' || host.includes('gitlab')) return 'gitlab';
-    if (host === 'bitbucket.org' || host.includes('bitbucket')) return 'bitbucket';
-    if (host === 'dev.azure.com' || host.includes('visualstudio.com')) return 'azure';
-  } catch (e) { /* ignore */ }
-  return 'github'; // default assumption for self-hosted
-}
+// detectPlatform imported from src/git/remote.js
 
 // Get PR info for a branch using gh or glab CLI
 // Queries all states (open, merged, closed) so merged PRs are visible in the action modal
