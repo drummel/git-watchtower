@@ -55,27 +55,49 @@
  * @property {string|null} currentBranch - Current checked out branch
  * @property {number} selectedIndex - Selected branch index
  * @property {string|null} selectedBranchName - Selected branch name (for persistence)
- * @property {UIMode} mode - Current UI mode
+ * @property {Branch[]|null} filteredBranches - Filtered branch list (null = no filter)
+ * @property {boolean} isDetachedHead - In detached HEAD state
+ * @property {boolean} hasMergeConflict - Has merge conflicts
+ * @property {UIMode} mode - Current UI mode (legacy)
+ * @property {boolean} searchMode - Search mode active
  * @property {string} searchQuery - Current search query
+ * @property {boolean} previewMode - Preview pane active
+ * @property {Object|null} previewData - Preview pane data
+ * @property {boolean} historyMode - History view active
+ * @property {boolean} infoMode - Info view active
+ * @property {boolean} logViewMode - Log view active
+ * @property {string} logViewTab - Active log tab ('server' | 'activity')
+ * @property {boolean} actionMode - Action modal active
+ * @property {Object|null} actionData - Action modal data
+ * @property {boolean} actionLoading - Action modal loading state
  * @property {FlashMessage|null} flashMessage - Current flash message
+ * @property {Object|null} errorToast - Current error toast
  * @property {ActivityLogEntry[]} activityLog - Activity log entries
  * @property {SwitchHistoryEntry[]} switchHistory - Branch switch history
- * @property {Object|null} previewData - Preview pane data
  * @property {boolean} isPolling - Currently polling git
  * @property {string} pollingStatus - Polling status message
  * @property {boolean} isOffline - Network is offline
  * @property {number} lastFetchDuration - Last fetch duration in ms
  * @property {number} consecutiveNetworkFailures - Number of consecutive failures
- * @property {boolean} isDetachedHead - In detached HEAD state
- * @property {boolean} hasMergeConflict - Has merge conflicts
+ * @property {number} adaptivePollInterval - Current adaptive poll interval in ms
  * @property {boolean} serverRunning - Server process is running
  * @property {boolean} serverCrashed - Server process crashed
- * @property {ServerLogEntry[]} serverLogs - Server log buffer
+ * @property {ServerLogEntry[]} serverLogs - Server log buffer (legacy)
+ * @property {ServerLogEntry[]} serverLogBuffer - Server log buffer
  * @property {number} logScrollOffset - Scroll position in log view
  * @property {number} terminalWidth - Terminal width
  * @property {number} terminalHeight - Terminal height
  * @property {number} visibleBranchCount - Number of branches to show
  * @property {boolean} soundEnabled - Sound notifications enabled
+ * @property {boolean} casinoModeEnabled - Casino mode enabled
+ * @property {Map<string, string>} sparklineCache - Branch sparkline cache
+ * @property {Map<string, Object>} branchPrStatusMap - Branch PR status cache
+ * @property {string} serverMode - Server mode ('static' | 'command' | 'none')
+ * @property {boolean} noServer - No server mode
+ * @property {number} port - Server port
+ * @property {number} maxLogEntries - Max activity log entries
+ * @property {string} projectName - Project name
+ * @property {number} clientCount - Connected SSE clients
  */
 
 /**
