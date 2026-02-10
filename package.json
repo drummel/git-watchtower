@@ -1,6 +1,6 @@
 {
   "name": "git-watchtower",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Terminal-based Git branch monitor with activity sparklines and optional dev server with live reload",
   "main": "bin/git-watchtower.js",
   "bin": {
