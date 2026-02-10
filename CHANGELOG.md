@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/drummel/git-watchtower/compare/v1.2.0...v1.3.0) (2026-02-10)
+
+
+### Bug Fixes
+
+* update Node.js version to 22 for semantic-release compatibility ([6b5ad1a](https://github.com/drummel/git-watchtower/commit/6b5ad1ae11b57c583563c181b5ef19520f387cc6))
+
+
+### Features
+
+* bump version to 1.3.0 ([24f636c](https://github.com/drummel/git-watchtower/commit/24f636cb458ab6e7c1a8c61a4a5a43a758775a57))
+
 # [1.2.0](https://github.com/drummel/git-watchtower/compare/v1.1.0...v1.2.0) (2026-02-05)
 
 
