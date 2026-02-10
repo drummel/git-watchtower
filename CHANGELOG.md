@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/drummel/git-watchtower/compare/v1.3.0...v1.4.0) (2026-02-10)
+
+
+### Features
+
+* add S key to stash changes when git operations fail due to dirty repo ([6d125d3](https://github.com/drummel/git-watchtower/commit/6d125d3fecd75fd6f230ff70180e88e04f343bb7))
+
 # [1.3.0](https://github.com/drummel/git-watchtower/compare/v1.2.0...v1.3.0) (2026-02-10)
 
 
