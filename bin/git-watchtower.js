@@ -720,8 +720,8 @@ const { filterBranches } = require('../src/ui/keybindings');
 const renderer = require('../src/ui/renderer');
 const actions = require('../src/ui/actions');
 
-// Diff stats parsing imported from src/git/commands.js
-const { parseDiffStats } = require('../src/git/commands');
+// Diff stats parsing and stash imported from src/git/commands.js
+const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../src/git/commands');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
@@ -733,6 +733,11 @@ const clients = new Set();
 // Flash/error toast timers
 let flashTimeout = null;
 let errorToastTimeout = null;
+
+// Tracks the operation that failed due to dirty working directory.
+// When set, pressing 'S' will stash changes and retry the operation.
+// Shape: { type: 'switch', branch: string } | { type: 'pull' } | null
+let pendingDirtyOperation = null;
 
 // Cached environment info (populated once at startup, doesn't change during session)
 let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
@@ -1219,6 +1224,7 @@ function showErrorToast(title, message, hint = null, duration = 8000) {
 
   errorToastTimeout = setTimeout(() => {
     store.setState({ errorToast: null });
+    pendingDirtyOperation = null;
     render();
   }, duration);
 }
@@ -1359,11 +1365,12 @@ async function switchToBranch(branchName, recordHistory = true) {
     const isDirty = await hasUncommittedChanges();
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
-      addLog(`Commit or stash your changes first`, 'warning');
+      addLog(`Press S to stash changes, or commit manually`, 'warning');
+      pendingDirtyOperation = { type: 'switch', branch: branchName };
       showErrorToast(
         'Cannot Switch Branch',
         'You have uncommitted changes in your working directory that would be lost.',
-        'Run: git stash or git commit'
+        'Press S to stash changes'
       );
       return { success: false, reason: 'dirty' };
     }
@@ -1416,11 +1423,12 @@ async function switchToBranch(branchName, recordHistory = true) {
       );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
-      addLog(`Commit or stash your changes first`, 'warning');
+      addLog(`Press S to stash changes, or commit manually`, 'warning');
+      pendingDirtyOperation = { type: 'switch', branch: branchName };
       showErrorToast(
         'Cannot Switch Branch',
         'Your local changes would be overwritten by checkout.',
-        'Run: git stash or git commit'
+        'Press S to stash changes'
       );
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
@@ -1479,7 +1487,15 @@ async function pullCurrentBranch() {
     const errMsg = e.stderr || e.message || String(e);
     addLog(`Pull failed: ${errMsg}`, 'error');
 
-    if (isMergeConflict(errMsg)) {
+    if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
+      addLog(`Press S to stash changes, or commit manually`, 'warning');
+      pendingDirtyOperation = { type: 'pull' };
+      showErrorToast(
+        'Pull Failed',
+        'Your local changes would be overwritten by pull.',
+        'Press S to stash changes'
+      );
+    } else if (isMergeConflict(errMsg)) {
       store.setState({ hasMergeConflict: true });
       showErrorToast(
         'Merge Conflict!',
@@ -1507,6 +1523,59 @@ async function pullCurrentBranch() {
     }
     return { success: false };
   }
+}
+
+async function stashAndRetry() {
+  const operation = pendingDirtyOperation;
+  if (!operation) {
+    addLog('No pending operation to retry', 'warning');
+    render();
+    return;
+  }
+
+  pendingDirtyOperation = null;
+  hideErrorToast();
+
+  addLog('Stashing uncommitted changes...', 'update');
+  render();
+
+  const stashResult = await gitStash({ message: 'git-watchtower: auto-stash before ' + (operation.type === 'switch' ? `switching to ${operation.branch}` : 'pull') });
+  if (!stashResult.success) {
+    addLog(`Stash failed: ${stashResult.error ? stashResult.error.message : 'unknown error'}`, 'error');
+    showErrorToast('Stash Failed', stashResult.error ? stashResult.error.message : 'Could not stash changes.');
+    render();
+    return;
+  }
+
+  addLog('Changes stashed successfully', 'success');
+
+  if (operation.type === 'switch') {
+    const switchResult = await switchToBranch(operation.branch);
+    if (!switchResult.success) {
+      addLog('Branch switch failed after stash — restoring stashed changes...', 'warning');
+      const popResult = await gitStashPop();
+      if (popResult.success) {
+        addLog('Stashed changes restored', 'info');
+      } else {
+        addLog('Warning: could not restore stashed changes. Run: git stash pop', 'error');
+      }
+    }
+    await pollGitChanges();
+  } else if (operation.type === 'pull') {
+    const pullResult = await pullCurrentBranch();
+    if (!pullResult.success) {
+      addLog('Pull failed after stash — restoring stashed changes...', 'warning');
+      const popResult = await gitStashPop();
+      if (popResult.success) {
+        addLog('Stashed changes restored', 'info');
+      } else {
+        addLog('Warning: could not restore stashed changes. Run: git stash pop', 'error');
+      }
+    }
+    await pollGitChanges();
+  }
+
+  render();
 }
 
 // ============================================================================
@@ -2248,9 +2317,14 @@ function setupKeyboardInput() {
       }
     }
 
-    // Dismiss error toast on any key
+    // Dismiss error toast on any key (S triggers stash if pending)
     if (store.get('errorToast')) {
+      if (key === 'S' && pendingDirtyOperation) {
+        await stashAndRetry();
+        return;
+      }
       hideErrorToast();
+      pendingDirtyOperation = null;
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
@@ -2400,6 +2474,12 @@ function setupKeyboardInput() {
         render();
         break;
       }
+
+      case 'S': // Stash changes (only active with pending dirty operation)
+        if (pendingDirtyOperation) {
+          await stashAndRetry();
+        }
+        break;
 
       case 'c': { // Toggle casino mode
         const newCasinoState = casino.toggle();

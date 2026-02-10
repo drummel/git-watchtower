@@ -238,6 +238,10 @@ describe('getNormalModeAction', () => {
     assert.equal(getNormalModeAction('s'), 'toggle_sound');
   });
 
+  it('should map S to stash', () => {
+    assert.equal(getNormalModeAction('S'), 'stash');
+  });
+
   it('should map c to toggle_casino', () => {
     assert.equal(getNormalModeAction('c'), 'toggle_casino');
   });

@@ -148,6 +148,8 @@ function getNormalModeAction(key) {
       return 'fetch';
     case 's':
       return 'toggle_sound';
+    case 'S':
+      return 'stash';
     case 'c':
       return 'toggle_casino';
     case 'q':

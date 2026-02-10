@@ -107,6 +107,8 @@ module.exports = {
   log: gitCommands.log,
   getCommitsByDay: gitCommands.getCommitsByDay,
   hasUncommittedChanges: gitCommands.hasUncommittedChanges,
+  stash: gitCommands.stash,
+  stashPop: gitCommands.stashPop,
   getChangedFiles: gitCommands.getChangedFiles,
 
   // Git branch operations
