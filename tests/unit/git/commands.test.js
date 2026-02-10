@@ -16,6 +16,8 @@ const {
   getRemotes,
   remoteExists,
   hasUncommittedChanges,
+  stash,
+  stashPop,
   parseDiffStats,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
@@ -179,5 +181,42 @@ describe('parseDiffStats', () => {
   it('should handle large numbers', () => {
     const result = parseDiffStats('50 files changed, 1234 insertions(+), 567 deletions(-)');
     assert.deepStrictEqual(result, { added: 1234, deleted: 567 });
+  });
+});
+
+describe('stash', () => {
+  it('should be a function', () => {
+    assert.strictEqual(typeof stash, 'function');
+  });
+
+  it('should return an object with success property', async () => {
+    // On a clean repo, stash returns success: false with GIT_STASH_EMPTY
+    const result = await stash({ cwd: REPO_ROOT });
+    assert.strictEqual(typeof result.success, 'boolean');
+    if (!result.success && result.error) {
+      assert.ok(result.error.message.includes('No local changes') || result.error.code === 'GIT_STASH_EMPTY');
+    }
+  });
+
+  it('should accept a message option', async () => {
+    const result = await stash({ message: 'test stash', cwd: REPO_ROOT });
+    assert.strictEqual(typeof result.success, 'boolean');
+  });
+
+  it('should accept includeUntracked option', async () => {
+    const result = await stash({ includeUntracked: false, cwd: REPO_ROOT });
+    assert.strictEqual(typeof result.success, 'boolean');
+  });
+});
+
+describe('stashPop', () => {
+  it('should be a function', () => {
+    assert.strictEqual(typeof stashPop, 'function');
+  });
+
+  it('should return an object with success property', async () => {
+    // On a repo with no stash entries, this should fail gracefully
+    const result = await stashPop({ cwd: REPO_ROOT });
+    assert.strictEqual(typeof result.success, 'boolean');
   });
 });

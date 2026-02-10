@@ -226,6 +226,56 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
 }
 
 /**
+ * Stash all uncommitted changes (tracked and untracked)
+ * @param {Object} [options] - Stash options
+ * @param {string} [options.message] - Optional stash message
+ * @param {boolean} [options.includeUntracked=true] - Include untracked files
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{success: boolean, error?: GitError}>}
+ */
+async function stash(options = {}) {
+  const { message, includeUntracked = true, cwd } = options;
+
+  let command = 'git stash push';
+  if (includeUntracked) command += ' --include-untracked';
+  if (message) command += ` -m "${message.replace(/"/g, '\\"')}"`;
+
+  try {
+    const result = await execGit(command, { cwd });
+    // git stash returns "No local changes to save" if there's nothing to stash
+    if (result.stdout.includes('No local changes')) {
+      return { success: false, error: new GitError('No local changes to stash', 'GIT_STASH_EMPTY') };
+    }
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof GitError ? error : GitError.fromExecError(error, 'stash'),
+    };
+  }
+}
+
+/**
+ * Pop the most recent stash entry
+ * @param {Object} [options] - Options
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{success: boolean, error?: GitError}>}
+ */
+async function stashPop(options = {}) {
+  const { cwd } = options;
+
+  try {
+    await execGit('git stash pop', { cwd });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof GitError ? error : GitError.fromExecError(error, 'stash pop'),
+    };
+  }
+}
+
+/**
  * Check if working directory has uncommitted changes
  * @param {string} [cwd] - Working directory
  * @returns {Promise<boolean>}
@@ -310,6 +360,8 @@ module.exports = {
   log,
   getCommitsByDay,
   hasUncommittedChanges,
+  stash,
+  stashPop,
   getChangedFiles,
   parseDiffStats,
   getDiffStats,
