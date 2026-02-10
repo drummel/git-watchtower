@@ -55,27 +55,49 @@
  * @property {string|null} currentBranch - Current checked out branch
  * @property {number} selectedIndex - Selected branch index
  * @property {string|null} selectedBranchName - Selected branch name (for persistence)
- * @property {UIMode} mode - Current UI mode
+ * @property {Branch[]|null} filteredBranches - Filtered branch list (null = no filter)
+ * @property {boolean} isDetachedHead - In detached HEAD state
+ * @property {boolean} hasMergeConflict - Has merge conflicts
+ * @property {UIMode} mode - Current UI mode (legacy)
+ * @property {boolean} searchMode - Search mode active
  * @property {string} searchQuery - Current search query
+ * @property {boolean} previewMode - Preview pane active
+ * @property {Object|null} previewData - Preview pane data
+ * @property {boolean} historyMode - History view active
+ * @property {boolean} infoMode - Info view active
+ * @property {boolean} logViewMode - Log view active
+ * @property {string} logViewTab - Active log tab ('server' | 'activity')
+ * @property {boolean} actionMode - Action modal active
+ * @property {Object|null} actionData - Action modal data
+ * @property {boolean} actionLoading - Action modal loading state
  * @property {FlashMessage|null} flashMessage - Current flash message
+ * @property {Object|null} errorToast - Current error toast
  * @property {ActivityLogEntry[]} activityLog - Activity log entries
  * @property {SwitchHistoryEntry[]} switchHistory - Branch switch history
- * @property {Object|null} previewData - Preview pane data
  * @property {boolean} isPolling - Currently polling git
  * @property {string} pollingStatus - Polling status message
  * @property {boolean} isOffline - Network is offline
  * @property {number} lastFetchDuration - Last fetch duration in ms
  * @property {number} consecutiveNetworkFailures - Number of consecutive failures
- * @property {boolean} isDetachedHead - In detached HEAD state
- * @property {boolean} hasMergeConflict - Has merge conflicts
+ * @property {number} adaptivePollInterval - Current adaptive poll interval in ms
  * @property {boolean} serverRunning - Server process is running
  * @property {boolean} serverCrashed - Server process crashed
- * @property {ServerLogEntry[]} serverLogs - Server log buffer
+ * @property {ServerLogEntry[]} serverLogs - Server log buffer (legacy)
+ * @property {ServerLogEntry[]} serverLogBuffer - Server log buffer
  * @property {number} logScrollOffset - Scroll position in log view
  * @property {number} terminalWidth - Terminal width
  * @property {number} terminalHeight - Terminal height
  * @property {number} visibleBranchCount - Number of branches to show
  * @property {boolean} soundEnabled - Sound notifications enabled
+ * @property {boolean} casinoModeEnabled - Casino mode enabled
+ * @property {Map<string, string>} sparklineCache - Branch sparkline cache
+ * @property {Map<string, Object>} branchPrStatusMap - Branch PR status cache
+ * @property {string} serverMode - Server mode ('static' | 'command' | 'none')
+ * @property {boolean} noServer - No server mode
+ * @property {number} port - Server port
+ * @property {number} maxLogEntries - Max activity log entries
+ * @property {string} projectName - Project name
+ * @property {number} clientCount - Connected SSE clients
  */
 
 /**
@@ -89,15 +111,29 @@ function getInitialState() {
     currentBranch: null,
     selectedIndex: 0,
     selectedBranchName: null,
+    filteredBranches: null,
     isDetachedHead: false,
     hasMergeConflict: false,
 
-    // UI mode state
+    // UI mode (legacy — used by setMode/getFilteredBranches)
     mode: 'normal',
+
+    // UI mode flags
+    searchMode: false,
     searchQuery: '',
-    flashMessage: null,
+    previewMode: false,
     previewData: null,
-    logScrollOffset: 0,
+    historyMode: false,
+    infoMode: false,
+    logViewMode: false,
+    logViewTab: 'server',
+    actionMode: false,
+    actionData: null,
+    actionLoading: false,
+
+    // Notifications
+    flashMessage: null,
+    errorToast: null,
 
     // Activity tracking
     activityLog: [],
@@ -109,11 +145,14 @@ function getInitialState() {
     isOffline: false,
     lastFetchDuration: 0,
     consecutiveNetworkFailures: 0,
+    adaptivePollInterval: 5000,
 
     // Server state
     serverRunning: false,
     serverCrashed: false,
     serverLogs: [],
+    serverLogBuffer: [],
+    logScrollOffset: 0,
 
     // Terminal state
     terminalWidth: process.stdout.columns || 80,
@@ -122,6 +161,19 @@ function getInitialState() {
     // Settings (can be overridden by config)
     visibleBranchCount: 7,
     soundEnabled: true,
+    casinoModeEnabled: false,
+
+    // Caches (Maps — shallow-copied by getState())
+    sparklineCache: new Map(),
+    branchPrStatusMap: new Map(),
+
+    // Config (set once at startup, treated as read-only after)
+    serverMode: 'static',
+    noServer: false,
+    port: 3000,
+    maxLogEntries: 10,
+    projectName: '',
+    clientCount: 0,
   };
 }
 
@@ -432,8 +484,8 @@ class Store {
    * @returns {Branch[]}
    */
   getFilteredBranches() {
-    const { branches, searchQuery, mode } = this.state;
-    if (mode !== 'search' || !searchQuery) {
+    const { branches, searchQuery, mode, searchMode } = this.state;
+    if ((!searchMode && mode !== 'search') || !searchQuery) {
       return branches;
     }
     const query = searchQuery.toLowerCase();

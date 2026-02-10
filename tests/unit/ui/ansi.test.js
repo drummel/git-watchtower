@@ -18,6 +18,11 @@ const {
   visibleLength,
   truncate,
   pad,
+  padRight,
+  padLeft,
+  getMaxBranchesForScreen,
+  drawBox,
+  clearArea,
   wordWrap,
   horizontalLine,
   style,
@@ -425,5 +430,114 @@ describe('style', () => {
     const result = style('Test', ansi.bold, ansi.red, ansi.bgWhite);
     assert.strictEqual(visibleLength(result), 4);
     assert.strictEqual(stripAnsi(result), 'Test');
+  });
+});
+
+describe('padRight', () => {
+  it('should pad shorter strings with spaces on the right', () => {
+    assert.strictEqual(padRight('Hi', 5), 'Hi   ');
+  });
+
+  it('should truncate longer strings', () => {
+    assert.strictEqual(padRight('Hello World', 5), 'Hello');
+  });
+
+  it('should return string as-is when exact length', () => {
+    assert.strictEqual(padRight('Hello', 5), 'Hello');
+  });
+
+  it('should handle empty string', () => {
+    assert.strictEqual(padRight('', 3), '   ');
+  });
+});
+
+describe('padLeft', () => {
+  it('should pad shorter strings with spaces on the left', () => {
+    assert.strictEqual(padLeft('Hi', 5), '   Hi');
+  });
+
+  it('should truncate longer strings', () => {
+    assert.strictEqual(padLeft('Hello World', 5), 'Hello');
+  });
+
+  it('should return string as-is when exact length', () => {
+    assert.strictEqual(padLeft('Hello', 5), 'Hello');
+  });
+
+  it('should handle empty string', () => {
+    assert.strictEqual(padLeft('', 3), '   ');
+  });
+});
+
+describe('getMaxBranchesForScreen', () => {
+  it('should calculate for typical terminal (24 rows)', () => {
+    // availableHeight = 24 - 2 - 10 - 5 - 2 = 5
+    // Math.floor(5 / 2) = 2
+    const result = getMaxBranchesForScreen(24);
+    assert.strictEqual(result, 2);
+  });
+
+  it('should calculate for large terminal (50 rows)', () => {
+    // availableHeight = 50 - 2 - 10 - 5 - 2 = 31
+    // Math.floor(31 / 2) = 15
+    const result = getMaxBranchesForScreen(50);
+    assert.strictEqual(result, 15);
+  });
+
+  it('should return minimum of 1 for small terminal', () => {
+    // availableHeight = 10 - 2 - 10 - 5 - 2 = -9
+    // Math.max(1, Math.floor(-9 / 2)) = 1
+    const result = getMaxBranchesForScreen(10);
+    assert.strictEqual(result, 1);
+  });
+
+  it('should accept custom maxLogEntries', () => {
+    // availableHeight = 30 - 2 - 5 - 5 - 2 = 16
+    // Math.floor(16 / 2) = 8
+    const result = getMaxBranchesForScreen(30, 5);
+    assert.strictEqual(result, 8);
+  });
+});
+
+describe('drawBox', () => {
+  it('should return a string containing box characters', () => {
+    const result = drawBox(1, 1, 10, 5);
+    assert.strictEqual(typeof result, 'string');
+    assert.ok(result.includes(box.topLeft));
+    assert.ok(result.includes(box.topRight));
+    assert.ok(result.includes(box.bottomLeft));
+    assert.ok(result.includes(box.bottomRight));
+    assert.ok(result.includes(box.horizontal));
+    assert.ok(result.includes(box.vertical));
+  });
+
+  it('should include title when provided', () => {
+    const result = drawBox(1, 1, 20, 5, 'My Title');
+    assert.ok(result.includes('My Title'));
+  });
+
+  it('should include ANSI escape sequences', () => {
+    const result = drawBox(1, 1, 10, 5);
+    assert.ok(result.includes(ESC));
+  });
+});
+
+describe('clearArea', () => {
+  it('should return a string with spaces', () => {
+    const result = clearArea(1, 1, 5, 3);
+    assert.strictEqual(typeof result, 'string');
+    assert.ok(result.includes('     '));
+  });
+
+  it('should include ANSI cursor movement sequences', () => {
+    const result = clearArea(1, 1, 5, 3);
+    assert.ok(result.includes(ESC));
+  });
+
+  it('should produce output for each row of the area', () => {
+    const result = clearArea(1, 1, 4, 3);
+    // Should contain 3 rows of 4 spaces each
+    const spaceRuns = result.match(/ {4}/g);
+    assert.strictEqual(spaceRuns.length, 3);
   });
 });

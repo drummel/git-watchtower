@@ -16,6 +16,7 @@ const {
   getRemotes,
   remoteExists,
   hasUncommittedChanges,
+  parseDiffStats,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 } = require('../../../src/git/commands');
@@ -146,5 +147,37 @@ describe('GitError handling', () => {
       assert.ok(err instanceof GitError);
       assert.ok(err.command || err.details?.command);
     }
+  });
+});
+
+describe('parseDiffStats', () => {
+  it('should parse both insertions and deletions', () => {
+    const result = parseDiffStats('3 files changed, 10 insertions(+), 5 deletions(-)');
+    assert.deepStrictEqual(result, { added: 10, deleted: 5 });
+  });
+
+  it('should parse only insertions', () => {
+    const result = parseDiffStats('1 file changed, 3 insertions(+)');
+    assert.deepStrictEqual(result, { added: 3, deleted: 0 });
+  });
+
+  it('should parse only deletions', () => {
+    const result = parseDiffStats('2 files changed, 7 deletions(-)');
+    assert.deepStrictEqual(result, { added: 0, deleted: 7 });
+  });
+
+  it('should parse singular insertion and deletion', () => {
+    const result = parseDiffStats('1 file changed, 1 insertion(+), 1 deletion(-)');
+    assert.deepStrictEqual(result, { added: 1, deleted: 1 });
+  });
+
+  it('should return zeros for empty string', () => {
+    const result = parseDiffStats('');
+    assert.deepStrictEqual(result, { added: 0, deleted: 0 });
+  });
+
+  it('should handle large numbers', () => {
+    const result = parseDiffStats('50 files changed, 1234 insertions(+), 567 deletions(-)');
+    assert.deepStrictEqual(result, { added: 1234, deleted: 567 });
   });
 });
