@@ -1224,7 +1224,6 @@ function showErrorToast(title, message, hint = null, duration = 8000) {
 
   errorToastTimeout = setTimeout(() => {
     store.setState({ errorToast: null });
-    pendingDirtyOperation = null;
     render();
   }, duration);
 }
@@ -1404,6 +1403,7 @@ async function switchToBranch(branchName, recordHistory = true) {
     }
 
     addLog(`Switched to ${safeBranchName}`, 'success');
+    pendingDirtyOperation = null;
 
     // Restart server if configured (command mode)
     if (SERVER_MODE === 'command' && RESTART_ON_SWITCH && serverProcess) {
@@ -1481,6 +1481,7 @@ async function pullCurrentBranch() {
 
     await execAsync(`git pull "${REMOTE_NAME}" "${branch}"`);
     addLog('Pulled successfully', 'success');
+    pendingDirtyOperation = null;
     notifyClients();
     return { success: true };
   } catch (e) {
@@ -1556,9 +1557,13 @@ async function stashAndRetry() {
       const popResult = await gitStashPop();
       if (popResult.success) {
         addLog('Stashed changes restored', 'info');
+        showFlash('Stashed changes restored (switch failed)');
       } else {
         addLog('Warning: could not restore stashed changes. Run: git stash pop', 'error');
+        showErrorToast('Stash Pop Failed', 'Could not restore stashed changes.', 'Run: git stash pop');
       }
+    } else {
+      showFlash(`Stashed & switched to ${operation.branch}`);
     }
     await pollGitChanges();
   } else if (operation.type === 'pull') {
@@ -1568,9 +1573,13 @@ async function stashAndRetry() {
       const popResult = await gitStashPop();
       if (popResult.success) {
         addLog('Stashed changes restored', 'info');
+        showFlash('Stashed changes restored (pull failed)');
       } else {
         addLog('Warning: could not restore stashed changes. Run: git stash pop', 'error');
+        showErrorToast('Stash Pop Failed', 'Could not restore stashed changes.', 'Run: git stash pop');
       }
+    } else {
+      showFlash('Stashed & pulled successfully');
     }
     await pollGitChanges();
   }
@@ -2324,7 +2333,6 @@ function setupKeyboardInput() {
         return;
       }
       hideErrorToast();
-      pendingDirtyOperation = null;
       if (key !== '\u001b[A' && key !== '\u001b[B' && key !== '\r' && key !== 'q') {
         return;
       }
@@ -2478,6 +2486,8 @@ function setupKeyboardInput() {
       case 'S': // Stash changes (only active with pending dirty operation)
         if (pendingDirtyOperation) {
           await stashAndRetry();
+        } else {
+          showFlash('No pending operation — stash with S after a failed switch or pull');
         }
         break;
 
