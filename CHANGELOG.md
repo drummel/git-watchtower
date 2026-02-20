@@ -1,3 +1,15 @@
+# [1.5.0](https://github.com/drummel/git-watchtower/compare/v1.4.0...v1.5.0) (2026-02-20)
+
+
+### Bug Fixes
+
+* prevent pendingDirtyOperation from being cleared prematurely and add stash feedback ([01845ee](https://github.com/drummel/git-watchtower/commit/01845ee845f0141af1edc72f74d5f1d9ec9f8355))
+
+
+### Features
+
+* replace stash error toast with interactive confirmation dialog ([c7858f5](https://github.com/drummel/git-watchtower/commit/c7858f52000141973b41f93ba1a60b6306c9e349))
+
 # [1.4.0](https://github.com/drummel/git-watchtower/compare/v1.3.0...v1.4.0) (2026-02-10)
 
 
