@@ -72,6 +72,9 @@
  * @property {boolean} actionLoading - Action modal loading state
  * @property {FlashMessage|null} flashMessage - Current flash message
  * @property {Object|null} errorToast - Current error toast
+ * @property {boolean} stashConfirmMode - Stash confirmation dialog active
+ * @property {number} stashConfirmSelectedIndex - Selected option in stash confirm dialog
+ * @property {string|null} pendingDirtyOperationLabel - Label for the pending dirty operation
  * @property {ActivityLogEntry[]} activityLog - Activity log entries
  * @property {SwitchHistoryEntry[]} switchHistory - Branch switch history
  * @property {boolean} isPolling - Currently polling git
@@ -134,6 +137,9 @@ function getInitialState() {
     // Notifications
     flashMessage: null,
     errorToast: null,
+    stashConfirmMode: false,
+    stashConfirmSelectedIndex: 0,
+    pendingDirtyOperationLabel: null,
 
     // Activity tracking
     activityLog: [],
