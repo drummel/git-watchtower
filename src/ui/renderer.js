@@ -1077,6 +1077,120 @@ function renderActionModal(state, write) {
 }
 
 // ---------------------------------------------------------------------------
+// renderStashConfirm
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a stash confirmation dialog with selectable options.
+ *
+ * The dialog appears when the user tries to switch branches or pull with
+ * uncommitted changes. It offers two options navigable with up/down arrows.
+ *
+ * State shape expected:
+ *   stashConfirmMode: boolean
+ *   stashConfirmSelectedIndex: number (0 or 1)
+ *   pendingDirtyOperationLabel: string (e.g. "switch to main", "pull")
+ *
+ * @param {object} state
+ * @param {function} write
+ */
+function renderStashConfirm(state, write) {
+  if (!state.stashConfirmMode) return;
+
+  const options = [
+    'Stash changes and continue',
+    "No, I'll handle it myself",
+  ];
+  const selectedIdx = state.stashConfirmSelectedIndex || 0;
+
+  const title = 'Uncommitted Changes';
+  const message = state.pendingDirtyOperationLabel
+    ? `You have uncommitted changes that conflict with: ${state.pendingDirtyOperationLabel}`
+    : 'You have uncommitted changes in your working directory.';
+
+  const width = Math.min(60, state.terminalWidth - 4);
+  const col = Math.floor((state.terminalWidth - width) / 2);
+  const row = 2;
+
+  // Build content lines
+  const lines = [];
+  lines.push(title);
+  lines.push('');
+
+  // Word wrap the message
+  const msgWords = message.split(' ');
+  let currentLine = '';
+  for (const word of msgWords) {
+    if ((currentLine + ' ' + word).length > width - 6) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += (currentLine ? ' ' : '') + word;
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  lines.push('');
+
+  // Option lines (we'll render these specially)
+  const optionStartIdx = lines.length;
+  for (const opt of options) {
+    lines.push(opt);
+  }
+
+  lines.push('');
+  lines.push('[S] Stash  [Esc] Cancel');
+
+  const height = lines.length + 2;
+
+  // Draw yellow/amber box
+  write(ansi.moveTo(row, col));
+  write(ansi.yellow + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(ansi.yellow + box.dVertical + ansi.reset + '  ' + ' '.repeat(width - 6) + '  ' + ansi.yellow + box.dVertical + ansi.reset);
+  }
+
+  write(ansi.moveTo(row + height - 1, col));
+  write(ansi.yellow + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Render content
+  let contentRow = row + 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    write(ansi.moveTo(contentRow, col + 3));
+
+    if (i === 0) {
+      // Title — centered, bold yellow
+      const titlePadding = Math.floor((width - 6 - line.length) / 2);
+      write(' '.repeat(titlePadding) + ansi.yellow + ansi.bold + line + ansi.reset + ' '.repeat(width - 6 - titlePadding - line.length));
+    } else if (i >= optionStartIdx && i < optionStartIdx + options.length) {
+      // Selectable option
+      const optIdx = i - optionStartIdx;
+      const isSelected = optIdx === selectedIdx;
+      const prefix = isSelected ? '\u25b8 ' : '  ';
+      const optText = prefix + line;
+      if (isSelected) {
+        write(ansi.bold + ansi.cyan + padRight(optText, width - 6) + ansi.reset);
+      } else {
+        write(ansi.gray + padRight(optText, width - 6) + ansi.reset);
+      }
+    } else if (line === '[S] Stash  [Esc] Cancel') {
+      // Keyboard hints — centered, dim
+      const lPadding = Math.floor((width - 6 - line.length) / 2);
+      write(ansi.dim + ' '.repeat(lPadding) + line + ' '.repeat(width - 6 - lPadding - line.length) + ansi.reset);
+    } else {
+      // Regular content
+      write(padRight(line, width - 6));
+    }
+    contentRow++;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -1093,4 +1207,5 @@ module.exports = {
   renderLogView,
   renderInfo,
   renderActionModal,
+  renderStashConfirm,
 };

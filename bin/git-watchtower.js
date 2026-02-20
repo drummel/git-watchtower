@@ -1190,6 +1190,11 @@ function render() {
   if (state.errorToast) {
     renderer.renderErrorToast(state, write);
   }
+
+  // Stash confirmation dialog renders on top of everything
+  if (state.stashConfirmMode) {
+    renderer.renderStashConfirm(state, write);
+  }
 }
 
 function showFlash(message) {
@@ -1235,6 +1240,26 @@ function hideErrorToast() {
   }
   if (store.get('errorToast')) {
     store.setState({ errorToast: null });
+    render();
+  }
+}
+
+function showStashConfirm(operationLabel) {
+  store.setState({
+    stashConfirmMode: true,
+    stashConfirmSelectedIndex: 0,
+    pendingDirtyOperationLabel: operationLabel,
+  });
+  render();
+}
+
+function hideStashConfirm() {
+  if (store.get('stashConfirmMode')) {
+    store.setState({
+      stashConfirmMode: false,
+      stashConfirmSelectedIndex: 0,
+      pendingDirtyOperationLabel: null,
+    });
     render();
   }
 }
@@ -1364,13 +1389,8 @@ async function switchToBranch(branchName, recordHistory = true) {
     const isDirty = await hasUncommittedChanges();
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
-      addLog(`Press S to stash changes, or commit manually`, 'warning');
       pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showErrorToast(
-        'Cannot Switch Branch',
-        'You have uncommitted changes in your working directory that would be lost.',
-        'Press S to stash changes'
-      );
+      showStashConfirm(`switch to ${branchName}`);
       return { success: false, reason: 'dirty' };
     }
 
@@ -1423,13 +1443,8 @@ async function switchToBranch(branchName, recordHistory = true) {
       );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
-      addLog(`Press S to stash changes, or commit manually`, 'warning');
       pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showErrorToast(
-        'Cannot Switch Branch',
-        'Your local changes would be overwritten by checkout.',
-        'Press S to stash changes'
-      );
+      showStashConfirm(`switch to ${branchName}`);
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
       showErrorToast(
@@ -1489,13 +1504,8 @@ async function pullCurrentBranch() {
     addLog(`Pull failed: ${errMsg}`, 'error');
 
     if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
-      addLog(`Press S to stash changes, or commit manually`, 'warning');
       pendingDirtyOperation = { type: 'pull' };
-      showErrorToast(
-        'Pull Failed',
-        'Your local changes would be overwritten by pull.',
-        'Press S to stash changes'
-      );
+      showStashConfirm('pull');
     } else if (isMergeConflict(errMsg)) {
       store.setState({ hasMergeConflict: true });
       showErrorToast(
@@ -1536,6 +1546,7 @@ async function stashAndRetry() {
 
   pendingDirtyOperation = null;
   hideErrorToast();
+  hideStashConfirm();
 
   addLog('Stashing uncommitted changes...', 'update');
   render();
@@ -2318,6 +2329,52 @@ function setupKeyboardInput() {
       return; // Ignore other keys in action mode
     }
 
+    // Handle stash confirmation dialog
+    if (store.get('stashConfirmMode')) {
+      if (key === '\u001b[A' || key === 'k') { // Up
+        const idx = store.get('stashConfirmSelectedIndex');
+        if (idx > 0) {
+          store.setState({ stashConfirmSelectedIndex: idx - 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down
+        const idx = store.get('stashConfirmSelectedIndex');
+        if (idx < 1) {
+          store.setState({ stashConfirmSelectedIndex: idx + 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\r' || key === '\n') { // Enter — execute selected option
+        const idx = store.get('stashConfirmSelectedIndex');
+        hideStashConfirm();
+        if (idx === 0 && pendingDirtyOperation) {
+          await stashAndRetry();
+        } else {
+          addLog('Stash cancelled — handle changes manually', 'info');
+          pendingDirtyOperation = null;
+        }
+        return;
+      }
+      if (key === 'S') { // S shortcut — stash directly
+        hideStashConfirm();
+        if (pendingDirtyOperation) {
+          await stashAndRetry();
+        }
+        return;
+      }
+      if (key === '\u001b') { // Escape — cancel
+        hideStashConfirm();
+        addLog('Stash cancelled — handle changes manually', 'info');
+        pendingDirtyOperation = null;
+        render();
+        return;
+      }
+      return; // Ignore other keys in stash confirm mode
+    }
+
     // Dismiss flash on any key
     if (store.get('flashMessage')) {
       hideFlash();
@@ -2483,9 +2540,12 @@ function setupKeyboardInput() {
         break;
       }
 
-      case 'S': // Stash changes (only active with pending dirty operation)
+      case 'S': // Stash changes — open confirm dialog or show hint
         if (pendingDirtyOperation) {
-          await stashAndRetry();
+          const label = pendingDirtyOperation.type === 'switch'
+            ? `switch to ${pendingDirtyOperation.branch}`
+            : 'pull';
+          showStashConfirm(label);
         } else {
           showFlash('No pending operation — stash with S after a failed switch or pull');
         }
