@@ -1,3 +1,16 @@
+## [1.6.1](https://github.com/drummel/git-watchtower/compare/v1.6.0...v1.6.1) (2026-02-26)
+
+
+### Bug Fixes
+
+* add 30-second timeout to execAsync to prevent hung polling loop ([c0dc821](https://github.com/drummel/git-watchtower/commit/c0dc8213e520cb63da5d147960fe8e521f8a0321))
+* add path traversal guard to static file server ([8a0fb1f](https://github.com/drummel/git-watchtower/commit/8a0fb1f81ed577a0995d338ad254fa3b4da92cf7))
+* capture process reference before nulling to fix SIGKILL fallback ([6b762c3](https://github.com/drummel/git-watchtower/commit/6b762c3d99b5fc50610812390bd876992ea65a95))
+* reject dangerous shell characters in server.command config ([335efc6](https://github.com/drummel/git-watchtower/commit/335efc6e719aa5d24af3b72bd4b5c9562d4573b0))
+* reject path traversal in staticDir config validation ([28f0066](https://github.com/drummel/git-watchtower/commit/28f0066cfeed12f31a20b26295061c0040b42dcc))
+* replace exec() with execFile() in browser.js to prevent injection ([2704921](https://github.com/drummel/git-watchtower/commit/27049215339fbdce888c47e432a4e5d91293e94b))
+* replace exec() with execFile() to prevent command injection ([4645c81](https://github.com/drummel/git-watchtower/commit/4645c81559c101a4be8e0a1a93dbc0e1f88dc7e9))
+
 # [1.6.0](https://github.com/drummel/git-watchtower/compare/v1.5.0...v1.6.0) (2026-02-26)
 
 
