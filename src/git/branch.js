@@ -3,7 +3,7 @@
  * Provides branch management and parsing
  */
 
-const { execGit, execGitSilent, fetch, hasUncommittedChanges, getCommitsByDay, log } = require('./commands');
+const { execGit, execGitSilent, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
 
 // Valid git branch name pattern (conservative)
@@ -352,6 +352,64 @@ async function localBranchExists(branchName, cwd) {
   return branches.includes(branchName);
 }
 
+/**
+ * Get local branches whose remote tracking branch is gone.
+ * These are branches where the upstream was deleted on the remote
+ * (shown as [origin/...: gone] in git branch -vv output).
+ * @param {string} [cwd] - Working directory
+ * @returns {Promise<string[]>} Array of branch names whose remotes are gone
+ */
+async function getGoneBranches(cwd) {
+  try {
+    const { stdout } = await execGit('git branch -vv', { cwd });
+    const gone = [];
+    for (const line of stdout.split('\n')) {
+      // Match lines like "  branch-name  abc1234 [origin/branch-name: gone] commit msg"
+      // Skip current branch (starts with *)
+      const match = line.match(/^[ *]+(\S+)\s+\S+\s+\[.*: gone\]/);
+      if (match && isValidBranchName(match[1])) {
+        gone.push(match[1]);
+      }
+    }
+    return gone;
+  } catch (error) {
+    return [];
+  }
+}
+
+/**
+ * Delete multiple local branches whose remotes are gone.
+ * Skips the current branch and branches that fail to delete.
+ * @param {string[]} branchNames - Branch names to delete
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.force=false] - Force delete unmerged branches
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{deleted: string[], failed: Array<{name: string, error: string}>}>}
+ */
+async function deleteGoneBranches(branchNames, options = {}) {
+  const { force = false, cwd } = options;
+  const deleted = [];
+  const failed = [];
+
+  // Get current branch to avoid deleting it
+  const current = await getCurrentBranch(cwd);
+
+  for (const name of branchNames) {
+    if (current.name === name) {
+      failed.push({ name, error: 'Cannot delete the currently checked out branch' });
+      continue;
+    }
+    const result = await deleteLocalBranch(name, { force, cwd });
+    if (result.success) {
+      deleted.push(name);
+    } else {
+      failed.push({ name, error: result.error ? result.error.message : 'Unknown error' });
+    }
+  }
+
+  return { deleted, failed };
+}
+
 module.exports = {
   isValidBranchName,
   sanitizeBranchName,
@@ -363,5 +421,7 @@ module.exports = {
   generateSparkline,
   getLocalBranches,
   localBranchExists,
+  getGoneBranches,
+  deleteGoneBranches,
   VALID_BRANCH_PATTERN,
 };

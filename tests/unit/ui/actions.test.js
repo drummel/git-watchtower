@@ -11,6 +11,8 @@ const {
   toggleInfo,
   toggleLogView,
   closeActionModal,
+  openCleanupConfirm,
+  closeCleanupConfirm,
   switchLogTab,
   scrollLog,
   toggleSound,
@@ -755,5 +757,42 @@ describe('getSelectedBranch', () => {
     const state = makeState({ filteredBranches: [], selectedIndex: 0 });
     const result = getSelectedBranch(state);
     assert.equal(result, null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// openCleanupConfirm / closeCleanupConfirm
+// ---------------------------------------------------------------------------
+
+describe('openCleanupConfirm', () => {
+  it('should set cleanupConfirmMode and branches list', () => {
+    const state = makeState();
+    const goneBranches = ['old-feature', 'stale-branch'];
+    const result = openCleanupConfirm(state, goneBranches);
+    assert.equal(result.cleanupConfirmMode, true);
+    assert.deepEqual(result.cleanupBranches, goneBranches);
+    assert.equal(result.cleanupSelectedIndex, 0);
+  });
+
+  it('should work with empty branch list', () => {
+    const state = makeState();
+    const result = openCleanupConfirm(state, []);
+    assert.equal(result.cleanupConfirmMode, true);
+    assert.deepEqual(result.cleanupBranches, []);
+    assert.equal(result.cleanupSelectedIndex, 0);
+  });
+});
+
+describe('closeCleanupConfirm', () => {
+  it('should reset cleanup state', () => {
+    const state = makeState({
+      cleanupConfirmMode: true,
+      cleanupBranches: ['branch-1'],
+      cleanupSelectedIndex: 1,
+    });
+    const result = closeCleanupConfirm(state);
+    assert.equal(result.cleanupConfirmMode, false);
+    assert.equal(result.cleanupBranches, null);
+    assert.equal(result.cleanupSelectedIndex, 0);
   });
 });

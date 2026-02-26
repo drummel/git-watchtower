@@ -375,6 +375,7 @@ function renderFooter(state, write) {
     write(ansi.gray + '[c]' + ansi.reset + ansi.bgBlack + ' Casino  ');
   }
 
+  write(ansi.gray + '[d]' + ansi.reset + ansi.bgBlack + ' Cleanup  ');
   write(ansi.gray + '[q]' + ansi.reset + ansi.bgBlack + ' Quit  ');
   write(ansi.reset);
 }
@@ -1191,6 +1192,119 @@ function renderStashConfirm(state, write) {
 }
 
 // ---------------------------------------------------------------------------
+// renderCleanupConfirm
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the cleanup confirmation modal.
+ * Lists branches whose remote tracking branch is gone and asks for confirmation.
+ *
+ * @param {object} state
+ * @param {function} write
+ */
+function renderCleanupConfirm(state, write) {
+  if (!state.cleanupConfirmMode || !state.cleanupBranches) return;
+
+  const branches = state.cleanupBranches;
+  const width = Math.min(60, state.terminalWidth - 4);
+  const innerW = width - 6;
+
+  // Build content lines
+  const lines = [];
+  lines.push('Cleanup Stale Branches');
+  lines.push('');
+
+  if (branches.length === 0) {
+    lines.push('No stale branches found.');
+    lines.push('All local branches have active remotes.');
+  } else {
+    lines.push(`${branches.length} branch${branches.length === 1 ? '' : 'es'} with deleted remote:`);
+    lines.push('');
+
+    const maxShown = Math.min(branches.length, 10);
+    for (let i = 0; i < maxShown; i++) {
+      lines.push('\u2717 ' + truncate(branches[i], innerW - 4));
+    }
+    if (branches.length > maxShown) {
+      lines.push(`  ... and ${branches.length - maxShown} more`);
+    }
+  }
+
+  lines.push('');
+
+  // Options
+  const optionStartIdx = lines.length;
+  const options = branches.length > 0
+    ? ['Delete all (safe — merged only)', 'Force delete all (including unmerged)', 'Cancel']
+    : ['Close'];
+  for (const opt of options) {
+    lines.push(opt);
+  }
+
+  lines.push('');
+  if (branches.length > 0) {
+    lines.push('[Enter] Select  [Esc] Cancel');
+  } else {
+    lines.push('[Esc] Close');
+  }
+
+  const height = lines.length + 2;
+  const col = Math.floor((state.terminalWidth - width) / 2);
+  const row = Math.floor((state.terminalHeight - height) / 2);
+  const selectedIdx = state.cleanupSelectedIndex || 0;
+
+  // Draw red/amber box
+  const borderColor = ansi.red;
+  write(ansi.moveTo(row, col));
+  write(borderColor + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(borderColor + box.dVertical + ansi.reset + '  ' + ' '.repeat(width - 6) + '  ' + borderColor + box.dVertical + ansi.reset);
+  }
+
+  write(ansi.moveTo(row + height - 1, col));
+  write(borderColor + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Render content
+  let contentRow = row + 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    write(ansi.moveTo(contentRow, col + 3));
+
+    if (i === 0) {
+      // Title — centered, bold red
+      const titlePadding = Math.floor((width - 6 - line.length) / 2);
+      write(' '.repeat(titlePadding) + ansi.red + ansi.bold + line + ansi.reset + ' '.repeat(width - 6 - titlePadding - line.length));
+    } else if (i >= optionStartIdx && i < optionStartIdx + options.length) {
+      // Selectable option
+      const optIdx = i - optionStartIdx;
+      const isSelected = optIdx === selectedIdx;
+      const prefix = isSelected ? '\u25b8 ' : '  ';
+      const optText = prefix + line;
+      if (isSelected) {
+        write(ansi.bold + ansi.cyan + padRight(optText, width - 6) + ansi.reset);
+      } else {
+        write(ansi.gray + padRight(optText, width - 6) + ansi.reset);
+      }
+    } else if (line.startsWith('[Enter]') || line.startsWith('[Esc]')) {
+      // Keyboard hints — centered, dim
+      const lPadding = Math.floor((width - 6 - line.length) / 2);
+      write(ansi.dim + ' '.repeat(lPadding) + line + ' '.repeat(width - 6 - lPadding - line.length) + ansi.reset);
+    } else if (line.startsWith('\u2717 ')) {
+      // Branch name — red cross
+      write(ansi.red + '\u2717 ' + ansi.reset + ansi.gray + truncate(line.slice(2), innerW - 2) + ansi.reset + ' '.repeat(Math.max(0, width - 6 - line.length)));
+    } else {
+      // Regular content
+      write(padRight(line, width - 6));
+    }
+    contentRow++;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -1208,4 +1322,5 @@ module.exports = {
   renderInfo,
   renderActionModal,
   renderStashConfirm,
+  renderCleanupConfirm,
 };

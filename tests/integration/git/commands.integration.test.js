@@ -15,6 +15,7 @@ const {
   getCommitsByDay,
   getChangedFiles,
   hasUncommittedChanges,
+  deleteLocalBranch,
 } = require('../../../src/git/commands');
 
 describe('commands.js integration tests', () => {
@@ -274,6 +275,48 @@ describe('commands.js integration tests', () => {
         timeout: 5000,
       });
       assert.ok(result.stdout !== undefined);
+    });
+  });
+
+  describe('deleteLocalBranch', () => {
+    it('should delete a fully merged branch', async () => {
+      fixture.createBranch('to-delete');
+
+      const result = await deleteLocalBranch('to-delete', { cwd: fixture.path });
+      assert.strictEqual(result.success, true);
+
+      // Verify branch is gone
+      const { stdout } = await execGit('git branch --list', { cwd: fixture.path });
+      assert.ok(!stdout.includes('to-delete'));
+    });
+
+    it('should fail to delete unmerged branch without force', async () => {
+      fixture.createBranch('unmerged', true);
+      fixture.createFile('feature.txt', 'content');
+      fixture.git('add .');
+      fixture.commit('Feature work');
+      fixture.checkout('master');
+
+      const result = await deleteLocalBranch('unmerged', { cwd: fixture.path });
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error);
+    });
+
+    it('should force delete unmerged branch with force=true', async () => {
+      fixture.createBranch('unmerged', true);
+      fixture.createFile('feature.txt', 'content');
+      fixture.git('add .');
+      fixture.commit('Feature work');
+      fixture.checkout('master');
+
+      const result = await deleteLocalBranch('unmerged', { force: true, cwd: fixture.path });
+      assert.strictEqual(result.success, true);
+    });
+
+    it('should fail to delete non-existent branch', async () => {
+      const result = await deleteLocalBranch('does-not-exist', { cwd: fixture.path });
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error);
     });
   });
 });

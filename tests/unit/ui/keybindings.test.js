@@ -273,6 +273,10 @@ describe('getNormalModeAction', () => {
     assert.equal(getNormalModeAction('0'), 'set_visible_count');
   });
 
+  it('should map d to cleanup_branches', () => {
+    assert.equal(getNormalModeAction('d'), 'cleanup_branches');
+  });
+
   it('should return null for unrecognized keys', () => {
     assert.equal(getNormalModeAction('x'), null);
     assert.equal(getNormalModeAction('Z'), null);
