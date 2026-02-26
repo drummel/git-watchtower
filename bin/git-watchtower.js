@@ -806,15 +806,28 @@ const LIVE_RELOAD_SCRIPT = `
 // Utility Functions
 // ============================================================================
 
+// Default timeout for execAsync (30 seconds) — prevents hung git/CLI commands
+// from permanently blocking the polling loop
+const EXEC_ASYNC_TIMEOUT = 30000;
+
 function execAsync(command, options = {}) {
+  const { timeout = EXEC_ASYNC_TIMEOUT, ...restOptions } = options;
   return new Promise((resolve, reject) => {
-    exec(command, { cwd: PROJECT_ROOT, ...options }, (error, stdout, stderr) => {
+    const child = exec(command, { cwd: PROJECT_ROOT, timeout, ...restOptions }, (error, stdout, stderr) => {
       if (error) {
         reject({ error, stdout, stderr });
       } else {
         resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
       }
     });
+    // Also kill the child if the timeout fires (exec timeout sends SIGTERM
+    // but doesn't guarantee cleanup of process trees)
+    if (timeout > 0) {
+      const killTimer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch (e) { /* already dead */ }
+      }, timeout + 5000);
+      child.on('close', () => clearTimeout(killTimer));
+    }
   });
 }
 
