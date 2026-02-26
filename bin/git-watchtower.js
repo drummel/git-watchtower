@@ -2010,6 +2010,16 @@ const server = http.createServer((req, res) => {
   pathname = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
   let filePath = path.join(STATIC_DIR, pathname);
 
+  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal
+  const resolvedPath = path.resolve(filePath);
+  const resolvedStaticDir = path.resolve(STATIC_DIR);
+  if (!resolvedPath.startsWith(resolvedStaticDir + path.sep) && resolvedPath !== resolvedStaticDir) {
+    res.writeHead(403, { 'Content-Type': 'text/html' });
+    res.end('<h1>403 Forbidden</h1>');
+    addServerLog(`GET ${logPath} → 403 (path traversal blocked)`, true);
+    return;
+  }
+
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, 'index.html');
   }
