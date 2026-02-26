@@ -2623,7 +2623,7 @@ function setupKeyboardInput() {
         break;
       }
 
-      case 'D': { // Cleanup stale branches (remotes deleted)
+      case 'd': { // Cleanup stale branches (remotes deleted)
         addLog('Scanning for stale branches...', 'info');
         render();
         const goneBranches = await getGoneBranches();

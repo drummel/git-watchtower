@@ -375,7 +375,7 @@ function renderFooter(state, write) {
     write(ansi.gray + '[c]' + ansi.reset + ansi.bgBlack + ' Casino  ');
   }
 
-  write(ansi.gray + '[D]' + ansi.reset + ansi.bgBlack + ' Cleanup  ');
+  write(ansi.gray + '[d]' + ansi.reset + ansi.bgBlack + ' Cleanup  ');
   write(ansi.gray + '[q]' + ansi.reset + ansi.bgBlack + ' Quit  ');
   write(ansi.reset);
 }
