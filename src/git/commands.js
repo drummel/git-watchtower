@@ -15,7 +15,8 @@ const FETCH_TIMEOUT = 60000;
 
 /**
  * Execute a git command safely using execFile (no shell).
- * @param {string[]} args - Git arguments (e.g. ['log', '--oneline'])
+ * @param {string | string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
+ *   or a legacy command string (e.g. 'git --version') for backwards compatibility
  * @param {Object} [options] - Execution options
  * @param {number} [options.timeout] - Command timeout in ms
  * @param {string} [options.cwd] - Working directory
@@ -28,7 +29,7 @@ async function execGit(args, options = {}) {
   // Backwards compatibility: accept a full command string for
   // simple constant commands (no user-controlled data).
   if (typeof args === 'string') {
-    const parts = args.split(/\s+/);
+    const parts = /** @type {string} */ (args).split(/\s+/);
     // Strip leading 'git' if present so callers can pass 'git --version'
     if (parts[0] === 'git') {
       args = parts.slice(1);
@@ -77,7 +78,7 @@ async function execGit(args, options = {}) {
 
 /**
  * Execute git command silently (suppress errors)
- * @param {string} command - Git command to execute
+ * @param {string | string[]} command - Git arguments (array or legacy string)
  * @param {Object} [options] - Execution options
  * @returns {Promise<{stdout: string, stderr: string}|null>}
  */
