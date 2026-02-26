@@ -3,12 +3,9 @@
  * Provides safe, timeout-aware git command execution
  */
 
-const { exec } = require('child_process');
-const { promisify } = require('util');
+const { execFile } = require('child_process');
 const { GitError } = require('../utils/errors');
 const { withTimeout } = require('../utils/async');
-
-const execPromise = promisify(exec);
 
 // Default timeout for git operations (30 seconds)
 const DEFAULT_TIMEOUT = 30000;
@@ -17,21 +14,45 @@ const DEFAULT_TIMEOUT = 30000;
 const FETCH_TIMEOUT = 60000;
 
 /**
- * Execute a git command with timeout and error handling
- * @param {string} command - Git command to execute
+ * Execute a git command safely using execFile (no shell).
+ * @param {string | string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
+ *   or a legacy command string (e.g. 'git --version') for backwards compatibility
  * @param {Object} [options] - Execution options
  * @param {number} [options.timeout] - Command timeout in ms
  * @param {string} [options.cwd] - Working directory
  * @returns {Promise<{stdout: string, stderr: string}>}
  * @throws {GitError}
  */
-async function execGit(command, options = {}) {
+async function execGit(args, options = {}) {
   const { timeout = DEFAULT_TIMEOUT, cwd = process.cwd() } = options;
 
+  // Backwards compatibility: accept a full command string for
+  // simple constant commands (no user-controlled data).
+  if (typeof args === 'string') {
+    const parts = /** @type {string} */ (args).split(/\s+/);
+    // Strip leading 'git' if present so callers can pass 'git --version'
+    if (parts[0] === 'git') {
+      args = parts.slice(1);
+    } else {
+      args = parts;
+    }
+  }
+
+  const command = `git ${args.join(' ')}`;
+
   try {
-    const promise = execPromise(command, {
-      cwd,
-      maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+    const promise = new Promise((resolve, reject) => {
+      execFile('git', args, {
+        cwd,
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+      }, (error, stdout, stderr) => {
+        if (error) {
+          error.stderr = stderr;
+          reject(error);
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
     });
 
     const result = await withTimeout(
@@ -46,7 +67,7 @@ async function execGit(command, options = {}) {
     };
   } catch (error) {
     // Handle timeout error
-    if (error.message.includes('timed out')) {
+    if (error.message && error.message.includes('timed out')) {
       throw new GitError(error.message, 'GIT_TIMEOUT', { command });
     }
 
@@ -57,7 +78,7 @@ async function execGit(command, options = {}) {
 
 /**
  * Execute git command silently (suppress errors)
- * @param {string} command - Git command to execute
+ * @param {string | string[]} command - Git arguments (array or legacy string)
  * @param {Object} [options] - Execution options
  * @returns {Promise<{stdout: string, stderr: string}|null>}
  */
@@ -75,7 +96,7 @@ async function execGitSilent(command, options = {}) {
  */
 async function isGitAvailable() {
   try {
-    await execGit('git --version', { timeout: 5000 });
+    await execGit(['--version'], { timeout: 5000 });
     return true;
   } catch (error) {
     return false;
@@ -89,7 +110,7 @@ async function isGitAvailable() {
  */
 async function isGitRepository(cwd) {
   try {
-    await execGit('git rev-parse --git-dir', { cwd, timeout: 5000 });
+    await execGit(['rev-parse', '--git-dir'], { cwd, timeout: 5000 });
     return true;
   } catch (error) {
     return false;
@@ -103,7 +124,7 @@ async function isGitRepository(cwd) {
  */
 async function getRemotes(cwd) {
   try {
-    const { stdout } = await execGit('git remote', { cwd, timeout: 5000 });
+    const { stdout } = await execGit(['remote'], { cwd, timeout: 5000 });
     return stdout.split('\n').filter(Boolean);
   } catch (error) {
     return [];
@@ -133,13 +154,12 @@ async function remoteExists(remoteName, cwd) {
 async function fetch(remoteName = 'origin', options = {}) {
   const { prune = true, all = true, cwd } = options;
 
-  let command = 'git fetch';
-  if (all) command += ' --all';
-  if (prune) command += ' --prune';
-  command += ' 2>/dev/null'; // Suppress progress output
+  const args = ['fetch'];
+  if (all) args.push('--all');
+  if (prune) args.push('--prune');
 
   try {
-    await execGit(command, { cwd, timeout: FETCH_TIMEOUT });
+    await execGit(args, { cwd, timeout: FETCH_TIMEOUT });
     return { success: true };
   } catch (error) {
     return { success: false, error };
@@ -155,7 +175,7 @@ async function fetch(remoteName = 'origin', options = {}) {
  */
 async function pull(remoteName, branchName, cwd) {
   try {
-    await execGit(`git pull "${remoteName}" "${branchName}"`, {
+    await execGit(['pull', remoteName, branchName], {
       cwd,
       timeout: FETCH_TIMEOUT,
     });
@@ -182,7 +202,7 @@ async function log(branchName, options = {}) {
   } = options;
 
   const { stdout } = await execGit(
-    `git log "${branchName}" -n ${count} --format="${format}"`,
+    ['log', branchName, '-n', String(count), `--format=${format}`],
     { cwd }
   );
 
@@ -201,7 +221,7 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
 
   try {
     const { stdout } = await execGit(
-      `git log "${branchName}" --format="%ci" --since="${days} days ago"`,
+      ['log', branchName, '--format=%ci', `--since=${days} days ago`],
       { cwd, timeout: 10000 }
     );
 
@@ -236,12 +256,14 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
 async function stash(options = {}) {
   const { message, includeUntracked = true, cwd } = options;
 
-  let command = 'git stash push';
-  if (includeUntracked) command += ' --include-untracked';
-  if (message) command += ` -m "${message.replace(/"/g, '\\"')}"`;
+  const args = ['stash', 'push'];
+  if (includeUntracked) args.push('--include-untracked');
+  if (message) {
+    args.push('-m', message);
+  }
 
   try {
-    const result = await execGit(command, { cwd });
+    const result = await execGit(args, { cwd });
     // git stash returns "No local changes to save" if there's nothing to stash
     if (result.stdout.includes('No local changes')) {
       return { success: false, error: new GitError('No local changes to stash', 'GIT_STASH_EMPTY') };
@@ -265,7 +287,7 @@ async function stashPop(options = {}) {
   const { cwd } = options;
 
   try {
-    await execGit('git stash pop', { cwd });
+    await execGit(['stash', 'pop'], { cwd });
     return { success: true };
   } catch (error) {
     return {
@@ -282,7 +304,7 @@ async function stashPop(options = {}) {
  */
 async function hasUncommittedChanges(cwd) {
   try {
-    const { stdout } = await execGit('git status --porcelain', {
+    const { stdout } = await execGit(['status', '--porcelain'], {
       cwd,
       timeout: 5000,
     });
@@ -302,7 +324,7 @@ async function hasUncommittedChanges(cwd) {
 async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
   try {
     const { stdout } = await execGit(
-      `git diff --name-only "${baseBranch}...${branchName}"`,
+      ['diff', '--name-only', `${baseBranch}...${branchName}`],
       { cwd }
     );
     return stdout.split('\n').filter(Boolean);
@@ -341,7 +363,7 @@ function parseDiffStats(diffStatOutput) {
  */
 async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
   try {
-    const { stdout } = await execGit(`git diff --stat ${fromCommit}..${toCommit}`, options);
+    const { stdout } = await execGit(['diff', '--stat', `${fromCommit}..${toCommit}`], options);
     return parseDiffStats(stdout);
   } catch (e) {
     return { added: 0, deleted: 0 };
@@ -361,7 +383,7 @@ async function deleteLocalBranch(branchName, options = {}) {
   const flag = force ? '-D' : '-d';
 
   try {
-    await execGit(`git branch ${flag} "${branchName}"`, { cwd });
+    await execGit(['branch', flag, branchName], { cwd });
     return { success: true };
   } catch (error) {
     return {

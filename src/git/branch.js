@@ -63,11 +63,11 @@ function sanitizeBranchName(name) {
  */
 async function getCurrentBranch(cwd) {
   try {
-    const { stdout } = await execGit('git rev-parse --abbrev-ref HEAD', { cwd });
+    const { stdout } = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd });
 
     if (stdout === 'HEAD') {
       // Detached HEAD state - get short commit hash
-      const { stdout: commitHash } = await execGit('git rev-parse --short HEAD', { cwd });
+      const { stdout: commitHash } = await execGit(['rev-parse', '--short', 'HEAD'], { cwd });
       return { name: `HEAD@${commitHash}`, isDetached: true };
     }
 
@@ -99,7 +99,7 @@ async function getAllBranches(options = {}) {
 
     // Get local branches
     const localResult = await execGitSilent(
-      'git for-each-ref --sort=-committerdate --format="%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)" refs/heads/',
+      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', 'refs/heads/'],
       { cwd }
     );
 
@@ -123,7 +123,7 @@ async function getAllBranches(options = {}) {
 
     // Get remote branches
     const remoteResult = await execGitSilent(
-      `git for-each-ref --sort=-committerdate --format="%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)" refs/remotes/${remoteName}/`,
+      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', `refs/remotes/${remoteName}/`],
       { cwd }
     );
 
@@ -222,7 +222,7 @@ async function checkout(branchName, options = {}) {
     }
 
     // Check if local branch exists
-    const { stdout: localBranches } = await execGit('git branch --list', { cwd });
+    const { stdout: localBranches } = await execGit(['branch', '--list'], { cwd });
     const hasLocal = localBranches
       .split('\n')
       .some((b) => b.trim().replace('* ', '') === safeName);
@@ -230,13 +230,14 @@ async function checkout(branchName, options = {}) {
     if (hasLocal) {
       // Local branch exists - just check out
       if (force) {
-        await execGit(`git checkout -- . 2>/dev/null; git checkout "${safeName}"`, { cwd });
+        await execGit(['checkout', '--', '.'], { cwd });
+        await execGit(['checkout', safeName], { cwd });
       } else {
-        await execGit(`git checkout "${safeName}"`, { cwd });
+        await execGit(['checkout', safeName], { cwd });
       }
     } else {
       // Create local branch from remote
-      await execGit(`git checkout -b "${safeName}" "${remoteName}/${safeName}"`, { cwd });
+      await execGit(['checkout', '-b', safeName, `${remoteName}/${safeName}`], { cwd });
     }
 
     return { success: true };
@@ -282,7 +283,7 @@ async function getPreviewData(branchName, options = {}) {
     let files = [];
     try {
       const { stdout: diffFiles } = await execGit(
-        `git diff --name-only HEAD..."${safeName}" 2>/dev/null`,
+        ['diff', '--name-only', `HEAD...${safeName}`],
         { cwd }
       );
       files = diffFiles.split('\n').filter(Boolean).slice(0, fileCount);
@@ -331,7 +332,7 @@ async function generateSparkline(branchName, options = {}) {
  */
 async function getLocalBranches(cwd) {
   try {
-    const { stdout } = await execGit('git branch --list', { cwd });
+    const { stdout } = await execGit(['branch', '--list'], { cwd });
     return stdout
       .split('\n')
       .map((b) => b.trim().replace('* ', ''))
@@ -361,7 +362,7 @@ async function localBranchExists(branchName, cwd) {
  */
 async function getGoneBranches(cwd) {
   try {
-    const { stdout } = await execGit('git branch -vv', { cwd });
+    const { stdout } = await execGit(['branch', '-vv'], { cwd });
     const gone = [];
     for (const line of stdout.split('\n')) {
       // Match lines like "  branch-name  abc1234 [origin/branch-name: gone] commit msg"

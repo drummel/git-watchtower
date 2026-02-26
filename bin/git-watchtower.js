@@ -676,17 +676,27 @@ function stopServerProcess() {
 
   addLog('Stopping server...', 'update');
 
+  // Capture reference before nulling — needed for deferred SIGKILL
+  const proc = serverProcess;
+
   // Try graceful shutdown first
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', serverProcess.pid, '/f', '/t']);
+    spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
   } else {
-    serverProcess.kill('SIGTERM');
-    // Force kill after timeout
-    setTimeout(() => {
-      if (serverProcess) {
-        serverProcess.kill('SIGKILL');
+    proc.kill('SIGTERM');
+    // Force kill after grace period if process hasn't exited
+    const forceKillTimeout = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch (e) {
+        // Process may already be dead
       }
     }, 3000);
+
+    // Clear the force-kill timer if the process exits cleanly
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
   }
 
   serverProcess = null;
@@ -796,15 +806,28 @@ const LIVE_RELOAD_SCRIPT = `
 // Utility Functions
 // ============================================================================
 
+// Default timeout for execAsync (30 seconds) — prevents hung git/CLI commands
+// from permanently blocking the polling loop
+const EXEC_ASYNC_TIMEOUT = 30000;
+
 function execAsync(command, options = {}) {
+  const { timeout = EXEC_ASYNC_TIMEOUT, ...restOptions } = options;
   return new Promise((resolve, reject) => {
-    exec(command, { cwd: PROJECT_ROOT, ...options }, (error, stdout, stderr) => {
+    const child = exec(command, { cwd: PROJECT_ROOT, timeout, ...restOptions }, (error, stdout, stderr) => {
       if (error) {
         reject({ error, stdout, stderr });
       } else {
         resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
       }
     });
+    // Also kill the child if the timeout fires (exec timeout sends SIGTERM
+    // but doesn't guarantee cleanup of process trees)
+    if (timeout > 0) {
+      const killTimer = setTimeout(() => {
+        try { child.kill('SIGKILL'); } catch (e) { /* already dead */ }
+      }, timeout + 5000);
+      child.on('close', () => clearTimeout(killTimer));
+    }
   });
 }
 
@@ -2009,6 +2032,16 @@ const server = http.createServer((req, res) => {
 
   pathname = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
   let filePath = path.join(STATIC_DIR, pathname);
+
+  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal
+  const resolvedPath = path.resolve(filePath);
+  const resolvedStaticDir = path.resolve(STATIC_DIR);
+  if (!resolvedPath.startsWith(resolvedStaticDir + path.sep) && resolvedPath !== resolvedStaticDir) {
+    res.writeHead(403, { 'Content-Type': 'text/html' });
+    res.end('<h1>403 Forbidden</h1>');
+    addServerLog(`GET ${logPath} → 403 (path traversal blocked)`, true);
+    return;
+  }
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     filePath = path.join(filePath, 'index.html');

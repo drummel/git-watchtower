@@ -3,6 +3,7 @@
  * Defines the structure and validation for Git Watchtower configuration
  */
 
+const path = require('path');
 const { ConfigError, ValidationError } = require('../utils/errors');
 
 /**
@@ -183,12 +184,36 @@ function validateConfig(config) {
       if (typeof config.server.staticDir !== 'string') {
         throw ConfigError.invalid('server.staticDir must be a string');
       }
+      // Reject absolute paths and path traversal attempts
+      if (path.isAbsolute(config.server.staticDir)) {
+        throw ConfigError.invalid(
+          'server.staticDir must be a relative path within the project',
+          { field: 'server.staticDir', value: config.server.staticDir }
+        );
+      }
+      const resolved = path.resolve(config.server.staticDir);
+      const cwd = process.cwd();
+      if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+        throw ConfigError.invalid(
+          'server.staticDir must not escape the project directory',
+          { field: 'server.staticDir', value: config.server.staticDir }
+        );
+      }
       result.server.staticDir = config.server.staticDir;
     }
 
     if (config.server.command !== undefined) {
       if (typeof config.server.command !== 'string') {
         throw ConfigError.invalid('server.command must be a string');
+      }
+      // Reject commands containing shell injection patterns
+      const dangerousPatterns = /[|;&`$(){}]|>\s*\/|<\s*\//;
+      if (config.server.command && dangerousPatterns.test(config.server.command)) {
+        throw ConfigError.invalid(
+          'server.command contains potentially dangerous shell characters (|;&`$(){}). ' +
+          'Only simple commands like "npm run dev" are allowed.',
+          { field: 'server.command', value: config.server.command }
+        );
       }
       result.server.command = config.server.command;
     }
