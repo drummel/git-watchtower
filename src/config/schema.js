@@ -3,6 +3,7 @@
  * Defines the structure and validation for Git Watchtower configuration
  */
 
+const path = require('path');
 const { ConfigError, ValidationError } = require('../utils/errors');
 
 /**
@@ -182,6 +183,21 @@ function validateConfig(config) {
     if (config.server.staticDir !== undefined) {
       if (typeof config.server.staticDir !== 'string') {
         throw ConfigError.invalid('server.staticDir must be a string');
+      }
+      // Reject absolute paths and path traversal attempts
+      if (path.isAbsolute(config.server.staticDir)) {
+        throw ConfigError.invalid(
+          'server.staticDir must be a relative path within the project',
+          { field: 'server.staticDir', value: config.server.staticDir }
+        );
+      }
+      const resolved = path.resolve(config.server.staticDir);
+      const cwd = process.cwd();
+      if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+        throw ConfigError.invalid(
+          'server.staticDir must not escape the project directory',
+          { field: 'server.staticDir', value: config.server.staticDir }
+        );
       }
       result.server.staticDir = config.server.staticDir;
     }

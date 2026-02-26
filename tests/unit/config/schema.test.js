@@ -182,6 +182,25 @@ describe('validateConfig', () => {
       ValidationError
     );
   });
+
+  it('should reject absolute staticDir paths', () => {
+    assert.throws(
+      () => validateConfig({ server: { staticDir: '/etc/passwd' } }),
+      ConfigError
+    );
+  });
+
+  it('should reject staticDir with path traversal', () => {
+    assert.throws(
+      () => validateConfig({ server: { staticDir: '../../../etc' } }),
+      ConfigError
+    );
+  });
+
+  it('should accept valid relative staticDir', () => {
+    const result = validateConfig({ server: { staticDir: 'public' } });
+    assert.strictEqual(result.server.staticDir, 'public');
+  });
 });
 
 describe('migrateConfig', () => {
