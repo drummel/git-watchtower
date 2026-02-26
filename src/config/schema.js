@@ -206,6 +206,15 @@ function validateConfig(config) {
       if (typeof config.server.command !== 'string') {
         throw ConfigError.invalid('server.command must be a string');
       }
+      // Reject commands containing shell injection patterns
+      const dangerousPatterns = /[|;&`$(){}]|>\s*\/|<\s*\//;
+      if (config.server.command && dangerousPatterns.test(config.server.command)) {
+        throw ConfigError.invalid(
+          'server.command contains potentially dangerous shell characters (|;&`$(){}). ' +
+          'Only simple commands like "npm run dev" are allowed.',
+          { field: 'server.command', value: config.server.command }
+        );
+      }
       result.server.command = config.server.command;
     }
 
