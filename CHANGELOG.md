@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/drummel/git-watchtower/compare/v1.5.0...v1.6.0) (2026-02-26)
+
+
+### Features
+
+* add cleanup tool for branches with deleted remotes ([86e34aa](https://github.com/drummel/git-watchtower/commit/86e34aa277ccc5a61cd5d18e5302877b47fe77d8))
+
 # [1.5.0](https://github.com/drummel/git-watchtower/compare/v1.4.0...v1.5.0) (2026-02-20)
 
 
