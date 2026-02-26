@@ -676,17 +676,27 @@ function stopServerProcess() {
 
   addLog('Stopping server...', 'update');
 
+  // Capture reference before nulling — needed for deferred SIGKILL
+  const proc = serverProcess;
+
   // Try graceful shutdown first
   if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', serverProcess.pid, '/f', '/t']);
+    spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
   } else {
-    serverProcess.kill('SIGTERM');
-    // Force kill after timeout
-    setTimeout(() => {
-      if (serverProcess) {
-        serverProcess.kill('SIGKILL');
+    proc.kill('SIGTERM');
+    // Force kill after grace period if process hasn't exited
+    const forceKillTimeout = setTimeout(() => {
+      try {
+        proc.kill('SIGKILL');
+      } catch (e) {
+        // Process may already be dead
       }
     }, 3000);
+
+    // Clear the force-kill timer if the process exits cleanly
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
   }
 
   serverProcess = null;

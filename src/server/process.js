@@ -235,32 +235,31 @@ class ProcessManager {
       return false;
     }
 
-    const pid = this.process.pid;
+    // Capture reference before nulling — needed for deferred SIGKILL
+    const proc = this.process;
 
     // Try graceful shutdown first
     if (process.platform === 'win32') {
       try {
-        spawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+        spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
       } catch (e) {
         // Ignore taskkill errors
       }
     } else {
       try {
-        this.process.kill('SIGTERM');
+        proc.kill('SIGTERM');
 
         // Force kill after grace period
         const forceKillTimeout = setTimeout(() => {
-          if (this.process) {
-            try {
-              this.process.kill('SIGKILL');
-            } catch (e) {
-              // Process may already be dead
-            }
+          try {
+            proc.kill('SIGKILL');
+          } catch (e) {
+            // Process may already be dead
           }
         }, KILL_GRACE_PERIOD);
 
         // Clear timeout if process exits cleanly
-        this.process.once('close', () => {
+        proc.once('close', () => {
           clearTimeout(forceKillTimeout);
         });
       } catch (e) {
