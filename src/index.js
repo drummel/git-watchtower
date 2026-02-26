@@ -110,6 +110,7 @@ module.exports = {
   stash: gitCommands.stash,
   stashPop: gitCommands.stashPop,
   getChangedFiles: gitCommands.getChangedFiles,
+  deleteLocalBranch: gitCommands.deleteLocalBranch,
 
   // Git branch operations
   isValidBranchName: gitBranch.isValidBranchName,
@@ -122,6 +123,8 @@ module.exports = {
   generateSparkline: gitBranch.generateSparkline,
   getLocalBranches: gitBranch.getLocalBranches,
   localBranchExists: gitBranch.localBranchExists,
+  getGoneBranches: gitBranch.getGoneBranches,
+  deleteGoneBranches: gitBranch.deleteGoneBranches,
 
   // Configuration schema
   SERVER_MODES: configSchema.SERVER_MODES,

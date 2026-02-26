@@ -279,6 +279,37 @@ function decreaseVisibleBranches(state) {
 }
 
 // ---------------------------------------------------------------------------
+// Cleanup confirm modal
+// ---------------------------------------------------------------------------
+
+/**
+ * Open the cleanup confirmation modal.
+ * @param {object} state
+ * @param {string[]} goneBranches - Branch names to be cleaned up
+ * @returns {object} State updates.
+ */
+function openCleanupConfirm(state, goneBranches) {
+  return {
+    cleanupConfirmMode: true,
+    cleanupBranches: goneBranches,
+    cleanupSelectedIndex: 0,
+  };
+}
+
+/**
+ * Close the cleanup confirmation modal.
+ * @param {object} state
+ * @returns {object} State updates.
+ */
+function closeCleanupConfirm(state) {
+  return {
+    cleanupConfirmMode: false,
+    cleanupBranches: null,
+    cleanupSelectedIndex: 0,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Dismiss flash / error
 // ---------------------------------------------------------------------------
 
@@ -367,6 +398,10 @@ module.exports = {
   toggleInfo,
   toggleLogView,
   closeActionModal,
+
+  // cleanup confirm
+  openCleanupConfirm,
+  closeCleanupConfirm,
 
   // log view
   switchLogTab,

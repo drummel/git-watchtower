@@ -15,6 +15,8 @@ const {
   generateSparkline,
   getLocalBranches,
   localBranchExists,
+  getGoneBranches,
+  deleteGoneBranches,
 } = require('../../../src/git/branch');
 const { GitError } = require('../../../src/utils/errors');
 
@@ -436,6 +438,123 @@ describe('branch.js integration tests', () => {
 
       const result = await localBranchExists('remote-only', fixture.path);
       assert.strictEqual(result, false);
+    });
+  });
+
+  describe('getGoneBranches', () => {
+    it('should return empty array when no branches have gone remotes', async () => {
+      const gone = await getGoneBranches(fixture.path);
+      assert.deepStrictEqual(gone, []);
+    });
+
+    it('should detect branches whose remote tracking branch was deleted', async () => {
+      const remotePath = fixture.createRemote('origin');
+
+      // Create a branch, push it, then delete it from remote
+      fixture.createBranch('stale-feature', true);
+      fixture.commit('Feature commit', true);
+      fixture.push('stale-feature');
+      // Set up tracking
+      fixture.git('branch --set-upstream-to=origin/stale-feature stale-feature');
+
+      // Go back to master
+      fixture.checkout('master');
+
+      // Delete the branch on the remote directly
+      require('child_process').execSync(`git branch -D stale-feature`, {
+        cwd: remotePath,
+        encoding: 'utf8',
+      });
+
+      // Fetch with prune to update tracking state
+      fixture.git('fetch --prune origin');
+
+      const gone = await getGoneBranches(fixture.path);
+      assert.ok(gone.includes('stale-feature'), `Expected 'stale-feature' in gone branches: ${JSON.stringify(gone)}`);
+    });
+
+    it('should not include branches with active remotes', async () => {
+      fixture.createRemote('origin');
+
+      // Create a branch and push it (still active on remote)
+      fixture.createBranch('active-feature', true);
+      fixture.commit('Feature commit', true);
+      fixture.push('active-feature');
+      fixture.git('branch --set-upstream-to=origin/active-feature active-feature');
+      fixture.checkout('master');
+
+      const gone = await getGoneBranches(fixture.path);
+      assert.ok(!gone.includes('active-feature'), `'active-feature' should not be in gone branches`);
+    });
+  });
+
+  describe('deleteGoneBranches', () => {
+    it('should delete specified branches', async () => {
+      // Create branches to delete
+      fixture.createBranch('to-delete-1');
+      fixture.createBranch('to-delete-2');
+
+      const result = await deleteGoneBranches(['to-delete-1', 'to-delete-2'], { cwd: fixture.path });
+      assert.strictEqual(result.deleted.length, 2);
+      assert.ok(result.deleted.includes('to-delete-1'));
+      assert.ok(result.deleted.includes('to-delete-2'));
+      assert.strictEqual(result.failed.length, 0);
+
+      // Verify branches are actually gone
+      const branches = await getLocalBranches(fixture.path);
+      assert.ok(!branches.includes('to-delete-1'));
+      assert.ok(!branches.includes('to-delete-2'));
+    });
+
+    it('should not delete the current branch', async () => {
+      const result = await deleteGoneBranches(['master'], { cwd: fixture.path });
+      assert.strictEqual(result.deleted.length, 0);
+      assert.strictEqual(result.failed.length, 1);
+      assert.strictEqual(result.failed[0].name, 'master');
+      assert.ok(result.failed[0].error.includes('currently checked out'));
+    });
+
+    it('should report failures for unmerged branches without force', async () => {
+      // Create a branch with unique commits
+      fixture.createBranch('unmerged-feature', true);
+      fixture.createFile('unique.txt', 'unique content');
+      fixture.git('add .');
+      fixture.commit('Unique commit');
+      fixture.checkout('master');
+
+      const result = await deleteGoneBranches(['unmerged-feature'], { cwd: fixture.path });
+      // git branch -d should fail because it has unmerged commits
+      assert.strictEqual(result.failed.length, 1);
+      assert.strictEqual(result.failed[0].name, 'unmerged-feature');
+    });
+
+    it('should force delete unmerged branches when force=true', async () => {
+      // Create a branch with unique commits
+      fixture.createBranch('unmerged-feature', true);
+      fixture.createFile('unique.txt', 'unique content');
+      fixture.git('add .');
+      fixture.commit('Unique commit');
+      fixture.checkout('master');
+
+      const result = await deleteGoneBranches(['unmerged-feature'], { force: true, cwd: fixture.path });
+      assert.strictEqual(result.deleted.length, 1);
+      assert.ok(result.deleted.includes('unmerged-feature'));
+      assert.strictEqual(result.failed.length, 0);
+    });
+
+    it('should handle mixed success and failure', async () => {
+      // Create one merged and one unmerged branch
+      fixture.createBranch('merged-branch');
+      fixture.createBranch('unmerged-branch', true);
+      fixture.createFile('unique2.txt', 'unique content');
+      fixture.git('add .');
+      fixture.commit('Unique commit');
+      fixture.checkout('master');
+
+      const result = await deleteGoneBranches(['merged-branch', 'unmerged-branch'], { cwd: fixture.path });
+      assert.ok(result.deleted.includes('merged-branch'));
+      assert.strictEqual(result.failed.length, 1);
+      assert.strictEqual(result.failed[0].name, 'unmerged-branch');
     });
   });
 });

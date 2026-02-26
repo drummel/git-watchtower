@@ -348,6 +348,29 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
   }
 }
 
+/**
+ * Delete a local branch
+ * @param {string} branchName - Branch to delete
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.force=false] - Force delete (git branch -D) even if not fully merged
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{success: boolean, error?: GitError}>}
+ */
+async function deleteLocalBranch(branchName, options = {}) {
+  const { force = false, cwd } = options;
+  const flag = force ? '-D' : '-d';
+
+  try {
+    await execGit(`git branch ${flag} "${branchName}"`, { cwd });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof GitError ? error : GitError.fromExecError(error, `branch ${flag}`),
+    };
+  }
+}
+
 module.exports = {
   execGit,
   execGitSilent,
@@ -365,6 +388,7 @@ module.exports = {
   getChangedFiles,
   parseDiffStats,
   getDiffStats,
+  deleteLocalBranch,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 };

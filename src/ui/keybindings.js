@@ -152,6 +152,8 @@ function getNormalModeAction(key) {
       return 'stash';
     case 'c':
       return 'toggle_casino';
+    case 'D':
+      return 'cleanup_branches';
     case 'q':
     case KEYS.CTRL_C:
       return 'quit';

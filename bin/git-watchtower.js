@@ -77,7 +77,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
-const { isValidBranchName, sanitizeBranchName } = require('../src/git/branch');
+const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
 const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
 
 // ============================================================================
@@ -1189,6 +1189,11 @@ function render() {
   // Error toast renders on top of everything for maximum visibility
   if (state.errorToast) {
     renderer.renderErrorToast(state, write);
+  }
+
+  // Cleanup confirmation dialog
+  if (state.cleanupConfirmMode) {
+    renderer.renderCleanupConfirm(state, write);
   }
 
   // Stash confirmation dialog renders on top of everything
@@ -2329,6 +2334,59 @@ function setupKeyboardInput() {
       return; // Ignore other keys in action mode
     }
 
+    // Handle cleanup confirmation dialog
+    if (store.get('cleanupConfirmMode')) {
+      const cleanupBranches = store.get('cleanupBranches') || [];
+      const maxOptions = cleanupBranches.length > 0 ? 3 : 1;
+      if (key === '\u001b[A' || key === 'k') { // Up
+        const idx = store.get('cleanupSelectedIndex') || 0;
+        if (idx > 0) {
+          store.setState({ cleanupSelectedIndex: idx - 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down
+        const idx = store.get('cleanupSelectedIndex') || 0;
+        if (idx < maxOptions - 1) {
+          store.setState({ cleanupSelectedIndex: idx + 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\r' || key === '\n') { // Enter — execute selected option
+        const idx = store.get('cleanupSelectedIndex') || 0;
+        applyUpdates(actions.closeCleanupConfirm(getActionState()));
+        render();
+        if (cleanupBranches.length === 0 || idx === maxOptions - 1) {
+          // Cancel or Close (no branches)
+          return;
+        }
+        const force = idx === 1; // 0=safe delete, 1=force delete, 2=cancel
+        addLog(`Cleaning up ${cleanupBranches.length} stale branch${cleanupBranches.length === 1 ? '' : 'es'}${force ? ' (force)' : ''}...`, 'update');
+        render();
+        const result = await deleteGoneBranches(cleanupBranches, { force });
+        for (const name of result.deleted) {
+          addLog(`Deleted branch: ${name}`, 'success');
+        }
+        for (const f of result.failed) {
+          addLog(`Failed to delete ${f.name}: ${f.error}`, 'error');
+        }
+        if (result.deleted.length > 0) {
+          addLog(`Cleaned up ${result.deleted.length} branch${result.deleted.length === 1 ? '' : 'es'}`, 'success');
+          await pollGitChanges();
+        }
+        render();
+        return;
+      }
+      if (key === '\u001b') { // Escape — cancel
+        applyUpdates(actions.closeCleanupConfirm(getActionState()));
+        render();
+        return;
+      }
+      return; // Ignore other keys in cleanup mode
+    }
+
     // Handle stash confirmation dialog
     if (store.get('stashConfirmMode')) {
       if (key === '\u001b[A' || key === 'k') { // Up
@@ -2561,6 +2619,15 @@ function setupKeyboardInput() {
             casinoSounds.playJackpot();
           }
         }
+        render();
+        break;
+      }
+
+      case 'D': { // Cleanup stale branches (remotes deleted)
+        addLog('Scanning for stale branches...', 'info');
+        render();
+        const goneBranches = await getGoneBranches();
+        applyUpdates(actions.openCleanupConfirm(actionState, goneBranches));
         render();
         break;
       }
