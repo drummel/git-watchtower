@@ -394,7 +394,8 @@ describe('getHelpText', () => {
 });
 
 describe('PACKAGE_VERSION', () => {
-  it('should be a semver string', () => {
-    assert.match(PACKAGE_VERSION, /^\d+\.\d+\.\d+$/);
+  it('should match the version in package.json', () => {
+    const { version } = require('../../../package.json');
+    assert.equal(PACKAGE_VERSION, version);
   });
 });

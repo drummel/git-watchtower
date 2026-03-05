@@ -3,7 +3,7 @@
  * @module cli/args
  */
 
-const PACKAGE_VERSION = '1.2.0';
+const { version: PACKAGE_VERSION } = require('../../package.json');
 
 /**
  * @typedef {object} CliArgs
