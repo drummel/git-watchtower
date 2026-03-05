@@ -52,6 +52,8 @@
   },
   "files": [
     "bin/git-watchtower.js",
+    "src/",
+    "sounds/",
     "README.md",
     "LICENSE"
   ],
@@ -85,5 +87,8 @@
         }
       ]
     ]
+  },
+  "dependencies": {
+    "posthog-node": "^5.28.0"
   }
 }

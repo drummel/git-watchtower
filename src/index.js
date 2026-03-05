@@ -34,6 +34,9 @@ const configLoader = require('./config/loader');
 // Server management
 const serverProcess = require('./server/process');
 
+// Telemetry
+const telemetryModule = require('./telemetry');
+
 // CLI and utilities
 const cliArgs = require('./cli/args');
 const timeUtils = require('./utils/time');
@@ -163,6 +166,9 @@ module.exports = {
   formatTimeAgo: timeUtils.formatTimeAgo,
   openInBrowser: browserUtils.openInBrowser,
   playSound: soundUtils.playSound,
+
+  // Telemetry
+  telemetry: telemetryModule,
 
   // Git remote URL utilities
   parseRemoteUrl: gitRemote.parseRemoteUrl,
