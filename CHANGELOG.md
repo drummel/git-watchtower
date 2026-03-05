@@ -1,3 +1,15 @@
+# [1.7.0](https://github.com/drummel/git-watchtower/compare/v1.6.1...v1.7.0) (2026-03-05)
+
+
+### Bug Fixes
+
+* include stack traces in PostHog error reporting ([ac6003f](https://github.com/drummel/git-watchtower/commit/ac6003faafcf189dfe6d3786f3f05aeb3c0c26cd))
+
+
+### Features
+
+* add opt-in PostHog analytics and error reporting ([8326a6c](https://github.com/drummel/git-watchtower/commit/8326a6cd66691581f7ad60de1d7995aea3b671e1))
+
 ## [1.6.1](https://github.com/drummel/git-watchtower/compare/v1.6.0...v1.6.1) (2026-02-26)
 
 
