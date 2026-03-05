@@ -79,19 +79,28 @@ function captureError(error) {
   try {
     const errorType = error.constructor?.name || 'Error';
     const errorCode = /** @type {any} */ (error).code || '';
-    // Truncate message to avoid sending sensitive data
-    const errorMessage = errorCode || (error.message || '').substring(0, 100);
+    const errorMessage = errorCode || (error.message || '').substring(0, 200);
+
+    /** @type {Record<string, any>} */
+    const properties = {
+      $exception_type: errorType,
+      $exception_message: errorMessage,
+      $exception_source: 'node',
+      $lib: 'git-watchtower',
+      $lib_version: appVersion,
+    };
+
+    // Include stack trace — contains only our package's file paths and
+    // line numbers, no user data. Required for PostHog error tracking
+    // to group, deduplicate, and show useful backtraces.
+    if (error.stack) {
+      properties.$exception_stack_trace_raw = error.stack;
+    }
 
     client.capture({
       distinctId,
       event: '$exception',
-      properties: {
-        $exception_type: errorType,
-        $exception_message: errorMessage,
-        $exception_source: 'node',
-        $lib: 'git-watchtower',
-        $lib_version: appVersion,
-      },
+      properties,
     });
   } catch {
     // Never let telemetry errors affect the app
