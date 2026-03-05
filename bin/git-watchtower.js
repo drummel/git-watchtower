@@ -66,6 +66,9 @@ const casinoSounds = require('../src/casino/sounds');
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
 
+// Telemetry (opt-in PostHog analytics)
+const telemetry = require('../src/telemetry');
+
 // Extracted modules
 const { formatTimeAgo } = require('../src/utils/time');
 const { openInBrowser: openUrl } = require('../src/utils/browser');
@@ -195,6 +198,7 @@ async function runConfigurationWizard() {
 
   // Save configuration
   saveConfig(config);
+  telemetry.capture('config_wizard_completed', { server_mode: config.server.mode });
 
   console.log('\n✓ Configuration saved to ' + CONFIG_FILE_NAME);
   console.log('  You can edit this file manually or delete it to reconfigure.\n');
@@ -366,6 +370,10 @@ let REMOTE_NAME = 'origin';
 let AUTO_PULL = true;
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
+
+// Telemetry session tracking
+let branchSwitchCount = 0;
+let sessionStartTime = null;
 
 // Server process management (for command mode)
 let serverProcess = null;
@@ -1419,6 +1427,7 @@ async function switchToBranch(branchName, recordHistory = true) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
       pendingDirtyOperation = { type: 'switch', branch: branchName };
       showStashConfirm(`switch to ${branchName}`);
+      telemetry.capture('dirty_repo_encountered');
       return { success: false, reason: 'dirty' };
     }
 
@@ -1451,6 +1460,8 @@ async function switchToBranch(branchName, recordHistory = true) {
     }
 
     addLog(`Switched to ${safeBranchName}`, 'success');
+    telemetry.capture('branch_switched');
+    branchSwitchCount++;
     pendingDirtyOperation = null;
 
     // Restart server if configured (command mode)
@@ -1480,6 +1491,7 @@ async function switchToBranch(branchName, recordHistory = true) {
         truncate(errMsg, 100),
         'Check the activity log for details'
       );
+      telemetry.captureError(e);
     }
     return { success: false };
   }
@@ -1588,6 +1600,7 @@ async function stashAndRetry() {
   }
 
   addLog('Changes stashed successfully', 'success');
+  telemetry.capture('stash_performed');
 
   if (operation.type === 'switch') {
     const switchResult = await switchToBranch(operation.branch);
@@ -2248,6 +2261,7 @@ function setupKeyboardInput() {
           openInBrowser(prUrl);
         } else if (!prInfo && prLoaded && cliReady) {
           // Create PR — only if we've confirmed no PR exists (prLoaded=true)
+          telemetry.capture('pr_action', { action: 'create' });
           addLog(`Creating ${prLabel} for ${aBranch.name}...`, 'update');
           render();
           try {
@@ -2289,6 +2303,7 @@ function setupKeyboardInput() {
         return;
       }
       if (key === 'a' && prInfo && cliReady) { // Approve PR
+        telemetry.capture('pr_action', { action: 'approve' });
         addLog(`Approving ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
@@ -2308,6 +2323,7 @@ function setupKeyboardInput() {
         return;
       }
       if (key === 'm' && prInfo && cliReady) { // Merge PR
+        telemetry.capture('pr_action', { action: 'merge' });
         addLog(`Merging ${prLabel} #${prInfo.number}...`, 'update');
         render();
         try {
@@ -2406,6 +2422,7 @@ function setupKeyboardInput() {
           addLog(`Failed to delete ${f.name}: ${f.error}`, 'error');
         }
         if (result.deleted.length > 0) {
+          telemetry.capture('cleanup_branches_deleted', { count: result.deleted.length });
           addLog(`Cleaned up ${result.deleted.length} branch${result.deleted.length === 1 ? '' : 'es'}`, 'success');
           await pollGitChanges();
         }
@@ -2528,12 +2545,14 @@ function setupKeyboardInput() {
           render();
           const pvData = await getPreviewData(branch.name);
           store.setState({ previewData: pvData, previewMode: true });
+          telemetry.capture('preview_opened');
           render();
         }
         break;
 
       case '/': // Search mode
         applyUpdates(actions.enterSearchMode(actionState));
+        telemetry.capture('search_used');
         render();
         break;
 
@@ -2548,11 +2567,13 @@ function setupKeyboardInput() {
         break;
 
       case 'u': // Undo last switch
+        telemetry.capture('undo_branch_switch');
         await undoLastSwitch();
         await pollGitChanges();
         break;
 
       case 'p':
+        telemetry.capture('pull_forced');
         await pullCurrentBranch();
         await pollGitChanges();
         break;
@@ -2591,6 +2612,7 @@ function setupKeyboardInput() {
         const branch = displayBranches.length > 0 && curSelIdx < displayBranches.length
           ? displayBranches[curSelIdx] : null;
         if (branch) {
+          telemetry.capture('branch_actions_opened');
           // Phase 1: Open modal instantly with local/cached data
           const localData = gatherLocalActionData(branch);
           store.setState({ actionData: localData, actionMode: true, actionLoading: !localData.prLoaded });
@@ -2625,8 +2647,10 @@ function setupKeyboardInput() {
 
       case 's': {
         applyUpdates(actions.toggleSound(actionState));
-        addLog(`Sound notifications ${store.get('soundEnabled') ? 'enabled' : 'disabled'}`, 'info');
-        if (store.get('soundEnabled')) playSound();
+        const soundNowEnabled = store.get('soundEnabled');
+        addLog(`Sound notifications ${soundNowEnabled ? 'enabled' : 'disabled'}`, 'info');
+        telemetry.capture('sound_toggled', { enabled: soundNowEnabled });
+        if (soundNowEnabled) playSound();
         render();
         break;
       }
@@ -2645,6 +2669,7 @@ function setupKeyboardInput() {
       case 'c': { // Toggle casino mode
         const newCasinoState = casino.toggle();
         store.setState({ casinoModeEnabled: newCasinoState });
+        telemetry.capture('casino_mode_toggled', { enabled: newCasinoState });
         addLog(`Casino mode ${newCasinoState ? '🎰 ENABLED' : 'disabled'}`, newCasinoState ? 'success' : 'info');
         if (newCasinoState) {
           addLog(`Have you noticed this game has that 'variable rewards' thing going on? 🤔😉`, 'info');
@@ -2754,6 +2779,14 @@ async function shutdown() {
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
 
+  // Flush telemetry
+  telemetry.capture('session_ended', {
+    duration_seconds: sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0,
+    branch_switches: branchSwitchCount,
+    branches_count: store.get('branches').length,
+  });
+  await telemetry.shutdown();
+
   console.log('\n✓ Git Watchtower stopped\n');
   process.exit(0);
 }
@@ -2761,6 +2794,7 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 process.on('uncaughtException', (err) => {
+  telemetry.captureError(err);
   write(ansi.showCursor);
   write(ansi.restoreScreen);
   restoreTerminalTitle();
@@ -2786,6 +2820,19 @@ async function start() {
   // Load or create configuration
   const config = await ensureConfig(cliArgs);
   applyConfig(config);
+
+  // Telemetry: opt-in prompt (first run only) and initialization
+  await telemetry.promptIfNeeded(promptYesNo);
+  telemetry.init({ version: PACKAGE_VERSION });
+  sessionStartTime = Date.now();
+  telemetry.capture('tool_launched', {
+    version: PACKAGE_VERSION,
+    node_version: process.version,
+    os: process.platform,
+    server_mode: SERVER_MODE,
+    has_config: !!loadConfig(),
+    casino_mode: config.casinoMode || false,
+  });
 
   // Set up casino mode render callback for animations
   casino.setRenderCallback(render);
