@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/drummel/git-watchtower/compare/v1.8.0...v1.8.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* account for server status dot in header width calculation ([f390309](https://github.com/drummel/git-watchtower/commit/f390309365a782d04b436b4629d2e0409c9c51df))
+
 # [1.8.0](https://github.com/drummel/git-watchtower/compare/v1.7.1...v1.8.0) (2026-03-06)
 
 
