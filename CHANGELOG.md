@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/drummel/git-watchtower/compare/v1.8.1...v1.8.2) (2026-03-06)
+
+
+### Bug Fixes
+
+* add update check with interactive update modal ([1dc283c](https://github.com/drummel/git-watchtower/commit/1dc283c487e96ac1c4e3335262fdbd39c719db3d))
+
 ## [1.8.1](https://github.com/drummel/git-watchtower/compare/v1.8.0...v1.8.1) (2026-03-06)
 
 
