@@ -96,19 +96,19 @@ function renderHeader(state, write) {
   }
 
   let serverInfo = '';
-  let serverInfoVisible = '';
+  let serverInfoVisibleLen = 0;
   if (state.serverMode === 'none') {
-    serverInfoVisible = '';
+    serverInfoVisibleLen = 0;
   } else {
     const statusDot = state.serverRunning
       ? ansi.green + '\u25CF'
       : (state.serverCrashed ? ansi.red + '\u25CF' : ansi.gray + '\u25CB');
-    serverInfoVisible = `localhost:${state.port} `;
+    serverInfoVisibleLen = 2 + `localhost:${state.port} `.length; // dot + space + "localhost:PORT "
     serverInfo = statusDot + ansi.white + ` localhost:${state.port} `;
   }
 
   const rightContent = `${modeBadge} ${serverInfo}${statusIcon}${ansi.bgBlue} ${soundIcon}${ansi.bgBlue} `;
-  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisible.length + 5;
+  const rightVisibleLen = modeLabel.length + 1 + serverInfoVisibleLen + 5;
 
   const usedSpace = leftVisibleLen + badgesVisibleLen + rightVisibleLen;
   const padding = Math.max(1, width - usedSpace);
