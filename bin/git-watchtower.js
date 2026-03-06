@@ -74,6 +74,7 @@ const { formatTimeAgo } = require('../src/utils/time');
 const { openInBrowser: openUrl } = require('../src/utils/browser');
 const { playSound: playSoundEffect } = require('../src/utils/sound');
 const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
+const { checkForUpdate } = require('../src/utils/version-check');
 const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
 const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
@@ -2953,6 +2954,15 @@ async function start() {
 
   // Initial render
   render();
+
+  // Check for newer version on npm (non-blocking, silent on failure)
+  checkForUpdate().then((latestVersion) => {
+    if (latestVersion) {
+      store.setState({ updateAvailable: latestVersion });
+      addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
+      render();
+    }
+  }).catch(() => {});
 }
 
 start().catch(err => {

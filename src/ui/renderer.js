@@ -73,6 +73,11 @@ function renderHeader(state, write) {
     badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
     badgesVisibleLen += 1 + label.length;
   }
+  if (state.updateAvailable) {
+    const label = ` UPDATE v${state.updateAvailable} `;
+    badges += ' ' + ansi.bgMagenta + ansi.white + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
   write(badges);
 
   let modeLabel = '';
