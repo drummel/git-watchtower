@@ -23,6 +23,7 @@ const {
 } = require('../ui/ansi');
 const { formatTimeAgo } = require('../utils/time');
 const { isBaseBranch } = require('../git/pr');
+const { version: PACKAGE_VERSION } = require('../../package.json');
 
 // ---------------------------------------------------------------------------
 // renderHeader
@@ -46,8 +47,9 @@ function renderHeader(state, write) {
   write(ansi.moveTo(headerRow, 1));
   write(ansi.bgBlue + ansi.white + ansi.bold);
 
-  const leftContent = ` \uD83C\uDFF0 Git Watchtower ${ansi.dim}\u2502${ansi.bold} ${state.projectName}`;
-  const leftVisibleLen = 21 + state.projectName.length;
+  const versionStr = `v${PACKAGE_VERSION}`;
+  const leftContent = ` \uD83C\uDFF0 Git Watchtower ${ansi.dim}${versionStr} \u2502${ansi.bold} ${state.projectName}`;
+  const leftVisibleLen = 21 + versionStr.length + 1 + state.projectName.length;
   write(leftContent);
 
   let badges = '';

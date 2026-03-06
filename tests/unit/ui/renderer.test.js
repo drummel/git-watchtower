@@ -91,6 +91,12 @@ function collectState(fn, overrides) {
 // ---------------------------------------------------------------------------
 
 describe('renderHeader', () => {
+  it('should show version from package.json', () => {
+    const { version } = require('../../../package.json');
+    const { text } = collectState(renderHeader);
+    assert.ok(text.includes(`v${version}`), 'Expected version in header');
+  });
+
   it('should show project name', () => {
     const { text } = collectState(renderHeader);
     assert.ok(text.includes('test-project'), 'Expected project name in header');
