@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * Provision a PostHog dashboard with feature-usage insights for git-watchtower.
+ * Provision PostHog insights for git-watchtower feature-usage tracking.
  *
  * Usage:
- *   POSTHOG_API_KEY=phx_... node scripts/setup-posthog-dashboard.js
+ *   # Create a new dashboard with all tiles:
+ *   POSTHOG_API_KEY=phx_... npm run dashboard:setup
+ *
+ *   # Add tiles to an existing dashboard:
+ *   POSTHOG_API_KEY=phx_... POSTHOG_DASHBOARD_ID=12345 npm run dashboard:setup
  *
  * Environment variables:
- *   POSTHOG_API_KEY   – Personal API key (not the project key) with project write access
- *   POSTHOG_HOST      – PostHog host (default: https://us.posthog.com)
- *   POSTHOG_PROJECT_ID – Project ID (default: auto-detected from /api/projects/)
- *
- * The script is idempotent: running it again creates a new dashboard each time,
- * so you can iterate freely during development.
+ *   POSTHOG_API_KEY      – Personal API key (not the project key) with project write access
+ *   POSTHOG_HOST         – PostHog host (default: https://app.posthog.com)
+ *   POSTHOG_PROJECT_ID   – Project ID (default: auto-detected from /api/projects/)
+ *   POSTHOG_DASHBOARD_ID – Existing dashboard ID to add tiles to (default: creates a new one)
  */
 
 const https = require('https');
@@ -23,8 +25,9 @@ const { URL } = require('url');
 // ---------------------------------------------------------------------------
 
 const API_KEY = process.env.POSTHOG_API_KEY;
-const HOST = process.env.POSTHOG_HOST || 'https://us.posthog.com';
+const HOST = process.env.POSTHOG_HOST || 'https://app.posthog.com';
 const PROJECT_ID = process.env.POSTHOG_PROJECT_ID || null;
+const DASHBOARD_ID = process.env.POSTHOG_DASHBOARD_ID || null;
 
 if (!API_KEY) {
   console.error('Error: POSTHOG_API_KEY environment variable is required.');
@@ -362,14 +365,20 @@ async function main() {
 
   const basePath = `/api/projects/${projectId}`;
 
-  // Create dashboard
-  console.log('\nCreating dashboard: "git-watchtower — Feature Usage"...');
-  const dashboard = await api('POST', `${basePath}/dashboards/`, {
-    name: 'git-watchtower — Feature Usage',
-    description:
-      'Feature-level analytics for git-watchtower: which tools are used, how often, and engagement trends.',
-  });
-  console.log(`Dashboard created: ID ${dashboard.id}`);
+  // Use existing dashboard or create a new one
+  let dashboardId = DASHBOARD_ID;
+  if (dashboardId) {
+    console.log(`\nAdding tiles to existing dashboard: ${dashboardId}...`);
+  } else {
+    console.log('\nCreating dashboard: "git-watchtower — Feature Usage"...');
+    const dashboard = await api('POST', `${basePath}/dashboards/`, {
+      name: 'git-watchtower — Feature Usage',
+      description:
+        'Feature-level analytics for git-watchtower: which tools are used, how often, and engagement trends.',
+    });
+    dashboardId = dashboard.id;
+    console.log(`Dashboard created: ID ${dashboardId}`);
+  }
 
   // Create insights and add to dashboard
   const insights = buildInsights();
@@ -380,13 +389,13 @@ async function main() {
       name: insight.name,
       description: insight.description,
       query: insight.query,
-      dashboards: [dashboard.id],
+      dashboards: [dashboardId],
     });
     console.log('done');
   }
 
   console.log(`\nDashboard ready with ${insights.length} tiles.`);
-  console.log(`View it at: ${HOST}/project/${projectId}/dashboard/${dashboard.id}`);
+  console.log(`View it at: ${HOST}/project/${projectId}/dashboard/${dashboardId}`);
 }
 
 main().catch((err) => {
