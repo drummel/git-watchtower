@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/drummel/git-watchtower/compare/v1.7.1...v1.8.0) (2026-03-06)
+
+
+### Features
+
+* add version update notification via npm registry check ([d48e723](https://github.com/drummel/git-watchtower/commit/d48e7230ee8d2ff3e2008d283127135d459ce7e5))
+
 ## [1.7.1](https://github.com/drummel/git-watchtower/compare/v1.7.0...v1.7.1) (2026-03-06)
 
 
