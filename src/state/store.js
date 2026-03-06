@@ -102,6 +102,9 @@
  * @property {string} projectName - Project name
  * @property {number} clientCount - Connected SSE clients
  * @property {string|null} updateAvailable - Latest version if update available, or null
+ * @property {boolean} updateModalVisible - Whether the update notification modal is shown
+ * @property {number} updateModalSelectedIndex - Selected option index in the update modal
+ * @property {boolean} updateInProgress - Whether an update is currently being installed
  */
 
 /**
@@ -184,6 +187,9 @@ function getInitialState() {
 
     // Version check
     updateAvailable: null,
+    updateModalVisible: false,
+    updateModalSelectedIndex: 0,
+    updateInProgress: false,
   };
 }
 

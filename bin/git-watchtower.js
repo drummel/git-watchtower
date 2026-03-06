@@ -74,7 +74,7 @@ const { formatTimeAgo } = require('../src/utils/time');
 const { openInBrowser: openUrl } = require('../src/utils/browser');
 const { playSound: playSoundEffect } = require('../src/utils/sound');
 const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
-const { checkForUpdate } = require('../src/utils/version-check');
+const { checkForUpdate, startPeriodicUpdateCheck } = require('../src/utils/version-check');
 const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
 const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
@@ -1231,6 +1231,11 @@ function render() {
   // Stash confirmation dialog renders on top of everything
   if (state.stashConfirmMode) {
     renderer.renderStashConfirm(state, write);
+  }
+
+  // Update notification modal renders on top of everything
+  if (state.updateModalVisible) {
+    renderer.renderUpdateModal(state, write);
   }
 }
 
@@ -2438,6 +2443,71 @@ function setupKeyboardInput() {
       return; // Ignore other keys in cleanup mode
     }
 
+    // Handle update notification modal
+    if (store.get('updateModalVisible')) {
+      if (store.get('updateInProgress')) {
+        return; // Block all keys while update is running
+      }
+      if (key === '\u001b') {
+        store.setState({ updateModalVisible: false, updateModalSelectedIndex: 0 });
+        render();
+        return;
+      }
+      if (key === '\u001b[A' || key === 'k') { // Up
+        const idx = store.get('updateModalSelectedIndex');
+        if (idx > 0) {
+          store.setState({ updateModalSelectedIndex: idx - 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down
+        const idx = store.get('updateModalSelectedIndex');
+        if (idx < 1) {
+          store.setState({ updateModalSelectedIndex: idx + 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\r' || key === '\n') {
+        const selectedIdx = store.get('updateModalSelectedIndex') || 0;
+        if (selectedIdx === 0) {
+          // Update now — run npm i -g git-watchtower
+          store.setState({ updateInProgress: true });
+          render();
+          const { spawn } = require('child_process');
+          const child = spawn('npm', ['i', '-g', 'git-watchtower'], {
+            stdio: 'ignore',
+            detached: false,
+          });
+          child.on('close', (code) => {
+            store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
+            if (code === 0) {
+              store.setState({ updateAvailable: null });
+              addLog('Successfully updated git-watchtower! Restart to use new version.', 'update');
+              showFlash('Updated! Restart to use new version.');
+            } else {
+              addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
+              showFlash('Update failed. Try manually: npm i -g git-watchtower');
+            }
+            render();
+          });
+          child.on('error', (err) => {
+            store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
+            addLog(`Update failed: ${err.message}. Run manually: npm i -g git-watchtower`, 'error');
+            showFlash('Update failed. Try manually: npm i -g git-watchtower');
+            render();
+          });
+        } else {
+          // Show update command — dismiss modal with flash showing the command
+          store.setState({ updateModalVisible: false, updateModalSelectedIndex: 0 });
+          showFlash('Run: npm i -g git-watchtower');
+        }
+        return;
+      }
+      return; // Block all other keys while modal is shown
+    }
+
     // Handle stash confirmation dialog
     if (store.get('stashConfirmMode')) {
       if (key === '\u001b[A' || key === 'k') { // Up
@@ -2958,11 +3028,26 @@ async function start() {
   // Check for newer version on npm (non-blocking, silent on failure)
   checkForUpdate().then((latestVersion) => {
     if (latestVersion) {
-      store.setState({ updateAvailable: latestVersion });
+      store.setState({ updateAvailable: latestVersion, updateModalVisible: true });
       addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
       render();
     }
   }).catch(() => {});
+
+  // Re-check for updates periodically (every 4 hours) while running
+  const periodicCheck = startPeriodicUpdateCheck((latestVersion) => {
+    const alreadyKnown = store.get('updateAvailable');
+    store.setState({ updateAvailable: latestVersion });
+    if (!alreadyKnown) {
+      // First time discovering an update during this session — show modal
+      store.setState({ updateModalVisible: true });
+      addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
+    }
+    render();
+  });
+
+  // Clean up periodic check on exit
+  process.on('exit', () => periodicCheck.stop());
 }
 
 start().catch(err => {
