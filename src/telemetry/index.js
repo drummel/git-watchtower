@@ -82,6 +82,13 @@ module.exports = {
   shutdown: analytics.shutdown,
   isEnabled: analytics.isEnabled,
 
+  // Debug mode
+  toggleDebugMode: analytics.toggleDebugMode,
+  setDebugMode: analytics.setDebugMode,
+  isDebugMode: analytics.isDebugMode,
+  getDebugLog: analytics.getDebugLog,
+  clearDebugLog: analytics.clearDebugLog,
+
   // Prompt
   promptIfNeeded,
 

@@ -19,6 +19,7 @@ const {
   renderLogView,
   renderInfo,
   renderActionModal,
+  renderAnalyticsDebug,
 } = require('../../../src/ui/renderer');
 const { stripAnsi } = require('../../../src/ui/ansi');
 
@@ -1120,5 +1121,62 @@ describe('renderActionModal', () => {
       }),
     });
     assert.ok(text.includes('No PR for this branch'), 'Expected no-PR message');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderAnalyticsDebug
+// ---------------------------------------------------------------------------
+
+describe('renderAnalyticsDebug', () => {
+  it('should not render when debug mode is off', () => {
+    const { raw } = collectState(renderAnalyticsDebug, {
+      analyticsDebugMode: false,
+      analyticsDebugLog: [],
+      telemetryEnabled: false,
+    });
+    assert.equal(raw, '', 'Expected no output when debug mode is off');
+  });
+
+  it('should render overlay when debug mode is on', () => {
+    const { text } = collectState(renderAnalyticsDebug, {
+      analyticsDebugMode: true,
+      analyticsDebugLog: [
+        { timestamp: Date.now(), event: 'test_event', properties: {} },
+      ],
+      telemetryEnabled: true,
+    });
+    assert.ok(text.includes('ANALYTICS DEBUG'), 'Expected debug title');
+    assert.ok(text.includes('test_event'), 'Expected event name in output');
+  });
+
+  it('should show telemetry status ON when enabled', () => {
+    const { text } = collectState(renderAnalyticsDebug, {
+      analyticsDebugMode: true,
+      analyticsDebugLog: [],
+      telemetryEnabled: true,
+    });
+    assert.ok(text.includes('ON'), 'Expected ON status');
+  });
+
+  it('should show telemetry status OFF when disabled', () => {
+    const { text } = collectState(renderAnalyticsDebug, {
+      analyticsDebugMode: true,
+      analyticsDebugLog: [],
+      telemetryEnabled: false,
+    });
+    assert.ok(text.includes('OFF'), 'Expected OFF status');
+  });
+
+  it('should show event properties', () => {
+    const { text } = collectState(renderAnalyticsDebug, {
+      analyticsDebugMode: true,
+      analyticsDebugLog: [
+        { timestamp: Date.now(), event: 'branch_switched', properties: { branch: 'feat-x' } },
+      ],
+      telemetryEnabled: true,
+    });
+    assert.ok(text.includes('branch_switched'), 'Expected event name');
+    assert.ok(text.includes('feat-x'), 'Expected property value');
   });
 });

@@ -1305,6 +1305,82 @@ function renderCleanupConfirm(state, write) {
 }
 
 // ---------------------------------------------------------------------------
+// renderAnalyticsDebug
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the analytics debug overlay — shows recent telemetry events.
+ *
+ * Activated via secret 'D' key or GIT_WATCHTOWER_ANALYTICS_DEBUG=1 env var.
+ *
+ * @param {object} state
+ * @param {boolean} state.analyticsDebugMode
+ * @param {Array<{timestamp: number, event: string, properties: Record<string, any>}>} state.analyticsDebugLog
+ * @param {boolean} state.telemetryEnabled
+ * @param {number} state.terminalWidth
+ * @param {number} state.terminalHeight
+ * @param {function} write
+ */
+function renderAnalyticsDebug(state, write) {
+  if (!state.analyticsDebugMode) return;
+
+  const log = state.analyticsDebugLog || [];
+  const telemetryOn = state.telemetryEnabled;
+
+  const width = Math.min(70, state.terminalWidth - 4);
+  const maxEvents = Math.min(log.length, state.terminalHeight - 8);
+  const height = maxEvents + 4; // title + status + events + bottom border
+  const col = Math.max(1, state.terminalWidth - width - 1);
+  const row = Math.max(1, Math.floor((state.terminalHeight - height) / 2));
+
+  const innerW = width - 4;
+
+  // Top border
+  write(ansi.moveTo(row, col));
+  write(ansi.bgBlack + ansi.brightMagenta + ansi.bold);
+  write(box.topLeft + box.horizontal.repeat(width - 2) + box.topRight);
+
+  // Title line
+  write(ansi.moveTo(row + 1, col));
+  const title = ' 🔍 ANALYTICS DEBUG ';
+  const statusText = telemetryOn ? ansi.green + '● ON' : ansi.red + '● OFF';
+  write(box.vertical + ansi.brightMagenta + ansi.bold + title + ansi.reset + ansi.bgBlack);
+  const statusLabel = ' Telemetry: ';
+  const pad = width - 2 - visibleLength(title) - visibleLength(statusLabel) - 4;
+  write(' '.repeat(Math.max(0, pad)) + ansi.gray + statusLabel + statusText + ansi.reset + ansi.bgBlack + ' ' + ansi.brightMagenta + box.vertical);
+
+  // Separator
+  write(ansi.moveTo(row + 2, col));
+  write(ansi.brightMagenta + box.vertical + ansi.dim + '─'.repeat(width - 2) + ansi.reset + ansi.brightMagenta + box.vertical);
+
+  // Events (most recent at top)
+  const eventsToShow = log.slice(-maxEvents).reverse();
+  for (let i = 0; i < maxEvents; i++) {
+    write(ansi.moveTo(row + 3 + i, col));
+    write(ansi.brightMagenta + box.vertical + ansi.reset + ansi.bgBlack);
+
+    if (i < eventsToShow.length) {
+      const ev = eventsToShow[i];
+      const age = Math.floor((Date.now() - ev.timestamp) / 1000);
+      const ageStr = age < 60 ? `${age}s` : `${Math.floor(age / 60)}m`;
+      const propKeys = Object.keys(ev.properties);
+      const propStr = propKeys.length > 0 ? ansi.dim + ' ' + JSON.stringify(ev.properties) : '';
+      const eventColor = ev.event.startsWith('_') ? ansi.dim : ansi.cyan;
+      const line = ` ${ansi.gray}${padLeft(ageStr, 4)} ${eventColor}${ev.event}${ansi.reset + ansi.bgBlack}${propStr}`;
+      write(truncate(line, innerW) + ' '.repeat(Math.max(0, innerW - visibleLength(line))) + '  ');
+    } else {
+      write(' '.repeat(width - 2));
+    }
+    write(ansi.brightMagenta + box.vertical);
+  }
+
+  // Bottom border
+  write(ansi.moveTo(row + 3 + maxEvents, col));
+  write(ansi.brightMagenta + box.bottomLeft + box.horizontal.repeat(width - 2) + box.bottomRight);
+  write(ansi.reset);
+}
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -1323,4 +1399,5 @@ module.exports = {
   renderActionModal,
   renderStashConfirm,
   renderCleanupConfirm,
+  renderAnalyticsDebug,
 };

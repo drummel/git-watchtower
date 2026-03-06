@@ -94,6 +94,90 @@ describe('telemetry/analytics', () => {
   });
 });
 
+describe('telemetry/analytics debug mode', () => {
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-analytics-debug-test-'));
+    originalHomedir = os.homedir;
+    os.homedir = () => tmpDir;
+  });
+
+  afterEach(() => {
+    os.homedir = originalHomedir;
+    delete process.env.GIT_WATCHTOWER_TELEMETRY;
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // Best effort cleanup
+    }
+  });
+
+  it('debug mode is off by default', () => {
+    const analytics = freshAnalytics();
+    assert.equal(analytics.isDebugMode(), false);
+  });
+
+  it('toggleDebugMode toggles on and off', () => {
+    const analytics = freshAnalytics();
+    assert.equal(analytics.toggleDebugMode(), true);
+    assert.equal(analytics.isDebugMode(), true);
+    assert.equal(analytics.toggleDebugMode(), false);
+    assert.equal(analytics.isDebugMode(), false);
+  });
+
+  it('setDebugMode sets explicitly', () => {
+    const analytics = freshAnalytics();
+    analytics.setDebugMode(true);
+    assert.equal(analytics.isDebugMode(), true);
+    analytics.setDebugMode(false);
+    assert.equal(analytics.isDebugMode(), false);
+  });
+
+  it('records events in debug log when debug mode is on', () => {
+    const analytics = freshAnalytics();
+    analytics.setDebugMode(true);
+    analytics.capture('test_event', { foo: 'bar' });
+    const log = analytics.getDebugLog();
+    const testEvents = log.filter(e => e.event === 'test_event');
+    assert.equal(testEvents.length, 1);
+    assert.equal(testEvents[0].properties.foo, 'bar');
+    assert.ok(testEvents[0].timestamp > 0);
+  });
+
+  it('does not record events when debug mode is off', () => {
+    const analytics = freshAnalytics();
+    analytics.capture('test_event', { foo: 'bar' });
+    const log = analytics.getDebugLog();
+    assert.equal(log.filter(e => e.event === 'test_event').length, 0);
+  });
+
+  it('records events even when telemetry is disabled', () => {
+    process.env.GIT_WATCHTOWER_TELEMETRY = 'false';
+    const analytics = freshAnalytics();
+    analytics.init({ version: '1.0.0' });
+    analytics.setDebugMode(true);
+    analytics.capture('disabled_event', {});
+    const log = analytics.getDebugLog();
+    assert.ok(log.some(e => e.event === 'disabled_event'));
+  });
+
+  it('clearDebugLog clears the log', () => {
+    const analytics = freshAnalytics();
+    analytics.setDebugMode(true);
+    analytics.capture('event1', {});
+    analytics.capture('event2', {});
+    assert.ok(analytics.getDebugLog().length >= 2);
+    analytics.clearDebugLog();
+    assert.equal(analytics.getDebugLog().length, 0);
+  });
+
+  it('adds _debug_started entry when first enabled', () => {
+    const analytics = freshAnalytics();
+    analytics.setDebugMode(true);
+    const log = analytics.getDebugLog();
+    assert.ok(log.some(e => e.event === '_debug_started'));
+  });
+});
+
 describe('telemetry/index', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-telemetry-idx-test-'));

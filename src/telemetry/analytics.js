@@ -16,6 +16,12 @@ let distinctId = '';
 let appVersion = '';
 let enabled = false;
 
+// Debug mode: records captured events for on-screen inspection
+let debugMode = false;
+/** @type {Array<{timestamp: number, event: string, properties: Record<string, any>}>} */
+let debugLog = [];
+const DEBUG_LOG_MAX = 50;
+
 /**
  * Initialize the PostHog client if telemetry is enabled
  * @param {{ version: string }} options
@@ -52,6 +58,11 @@ function init({ version }) {
  * @param {Record<string, any>} [properties] - Event properties
  */
 function capture(event, properties = {}) {
+  if (debugMode) {
+    debugLog.push({ timestamp: Date.now(), event, properties: { ...properties } });
+    if (debugLog.length > DEBUG_LOG_MAX) debugLog.shift();
+  }
+
   if (!enabled || !client) return;
 
   try {
@@ -133,10 +144,61 @@ function isEnabled() {
   return enabled;
 }
 
+/**
+ * Toggle analytics debug mode on/off.
+ * @returns {boolean} New debug mode state
+ */
+function toggleDebugMode() {
+  debugMode = !debugMode;
+  if (debugMode && debugLog.length === 0) {
+    debugLog.push({ timestamp: Date.now(), event: '_debug_started', properties: { telemetryEnabled: enabled } });
+  }
+  return debugMode;
+}
+
+/**
+ * Set analytics debug mode explicitly.
+ * @param {boolean} value
+ */
+function setDebugMode(value) {
+  debugMode = value;
+  if (debugMode && debugLog.length === 0) {
+    debugLog.push({ timestamp: Date.now(), event: '_debug_started', properties: { telemetryEnabled: enabled } });
+  }
+}
+
+/**
+ * Check if debug mode is active.
+ * @returns {boolean}
+ */
+function isDebugMode() {
+  return debugMode;
+}
+
+/**
+ * Get the debug event log (most recent events).
+ * @returns {Array<{timestamp: number, event: string, properties: Record<string, any>}>}
+ */
+function getDebugLog() {
+  return debugLog;
+}
+
+/**
+ * Clear the debug event log.
+ */
+function clearDebugLog() {
+  debugLog = [];
+}
+
 module.exports = {
   init,
   capture,
   captureError,
   shutdown,
   isEnabled,
+  toggleDebugMode,
+  setDebugMode,
+  isDebugMode,
+  getDebugLog,
+  clearDebugLog,
 };

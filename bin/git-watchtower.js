@@ -1102,6 +1102,9 @@ function renderCasinoStats(startRow) {
 function getRenderState() {
   const s = store.getState();
   s.clientCount = clients.size;
+  s.analyticsDebugMode = telemetry.isDebugMode();
+  s.analyticsDebugLog = telemetry.getDebugLog();
+  s.telemetryEnabled = telemetry.isEnabled();
   return s;
 }
 
@@ -1231,6 +1234,9 @@ function render() {
   if (state.stashConfirmMode) {
     renderer.renderStashConfirm(state, write);
   }
+
+  // Analytics debug overlay (secret mode — D key or GIT_WATCHTOWER_ANALYTICS_DEBUG=1)
+  renderer.renderAnalyticsDebug(state, write);
 }
 
 function showFlash(message) {
@@ -2690,6 +2696,13 @@ function setupKeyboardInput() {
         break;
       }
 
+      case 'D': { // Secret: toggle analytics debug overlay
+        const debugNow = telemetry.toggleDebugMode();
+        addLog(`Analytics debug ${debugNow ? 'enabled — watching events' : 'disabled'}`, 'info');
+        render();
+        break;
+      }
+
       // Number keys to set visible branch count
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9':
@@ -2824,6 +2837,9 @@ async function start() {
   // Telemetry: opt-in prompt (first run only) and initialization
   await telemetry.promptIfNeeded(promptYesNo);
   telemetry.init({ version: PACKAGE_VERSION });
+  if (process.env.GIT_WATCHTOWER_ANALYTICS_DEBUG === '1' || process.env.GIT_WATCHTOWER_ANALYTICS_DEBUG === 'true') {
+    telemetry.setDebugMode(true);
+  }
   sessionStartTime = Date.now();
   telemetry.capture('tool_launched', {
     version: PACKAGE_VERSION,
