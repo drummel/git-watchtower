@@ -31,12 +31,12 @@ const DASHBOARD_ID = process.env.POSTHOG_DASHBOARD_ID || null;
 
 if (!API_KEY) {
   console.error('Error: POSTHOG_API_KEY environment variable is required.');
-  console.error('Create a personal API key at https://us.posthog.com/settings/user-api-keys');
+  console.error('Create a personal API key at https://app.posthog.com/settings/user-api-keys');
   process.exit(1);
 }
 
 // ---------------------------------------------------------------------------
-// HTTP helper
+// HTTP helper — authenticates via personal_api_key query parameter
 // ---------------------------------------------------------------------------
 
 /**
@@ -48,13 +48,13 @@ if (!API_KEY) {
 function api(method, path, body) {
   return new Promise((resolve, reject) => {
     const url = new URL(path, HOST);
+    url.searchParams.set('personal_api_key', API_KEY);
     const options = {
       method,
       hostname: url.hostname,
       port: url.port || 443,
       path: url.pathname + url.search,
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
         'Content-Type': 'application/json',
       },
     };
@@ -87,261 +87,153 @@ function api(method, path, body) {
 // ---------------------------------------------------------------------------
 
 /**
- * Each insight maps to one dashboard tile.
- * PostHog TrendsQuery / FunnelsQuery shapes are used.
+ * Helper to wrap a TrendsQuery source in the InsightVizNode envelope
+ * that the PostHog insights API expects.
  */
+function trendsInsight(name, description, source) {
+  return {
+    name,
+    description,
+    query: {
+      kind: 'InsightVizNode',
+      source: {
+        kind: 'TrendsQuery',
+        ...source,
+      },
+    },
+  };
+}
+
+/** Shorthand for a simple EventsNode series entry */
+function evt(event, name, opts = {}) {
+  return { kind: 'EventsNode', event, math: 'total', name, ...opts };
+}
+
 function buildInsights() {
   return [
     // -----------------------------------------------------------------------
     // 1. Feature Usage Breakdown — bar chart of all feature events
     // -----------------------------------------------------------------------
-    {
-      name: 'Feature Usage Breakdown',
-      description: 'Side-by-side comparison of all interactive feature events',
-      query: {
-        kind: 'TrendsQuery',
+    trendsInsight(
+      'Feature Usage Breakdown',
+      'Side-by-side comparison of all interactive feature events',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'week',
         series: [
-          { event: 'branch_switched', kind: 'EventsNode', name: 'Branch Switched' },
-          { event: 'stash_performed', kind: 'EventsNode', name: 'Stash' },
-          { event: 'pull_forced', kind: 'EventsNode', name: 'Pull' },
-          { event: 'cleanup_branches_deleted', kind: 'EventsNode', name: 'Branch Cleanup' },
-          { event: 'preview_opened', kind: 'EventsNode', name: 'Preview' },
-          { event: 'search_used', kind: 'EventsNode', name: 'Search' },
-          { event: 'branch_actions_opened', kind: 'EventsNode', name: 'Branch Actions' },
-          { event: 'undo_branch_switch', kind: 'EventsNode', name: 'Undo Switch' },
-          { event: 'casino_mode_toggled', kind: 'EventsNode', name: 'Casino Toggle' },
-          { event: 'sound_toggled', kind: 'EventsNode', name: 'Sound Toggle' },
+          evt('branch_switched', 'Branch Switch'),
+          evt('stash_performed', 'Stash'),
+          evt('pull_forced', 'Pull'),
+          evt('cleanup_branches_deleted', 'Branch Cleanup'),
+          evt('preview_opened', 'Preview'),
+          evt('search_used', 'Search'),
+          evt('branch_actions_opened', 'Branch Actions'),
+          evt('undo_branch_switch', 'Undo Switch'),
+          evt('casino_mode_toggled', 'Casino Toggle'),
+          evt('sound_toggled', 'Sound Toggle'),
         ],
-        trendsFilter: {
-          display: 'ActionsBar',
-        },
+        trendsFilter: { display: 'ActionsBar' },
       },
-    },
+    ),
 
     // -----------------------------------------------------------------------
     // 2. Casino Mode Engagement
     // -----------------------------------------------------------------------
-    {
-      name: 'Casino Mode — Toggle Events',
-      description: 'How often casino mode is toggled on vs off',
-      query: {
-        kind: 'TrendsQuery',
+    trendsInsight(
+      'Casino Mode — Toggle Events',
+      'How often casino mode is toggled on vs off',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'week',
         series: [
-          {
-            event: 'casino_mode_toggled',
-            kind: 'EventsNode',
-            name: 'Casino Enabled',
-            properties: [
-              { key: 'enabled', value: ['true'], operator: 'exact', type: 'event' },
-            ],
-          },
-          {
-            event: 'casino_mode_toggled',
-            kind: 'EventsNode',
-            name: 'Casino Disabled',
-            properties: [
-              { key: 'enabled', value: ['false'], operator: 'exact', type: 'event' },
-            ],
-          },
+          evt('casino_mode_toggled', 'Casino Enabled', {
+            properties: [{ key: 'enabled', value: ['true'], operator: 'exact', type: 'event' }],
+          }),
+          evt('casino_mode_toggled', 'Casino Disabled', {
+            properties: [{ key: 'enabled', value: ['false'], operator: 'exact', type: 'event' }],
+          }),
         ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
+        trendsFilter: { display: 'ActionsLineGraph' },
       },
-    },
-    {
-      name: 'Casino Mode — Sessions Launched with Casino',
-      description: 'Sessions started with casino mode already active',
-      query: {
-        kind: 'TrendsQuery',
+    ),
+
+    trendsInsight(
+      'Casino Mode — Sessions with Casino Active',
+      'Sessions started with casino mode already active vs not',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'week',
         series: [
-          {
-            event: 'tool_launched',
-            kind: 'EventsNode',
-            name: 'Launched with Casino',
-            properties: [
-              { key: 'casino_mode', value: ['true'], operator: 'exact', type: 'event' },
-            ],
-          },
-          {
-            event: 'tool_launched',
-            kind: 'EventsNode',
-            name: 'Launched without Casino',
+          evt('tool_launched', 'Launched with Casino', {
+            properties: [{ key: 'casino_mode', value: ['true'], operator: 'exact', type: 'event' }],
+          }),
+          evt('tool_launched', 'Launched without Casino', {
             properties: [
               { key: 'casino_mode', value: ['false'], operator: 'exact', type: 'event' },
             ],
-          },
+          }),
         ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
+        trendsFilter: { display: 'ActionsLineGraph' },
       },
-    },
+    ),
 
     // -----------------------------------------------------------------------
     // 3. Git Operations over time
     // -----------------------------------------------------------------------
-    {
-      name: 'Git Operations Over Time',
-      description: 'Branch switches, stashes, pulls, and cleanups over time',
-      query: {
-        kind: 'TrendsQuery',
+    trendsInsight(
+      'Git Operations Over Time',
+      'Branch switches, stashes, pulls, cleanups, and undos over time',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'day',
         series: [
-          { event: 'branch_switched', kind: 'EventsNode', name: 'Branch Switch' },
-          { event: 'stash_performed', kind: 'EventsNode', name: 'Stash' },
-          { event: 'pull_forced', kind: 'EventsNode', name: 'Pull' },
-          { event: 'cleanup_branches_deleted', kind: 'EventsNode', name: 'Branch Cleanup' },
-          { event: 'undo_branch_switch', kind: 'EventsNode', name: 'Undo Switch' },
+          evt('branch_switched', 'Branch Switch'),
+          evt('stash_performed', 'Stash'),
+          evt('pull_forced', 'Pull'),
+          evt('cleanup_branches_deleted', 'Branch Cleanup'),
+          evt('undo_branch_switch', 'Undo Switch'),
         ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
+        trendsFilter: { display: 'ActionsLineGraph' },
       },
-    },
-    {
-      name: 'Branches Cleaned — Total Deleted',
-      description: 'Sum of branches deleted via cleanup over time',
-      query: {
-        kind: 'TrendsQuery',
+    ),
+
+    trendsInsight(
+      'Dirty Repo Encounters vs Stash Resolutions',
+      'How often users hit uncommitted-changes blockers and resolve them with stash',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'week',
         series: [
-          {
-            event: 'cleanup_branches_deleted',
-            kind: 'EventsNode',
-            name: 'Branches Deleted',
-            math: 'sum',
-            math_property: 'count',
-          },
+          evt('dirty_repo_encountered', 'Dirty Repo'),
+          evt('stash_performed', 'Stash (resolved)'),
         ],
-        trendsFilter: {
-          display: 'ActionsBar',
-        },
+        trendsFilter: { display: 'ActionsLineGraph' },
       },
-    },
-    {
-      name: 'Dirty Repo Encounters',
-      description: 'How often users hit uncommitted-changes blockers',
-      query: {
-        kind: 'TrendsQuery',
-        dateRange: { date_from: '-30d' },
-        interval: 'week',
-        series: [
-          { event: 'dirty_repo_encountered', kind: 'EventsNode', name: 'Dirty Repo' },
-          { event: 'stash_performed', kind: 'EventsNode', name: 'Stash (resolved)' },
-        ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
-      },
-    },
+    ),
 
     // -----------------------------------------------------------------------
     // 4. PR Actions breakdown
     // -----------------------------------------------------------------------
-    {
-      name: 'PR Actions — Create vs Approve vs Merge',
-      description: 'Breakdown of PR actions by type',
-      query: {
-        kind: 'TrendsQuery',
+    trendsInsight(
+      'PR Actions — Create vs Approve vs Merge',
+      'Breakdown of PR actions by type',
+      {
         dateRange: { date_from: '-30d' },
         interval: 'week',
         series: [
-          {
-            event: 'pr_action',
-            kind: 'EventsNode',
-            name: 'Create PR',
-            properties: [
-              { key: 'action', value: ['create'], operator: 'exact', type: 'event' },
-            ],
-          },
-          {
-            event: 'pr_action',
-            kind: 'EventsNode',
-            name: 'Approve PR',
-            properties: [
-              { key: 'action', value: ['approve'], operator: 'exact', type: 'event' },
-            ],
-          },
-          {
-            event: 'pr_action',
-            kind: 'EventsNode',
-            name: 'Merge PR',
-            properties: [
-              { key: 'action', value: ['merge'], operator: 'exact', type: 'event' },
-            ],
-          },
+          evt('pr_action', 'Create PR', {
+            properties: [{ key: 'action', value: ['create'], operator: 'exact', type: 'event' }],
+          }),
+          evt('pr_action', 'Approve PR', {
+            properties: [{ key: 'action', value: ['approve'], operator: 'exact', type: 'event' }],
+          }),
+          evt('pr_action', 'Merge PR', {
+            properties: [{ key: 'action', value: ['merge'], operator: 'exact', type: 'event' }],
+          }),
         ],
-        trendsFilter: {
-          display: 'ActionsBar',
-        },
+        trendsFilter: { display: 'ActionsBar' },
       },
-    },
-
-    // -----------------------------------------------------------------------
-    // 5. Session overview
-    // -----------------------------------------------------------------------
-    {
-      name: 'Sessions — Launch Count',
-      description: 'Total tool launches over time',
-      query: {
-        kind: 'TrendsQuery',
-        dateRange: { date_from: '-30d' },
-        interval: 'day',
-        series: [
-          { event: 'tool_launched', kind: 'EventsNode', name: 'Launches' },
-        ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
-      },
-    },
-    {
-      name: 'Sessions — Server Mode Breakdown',
-      description: 'How sessions are launched by server mode',
-      query: {
-        kind: 'TrendsQuery',
-        dateRange: { date_from: '-30d' },
-        interval: 'week',
-        series: [
-          {
-            event: 'tool_launched',
-            kind: 'EventsNode',
-            name: 'Launches',
-          },
-        ],
-        breakdownFilter: {
-          breakdown: 'server_mode',
-          breakdown_type: 'event',
-        },
-        trendsFilter: {
-          display: 'ActionsBar',
-        },
-      },
-    },
-    {
-      name: 'Errors Over Time',
-      description: 'Exception events captured by error tracking',
-      query: {
-        kind: 'TrendsQuery',
-        dateRange: { date_from: '-30d' },
-        interval: 'day',
-        series: [
-          { event: '$exception', kind: 'EventsNode', name: 'Errors' },
-        ],
-        trendsFilter: {
-          display: 'ActionsLineGraph',
-        },
-      },
-    },
+    ),
   ];
 }
 
