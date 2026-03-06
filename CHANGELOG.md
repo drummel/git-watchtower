@@ -1,3 +1,15 @@
+## [1.7.1](https://github.com/drummel/git-watchtower/compare/v1.7.0...v1.7.1) (2026-03-06)
+
+
+### Bug Fixes
+
+* add missing NPM_TOKEN to semantic-release step ([0a6bc13](https://github.com/drummel/git-watchtower/commit/0a6bc134c2a0678b0416bdf5ebbd3be2ae8d3d53))
+* add resolveJsonModule to tsconfig for package.json import ([ebaea80](https://github.com/drummel/git-watchtower/commit/ebaea80d0588f01d0573881390a111fa27987871))
+* display package version in header bar ([7c9e089](https://github.com/drummel/git-watchtower/commit/7c9e08951f323ec29691c289b5293a3295b5ace9))
+* read package version from package.json instead of hardcoding it ([99a0fd1](https://github.com/drummel/git-watchtower/commit/99a0fd1bf43cae12cbc54a4f1e68b6d10a4316f6))
+* restore semantic-release v25 for npm OIDC trusted publishing ([7b10af5](https://github.com/drummel/git-watchtower/commit/7b10af5fbc9f56f77f97cc766fdf97d2fe3ba243))
+* updated packages ([eb5cd5d](https://github.com/drummel/git-watchtower/commit/eb5cd5db1c4ecad68dc6c5e239986bca023692ca))
+
 # [1.7.0](https://github.com/drummel/git-watchtower/compare/v1.6.1...v1.7.0) (2026-03-05)
 
 
