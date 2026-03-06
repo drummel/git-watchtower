@@ -101,6 +101,7 @@
  * @property {number} maxLogEntries - Max activity log entries
  * @property {string} projectName - Project name
  * @property {number} clientCount - Connected SSE clients
+ * @property {string|null} updateAvailable - Latest version if update available, or null
  */
 
 /**
@@ -180,6 +181,9 @@ function getInitialState() {
     maxLogEntries: 10,
     projectName: '',
     clientCount: 0,
+
+    // Version check
+    updateAvailable: null,
   };
 }
 

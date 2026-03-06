@@ -122,6 +122,16 @@ describe('renderHeader', () => {
     assert.ok(text.includes('MERGE CONFLICT'), 'Expected MERGE CONFLICT badge');
   });
 
+  it('should show UPDATE badge when updateAvailable is set', () => {
+    const { text } = collectState(renderHeader, { updateAvailable: '2.0.0' });
+    assert.ok(text.includes('UPDATE v2.0.0'), 'Expected UPDATE badge with version');
+  });
+
+  it('should not show UPDATE badge when updateAvailable is null', () => {
+    const { text } = collectState(renderHeader, { updateAvailable: null });
+    assert.ok(!text.includes('UPDATE'), 'Should not show UPDATE badge');
+  });
+
   it('should show CRASHED badge when server crashed in command mode', () => {
     const { text } = collectState(renderHeader, {
       serverMode: 'command',
