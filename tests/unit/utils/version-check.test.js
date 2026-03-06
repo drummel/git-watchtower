@@ -1,6 +1,6 @@
-const { describe, it } = require('node:test');
+const { describe, it, mock } = require('node:test');
 const assert = require('node:assert/strict');
-const { compareVersions } = require('../../../src/utils/version-check');
+const { compareVersions, startPeriodicUpdateCheck, UPDATE_CHECK_INTERVAL } = require('../../../src/utils/version-check');
 
 describe('compareVersions', () => {
   it('should return -1 when first version is older', () => {
@@ -26,5 +26,25 @@ describe('compareVersions', () => {
   it('should compare patch versions correctly', () => {
     assert.equal(compareVersions('1.7.1', '1.7.0'), 1);
     assert.equal(compareVersions('1.7.0', '1.7.1'), -1);
+  });
+});
+
+describe('UPDATE_CHECK_INTERVAL', () => {
+  it('should be 4 hours in milliseconds', () => {
+    assert.equal(UPDATE_CHECK_INTERVAL, 4 * 60 * 60 * 1000);
+  });
+});
+
+describe('startPeriodicUpdateCheck', () => {
+  it('should return a controller with a stop method', () => {
+    const controller = startPeriodicUpdateCheck(() => {}, 999999999);
+    assert.equal(typeof controller.stop, 'function');
+    controller.stop();
+  });
+
+  it('should stop the interval when stop() is called', () => {
+    const controller = startPeriodicUpdateCheck(() => {}, 50);
+    controller.stop();
+    // No assertion needed — just verify it doesn't throw
   });
 });

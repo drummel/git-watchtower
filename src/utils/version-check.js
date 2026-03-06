@@ -54,4 +54,25 @@ function checkForUpdate() {
   });
 }
 
-module.exports = { checkForUpdate, compareVersions };
+/** Default interval between periodic update checks (4 hours in ms) */
+const UPDATE_CHECK_INTERVAL = 4 * 60 * 60 * 1000;
+
+/**
+ * Create a periodic update checker that re-checks npm at a fixed interval.
+ * @param {(latestVersion: string) => void} onUpdateFound - Called when a new version is detected
+ * @param {number} [interval] - Check interval in ms (default: 4 hours)
+ * @returns {{ stop: () => void }} Controller with stop() to clear the timer
+ */
+function startPeriodicUpdateCheck(onUpdateFound, interval = UPDATE_CHECK_INTERVAL) {
+  const timerId = setInterval(() => {
+    checkForUpdate()
+      .then((latestVersion) => {
+        if (latestVersion) onUpdateFound(latestVersion);
+      })
+      .catch(() => {});
+  }, interval);
+
+  return { stop: () => clearInterval(timerId) };
+}
+
+module.exports = { checkForUpdate, compareVersions, startPeriodicUpdateCheck, UPDATE_CHECK_INTERVAL };

@@ -19,6 +19,7 @@ const {
   renderLogView,
   renderInfo,
   renderActionModal,
+  renderUpdateModal,
 } = require('../../../src/ui/renderer');
 const { stripAnsi } = require('../../../src/ui/ansi');
 
@@ -70,6 +71,8 @@ function makeState(overrides = {}) {
     adaptivePollInterval: 5000,
     clientCount: 0,
     projectName: 'test-project',
+    updateAvailable: null,
+    updateModalVisible: false,
     ...overrides,
   };
 }
@@ -1136,5 +1139,70 @@ describe('renderActionModal', () => {
       }),
     });
     assert.ok(text.includes('No PR for this branch'), 'Expected no-PR message');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderUpdateModal
+// ---------------------------------------------------------------------------
+
+describe('renderUpdateModal', () => {
+  it('should not render when updateModalVisible is false', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.0.0',
+      updateModalVisible: false,
+    });
+    assert.equal(text, '', 'Expected no output when modal is not visible');
+  });
+
+  it('should not render when updateAvailable is null', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: null,
+      updateModalVisible: true,
+    });
+    assert.equal(text, '', 'Expected no output when no update is available');
+  });
+
+  it('should show the latest version', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+    });
+    assert.ok(text.includes('v2.5.0'), 'Expected latest version in modal');
+  });
+
+  it('should show selectable options', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+    });
+    assert.ok(text.includes('Update now'), 'Expected "Update now" option in modal');
+    assert.ok(text.includes('Show update command'), 'Expected "Show update command" option in modal');
+  });
+
+  it('should show update command when updateInProgress is true', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+      updateInProgress: true,
+    });
+    assert.ok(text.includes('npm i -g git-watchtower'), 'Expected update command during update');
+    assert.ok(text.includes('Updating'), 'Expected updating message');
+  });
+
+  it('should show Update Available title', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+    });
+    assert.ok(text.includes('Update Available'), 'Expected title in modal');
+  });
+
+  it('should show dismiss hint', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+    });
+    assert.ok(text.includes('Dismiss'), 'Expected dismiss hint in modal');
   });
 });
