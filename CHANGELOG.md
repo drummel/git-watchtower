@@ -1,3 +1,10 @@
+## [1.8.3](https://github.com/drummel/git-watchtower/compare/v1.8.2...v1.8.3) (2026-03-10)
+
+
+### Bug Fixes
+
+* replace shell-interpolated exec() with safe execFile() calls ([b80ba1c](https://github.com/drummel/git-watchtower/commit/b80ba1ce6f7f9f98db947262bd1c0dd3666a57f7))
+
 ## [1.8.2](https://github.com/drummel/git-watchtower/compare/v1.8.1...v1.8.2) (2026-03-06)
 
 
