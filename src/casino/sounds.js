@@ -5,7 +5,7 @@
  * Uses system audio tools when available, falls back gracefully.
  */
 
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -56,20 +56,20 @@ function playFile(soundPath, volume = 0.5) {
 
   try {
     if (platform === 'darwin') {
-      // macOS: afplay with volume
-      exec(`afplay -v ${volume} "${soundPath}" 2>/dev/null &`);
+      // macOS: afplay with volume — args passed as array (no shell)
+      execFile('afplay', ['-v', String(volume), soundPath], { stdio: 'ignore' }, () => {});
     } else if (platform === 'linux') {
-      // Linux: paplay (PulseAudio) or aplay (ALSA)
-      // Note: paplay doesn't support volume easily, aplay does via amixer
-      exec(
-        `paplay "${soundPath}" 2>/dev/null || aplay -q "${soundPath}" 2>/dev/null &`
-      );
+      // Linux: paplay (PulseAudio), fall back to aplay (ALSA)
+      execFile('paplay', [soundPath], { stdio: 'ignore' }, (err) => {
+        if (err) {
+          execFile('aplay', ['-q', soundPath], { stdio: 'ignore' }, () => {});
+        }
+      });
     } else if (platform === 'win32') {
-      // Windows: Use PowerShell to play sound
-      exec(
-        `powershell -c "(New-Object Media.SoundPlayer '${soundPath}').PlaySync()" 2>nul`,
-        { windowsHide: true }
-      );
+      // Windows: Use PowerShell to play sound — path passed as argument
+      execFile('powershell', [
+        '-c', `(New-Object Media.SoundPlayer $args[0]).PlaySync()`, '-args', soundPath,
+      ], { windowsHide: true, stdio: 'ignore' }, () => {});
     }
   } catch (e) {
     // Silently fail - sounds are optional
