@@ -56,7 +56,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { exec, execSync, spawn } = require('child_process');
+const { execFile, execSync, spawn } = require('child_process');
 const readline = require('readline');
 
 // Casino mode - Vegas-style feedback effects
@@ -82,7 +82,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
-const { isGitAvailable: checkGitAvailable } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe } = require('../src/git/commands');
 
 // ============================================================================
 // Configuration (imports from src/config/, inline wizard kept here)
@@ -436,7 +436,7 @@ function openInBrowser(url) {
 
 async function getRemoteWebUrl(branchName) {
   try {
-    const { stdout } = await execAsync(`git remote get-url "${REMOTE_NAME}"`);
+    const { stdout } = await execGit(['remote', 'get-url', REMOTE_NAME], { cwd: PROJECT_ROOT });
     const parsed = parseRemoteUrl(stdout);
     return buildWebUrl(parsed, branchName);
   } catch (e) {
@@ -446,20 +446,21 @@ async function getRemoteWebUrl(branchName) {
 
 // Extract Claude Code session URL from the most recent commit on a branch
 async function getSessionUrl(branchName) {
-  try {
-    const { stdout } = await execAsync(
-      `git log "${REMOTE_NAME}/${branchName}" -1 --format=%B 2>/dev/null || git log "${branchName}" -1 --format=%B 2>/dev/null`
-    );
-    return extractSessionUrl(stdout);
-  } catch (e) {
-    return null;
-  }
+  // Try remote branch first, fall back to local
+  const result = await execGitSilent(
+    ['log', `${REMOTE_NAME}/${branchName}`, '-1', '--format=%B'],
+    { cwd: PROJECT_ROOT }
+  ) || await execGitSilent(
+    ['log', branchName, '-1', '--format=%B'],
+    { cwd: PROJECT_ROOT }
+  );
+  return result ? extractSessionUrl(result.stdout) : null;
 }
 
 // Check if a CLI tool is available
 async function hasCommand(cmd) {
   try {
-    await execAsync(`which ${cmd} 2>/dev/null`);
+    await execCli('which', [cmd]);
     return true;
   } catch (e) {
     return false;
@@ -472,17 +473,18 @@ async function hasCommand(cmd) {
 async function getPrInfo(branchName, platform, hasGh, hasGlab) {
   if (platform === 'github' && hasGh) {
     try {
-      const { stdout } = await execAsync(
-        `gh pr list --head "${branchName}" --state all --json number,title,state,reviewDecision,statusCheckRollup --limit 1`
-      );
+      const { stdout } = await execCli('gh', [
+        'pr', 'list', '--head', branchName, '--state', 'all',
+        '--json', 'number,title,state,reviewDecision,statusCheckRollup', '--limit', '1',
+      ]);
       return parseGitHubPr(JSON.parse(stdout));
     } catch (e) { /* gh not authed or other error */ }
   }
   if (platform === 'gitlab' && hasGlab) {
     try {
-      const { stdout } = await execAsync(
-        `glab mr list --source-branch="${branchName}" --state all --output json 2>/dev/null`
-      );
+      const { stdout } = await execCli('glab', [
+        'mr', 'list', `--source-branch=${branchName}`, '--state', 'all', '--output', 'json',
+      ]);
       return parseGitLabMr(JSON.parse(stdout));
     } catch (e) { /* glab not authed or other error */ }
   }
@@ -492,11 +494,7 @@ async function getPrInfo(branchName, platform, hasGh, hasGlab) {
 // Check if gh/glab CLI is authenticated
 async function checkCliAuth(cmd) {
   try {
-    if (cmd === 'gh') {
-      await execAsync('gh auth status 2>&1');
-    } else if (cmd === 'glab') {
-      await execAsync('glab auth status 2>&1');
-    }
+    await execCli(cmd, ['auth', 'status']);
     return true;
   } catch (e) {
     return false;
@@ -510,18 +508,19 @@ async function fetchAllPrStatuses() {
 
   if (platform === 'github' && hasGh && ghAuthed) {
     try {
-      const { stdout } = await execAsync(
-        'gh pr list --state all --json headRefName,number,title,state --limit 200'
-      );
+      const { stdout } = await execCli('gh', [
+        'pr', 'list', '--state', 'all',
+        '--json', 'headRefName,number,title,state', '--limit', '200',
+      ]);
       return parseGitHubPrList(JSON.parse(stdout));
     } catch (e) { /* gh error */ }
   }
 
   if (platform === 'gitlab' && hasGlab && glabAuthed) {
     try {
-      const { stdout } = await execAsync(
-        'glab mr list --state all --output json 2>/dev/null'
-      );
+      const { stdout } = await execCli('glab', [
+        'mr', 'list', '--state', 'all', '--output', 'json',
+      ]);
       return parseGitLabMrList(JSON.parse(stdout));
     } catch (e) { /* glab error */ }
   }
@@ -815,22 +814,30 @@ const LIVE_RELOAD_SCRIPT = `
 // Utility Functions
 // ============================================================================
 
-// Default timeout for execAsync (30 seconds) — prevents hung git/CLI commands
+// Default timeout for CLI commands (30 seconds) — prevents hung commands
 // from permanently blocking the polling loop
-const EXEC_ASYNC_TIMEOUT = 30000;
+const CLI_TIMEOUT = 30000;
 
-function execAsync(command, options = {}) {
-  const { timeout = EXEC_ASYNC_TIMEOUT, ...restOptions } = options;
+/**
+ * Execute a non-git CLI command safely using execFile (no shell interpolation).
+ * For git commands, use execGit/execGitSilent from src/git/commands.js instead.
+ * @param {string} cmd - The executable (e.g. 'gh', 'glab', 'which')
+ * @param {string[]} args - Arguments array (no shell interpolation)
+ * @param {Object} [options] - Execution options
+ * @param {number} [options.timeout] - Command timeout in ms
+ * @returns {Promise<{stdout: string, stderr: string}>}
+ */
+function execCli(cmd, args = [], options = {}) {
+  const { timeout = CLI_TIMEOUT, ...restOptions } = options;
   return new Promise((resolve, reject) => {
-    const child = exec(command, { cwd: PROJECT_ROOT, timeout, ...restOptions }, (error, stdout, stderr) => {
+    const child = execFile(cmd, args, { cwd: PROJECT_ROOT, timeout, ...restOptions }, (error, stdout, stderr) => {
       if (error) {
         reject({ error, stdout, stderr });
       } else {
         resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
       }
     });
-    // Also kill the child if the timeout fires (exec timeout sends SIGTERM
-    // but doesn't guarantee cleanup of process trees)
+    // Force-kill if process outlives timeout grace period
     if (timeout > 0) {
       const killTimer = setTimeout(() => {
         try { child.kill('SIGKILL'); } catch (e) { /* already dead */ }
@@ -841,18 +848,13 @@ function execAsync(command, options = {}) {
 }
 
 /**
- * Get diff stats between two commits
+ * Get diff stats between two commits (delegates to src/git/commands.js)
  * @param {string} fromCommit - Starting commit
  * @param {string} toCommit - Ending commit (default HEAD)
  * @returns {Promise<{added: number, deleted: number}>}
  */
 async function getDiffStats(fromCommit, toCommit = 'HEAD') {
-  try {
-    const { stdout } = await execAsync(`git diff --stat ${fromCommit}..${toCommit}`);
-    return parseDiffStats(stdout);
-  } catch (e) {
-    return { added: 0, deleted: 0 };
-  }
+  return getDiffStatsSafe(fromCommit, toCommit, { cwd: PROJECT_ROOT });
 }
 
 // formatTimeAgo imported from src/utils/time.js
@@ -945,10 +947,15 @@ async function refreshAllSparklines() {
     for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
       if (branch.isDeleted) continue;
 
-      // Get commit counts for last 7 days
-      const { stdout } = await execAsync(
-        `git log origin/${branch.name} --since="7 days ago" --format="%ad" --date=format:"%Y-%m-%d" 2>/dev/null || git log ${branch.name} --since="7 days ago" --format="%ad" --date=format:"%Y-%m-%d" 2>/dev/null`
-      ).catch(() => ({ stdout: '' }));
+      // Get commit counts for last 7 days (try remote, fall back to local)
+      const sparkResult = await execGitSilent(
+        ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
+        { cwd: PROJECT_ROOT }
+      ) || await execGitSilent(
+        ['log', branch.name, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
+        { cwd: PROJECT_ROOT }
+      );
+      const stdout = sparkResult ? sparkResult.stdout : '';
 
       // Count commits per day
       const dayCounts = new Map();
@@ -978,10 +985,15 @@ async function refreshAllSparklines() {
 
 async function getPreviewData(branchName) {
   try {
-    // Get last 5 commits
-    const { stdout: logOutput } = await execAsync(
-      `git log origin/${branchName} -5 --oneline 2>/dev/null || git log ${branchName} -5 --oneline 2>/dev/null`
-    ).catch(() => ({ stdout: '' }));
+    // Get last 5 commits (try remote, fall back to local)
+    const logResult = await execGitSilent(
+      ['log', `origin/${branchName}`, '-5', '--oneline'],
+      { cwd: PROJECT_ROOT }
+    ) || await execGitSilent(
+      ['log', branchName, '-5', '--oneline'],
+      { cwd: PROJECT_ROOT }
+    );
+    const logOutput = logResult ? logResult.stdout : '';
 
     const commits = logOutput.split('\n').filter(Boolean).map(line => {
       const [hash, ...msgParts] = line.split(' ');
@@ -990,13 +1002,15 @@ async function getPreviewData(branchName) {
 
     // Get files changed (comparing to current branch)
     let filesChanged = [];
-    try {
-      const { stdout: diffOutput } = await execAsync(
-        `git diff --stat --name-only HEAD...origin/${branchName} 2>/dev/null || git diff --stat --name-only HEAD...${branchName} 2>/dev/null`
-      );
-      filesChanged = diffOutput.split('\n').filter(Boolean).slice(0, 8);
-    } catch (e) {
-      // No diff available
+    const diffResult = await execGitSilent(
+      ['diff', '--stat', '--name-only', `HEAD...origin/${branchName}`],
+      { cwd: PROJECT_ROOT }
+    ) || await execGitSilent(
+      ['diff', '--stat', '--name-only', `HEAD...${branchName}`],
+      { cwd: PROJECT_ROOT }
+    );
+    if (diffResult) {
+      filesChanged = diffResult.stdout.split('\n').filter(Boolean).slice(0, 8);
     }
 
     return { commits, filesChanged };
@@ -1312,12 +1326,12 @@ function hideStashConfirm() {
 
 async function getCurrentBranch() {
   try {
-    const { stdout } = await execAsync('git rev-parse --abbrev-ref HEAD');
+    const { stdout } = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: PROJECT_ROOT });
     // Check for detached HEAD state
     if (stdout === 'HEAD') {
       store.setState({ isDetachedHead: true });
       // Get the short commit hash instead
-      const { stdout: commitHash } = await execAsync('git rev-parse --short HEAD');
+      const { stdout: commitHash } = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
       return `HEAD@${commitHash}`;
     }
     store.setState({ isDetachedHead: false });
@@ -1329,7 +1343,7 @@ async function getCurrentBranch() {
 
 async function checkRemoteExists() {
   try {
-    const { stdout } = await execAsync('git remote');
+    const { stdout } = await execGit(['remote'], { cwd: PROJECT_ROOT });
     const remotes = stdout.split('\n').filter(Boolean);
     return remotes.length > 0;
   } catch (e) {
@@ -1339,7 +1353,7 @@ async function checkRemoteExists() {
 
 async function hasUncommittedChanges() {
   try {
-    const { stdout } = await execAsync('git status --porcelain');
+    const { stdout } = await execGit(['status', '--porcelain'], { cwd: PROJECT_ROOT, timeout: 5000 });
     return stdout.length > 0;
   } catch (e) {
     return false;
@@ -1350,14 +1364,15 @@ async function hasUncommittedChanges() {
 
 async function getAllBranches() {
   try {
-    await execAsync('git fetch --all --prune 2>/dev/null').catch(() => {});
+    await execGitSilent(['fetch', '--all', '--prune'], { cwd: PROJECT_ROOT, timeout: 60000 });
 
     const branchList = [];
     const seenBranches = new Set();
 
     // Get local branches
-    const { stdout: localOutput } = await execAsync(
-      'git for-each-ref --sort=-committerdate --format="%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)" refs/heads/'
+    const { stdout: localOutput } = await execGit(
+      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', 'refs/heads/'],
+      { cwd: PROJECT_ROOT }
     );
 
     for (const line of localOutput.split('\n').filter(Boolean)) {
@@ -1377,9 +1392,11 @@ async function getAllBranches() {
     }
 
     // Get remote branches (using configured remote name)
-    const { stdout: remoteOutput } = await execAsync(
-      `git for-each-ref --sort=-committerdate --format="%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)" refs/remotes/${REMOTE_NAME}/`
-    ).catch(() => ({ stdout: '' }));
+    const remoteResult = await execGitSilent(
+      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', `refs/remotes/${REMOTE_NAME}/`],
+      { cwd: PROJECT_ROOT }
+    );
+    const remoteOutput = remoteResult ? remoteResult.stdout : '';
 
     const remotePrefix = `${REMOTE_NAME}/`;
     for (const line of remoteOutput.split('\n').filter(Boolean)) {
@@ -1442,13 +1459,14 @@ async function switchToBranch(branchName, recordHistory = true) {
     addLog(`Switching to ${safeBranchName}...`, 'update');
     render();
 
-    const { stdout: localBranches } = await execAsync('git branch --list');
-    const hasLocal = localBranches.split('\n').some(b => b.trim().replace('* ', '') === safeBranchName);
+    const { stdout: localBranches } = await execGit(['branch', '--list'], { cwd: PROJECT_ROOT });
+    const hasLocal = localBranches.split('\n').some(b => b.trim().replace(/^\* /, '') === safeBranchName);
 
     if (hasLocal) {
-      await execAsync(`git checkout -- . 2>/dev/null; git checkout "${safeBranchName}"`);
+      await execGitSilent(['checkout', '--', '.'], { cwd: PROJECT_ROOT });
+      await execGit(['checkout', safeBranchName], { cwd: PROJECT_ROOT });
     } else {
-      await execAsync(`git checkout -b "${safeBranchName}" "${REMOTE_NAME}/${safeBranchName}"`);
+      await execGit(['checkout', '-b', safeBranchName, `${REMOTE_NAME}/${safeBranchName}`], { cwd: PROJECT_ROOT });
     }
 
     store.setState({ currentBranch: safeBranchName, isDetachedHead: false });
@@ -1540,7 +1558,7 @@ async function pullCurrentBranch() {
     addLog(`Pulling from ${REMOTE_NAME}/${branch}...`, 'update');
     render();
 
-    await execAsync(`git pull "${REMOTE_NAME}" "${branch}"`);
+    await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
     addLog('Pulled successfully', 'success');
     pendingDirtyOperation = null;
     notifyClients();
@@ -1867,12 +1885,12 @@ async function pollGitChanges() {
       const oldCommit = currentInfo.commit;
 
       try {
-        await execAsync(`git pull "${REMOTE_NAME}" "${autoPullBranchName}"`);
+        await execGit(['pull', REMOTE_NAME, autoPullBranchName], { cwd: PROJECT_ROOT, timeout: 60000 });
         addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
         store.setState({ hasMergeConflict: false });
         // Update the stored commit to the new one
-        const newCommit = await execAsync('git rev-parse --short HEAD');
+        const newCommit = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
         currentInfo.commit = newCommit.stdout.trim();
         previousBranchStates.set(autoPullBranchName, newCommit.stdout.trim());
         // Reload browsers
@@ -2273,9 +2291,9 @@ function setupKeyboardInput() {
           try {
             let result;
             if (platform === 'gitlab') {
-              result = await execAsync(`glab mr create --source-branch="${aBranch.name}" --fill --yes 2>&1`);
+              result = await execCli('glab', ['mr', 'create', `--source-branch=${aBranch.name}`, '--fill', '--yes']);
             } else {
-              result = await execAsync(`gh pr create --head "${aBranch.name}" --fill 2>&1`);
+              result = await execCli('gh', ['pr', 'create', '--head', aBranch.name, '--fill']);
             }
             addLog(`${prLabel} created: ${(result.stdout || '').trim().split('\n').pop()}`, 'success');
             // Invalidate cache and refresh modal data
@@ -2314,9 +2332,9 @@ function setupKeyboardInput() {
         render();
         try {
           if (platform === 'gitlab') {
-            await execAsync(`glab mr approve ${prInfo.number} 2>&1`);
+            await execCli('glab', ['mr', 'approve', String(prInfo.number)]);
           } else {
-            await execAsync(`gh pr review ${prInfo.number} --approve 2>&1`);
+            await execCli('gh', ['pr', 'review', String(prInfo.number), '--approve']);
           }
           addLog(`${prLabel} #${prInfo.number} approved`, 'success');
           // Refresh PR info to show updated status
@@ -2334,9 +2352,9 @@ function setupKeyboardInput() {
         render();
         try {
           if (platform === 'gitlab') {
-            await execAsync(`glab mr merge ${prInfo.number} --squash --remove-source-branch --yes 2>&1`);
+            await execCli('glab', ['mr', 'merge', String(prInfo.number), '--squash', '--remove-source-branch', '--yes']);
           } else {
-            await execAsync(`gh pr merge ${prInfo.number} --squash --delete-branch 2>&1`);
+            await execCli('gh', ['pr', 'merge', String(prInfo.number), '--squash', '--delete-branch']);
           }
           addLog(`${prLabel} #${prInfo.number} merged`, 'success');
           store.setState({ actionMode: false, actionData: null, actionLoading: false });
@@ -2356,13 +2374,13 @@ function setupKeyboardInput() {
         render();
         try {
           if (platform === 'gitlab') {
-            const result = await execAsync(`glab ci status --branch "${aBranch.name}" 2>&1`);
+            const result = await execCli('glab', ['ci', 'status', '--branch', aBranch.name]);
             const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 3)) {
               addLog(line.trim(), 'info');
             }
           } else if (prInfo) {
-            const result = await execAsync(`gh pr checks ${prInfo.number} 2>&1`);
+            const result = await execCli('gh', ['pr', 'checks', String(prInfo.number)]);
             const lines = (result.stdout || '').trim().split('\n');
             for (const line of lines.slice(0, 5)) {
               addLog(line.trim(), 'info');
