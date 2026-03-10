@@ -1,3 +1,11 @@
+## [1.8.4](https://github.com/drummel/git-watchtower/compare/v1.8.3...v1.8.4) (2026-03-10)
+
+
+### Bug Fixes
+
+* remove invalid stdio option from execFile calls in casino sounds ([b8b20b2](https://github.com/drummel/git-watchtower/commit/b8b20b2879b289587294895558a0067a8c824fb6))
+* replace shell-interpolated exec() with execFile() in casino sounds ([e133801](https://github.com/drummel/git-watchtower/commit/e1338010af4131dcf167ac9ffcef7ed676babc34))
+
 ## [1.8.3](https://github.com/drummel/git-watchtower/compare/v1.8.2...v1.8.3) (2026-03-10)
 
 
