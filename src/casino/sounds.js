@@ -57,19 +57,19 @@ function playFile(soundPath, volume = 0.5) {
   try {
     if (platform === 'darwin') {
       // macOS: afplay with volume — args passed as array (no shell)
-      execFile('afplay', ['-v', String(volume), soundPath], { stdio: 'ignore' }, () => {});
+      execFile('afplay', ['-v', String(volume), soundPath], () => {});
     } else if (platform === 'linux') {
       // Linux: paplay (PulseAudio), fall back to aplay (ALSA)
-      execFile('paplay', [soundPath], { stdio: 'ignore' }, (err) => {
+      execFile('paplay', [soundPath], (err) => {
         if (err) {
-          execFile('aplay', ['-q', soundPath], { stdio: 'ignore' }, () => {});
+          execFile('aplay', ['-q', soundPath], () => {});
         }
       });
     } else if (platform === 'win32') {
       // Windows: Use PowerShell to play sound — path passed as argument
       execFile('powershell', [
         '-c', `(New-Object Media.SoundPlayer $args[0]).PlaySync()`, '-args', soundPath,
-      ], { windowsHide: true, stdio: 'ignore' }, () => {});
+      ], { windowsHide: true }, () => {});
     }
   } catch (e) {
     // Silently fail - sounds are optional
