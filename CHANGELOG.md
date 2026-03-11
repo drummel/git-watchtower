@@ -1,3 +1,10 @@
+## [1.8.5](https://github.com/drummel/git-watchtower/compare/v1.8.4...v1.8.5) (2026-03-11)
+
+
+### Bug Fixes
+
+* use parseCommand() for server command parsing ([e558ca4](https://github.com/drummel/git-watchtower/commit/e558ca4bb452c1b815f20a99f35fb6a3e21535cd))
+
 ## [1.8.4](https://github.com/drummel/git-watchtower/compare/v1.8.3...v1.8.4) (2026-03-10)
 
 
