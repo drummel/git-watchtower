@@ -622,10 +622,8 @@ function startServerProcess() {
   addLog(`Starting: ${SERVER_COMMAND}`, 'update');
   addServerLog(`$ ${SERVER_COMMAND}`);
 
-  // Parse command and args
-  const parts = SERVER_COMMAND.split(' ');
-  const cmd = parts[0];
-  const args = parts.slice(1);
+  // Parse command and args (handles quoted arguments like `npm run "my script"`)
+  const { command: cmd, args } = parseCommand(SERVER_COMMAND);
 
   // Use shell on Windows, direct spawn elsewhere
   const isWindows = process.platform === 'win32';
@@ -740,6 +738,9 @@ const actions = require('../src/ui/actions');
 
 // Diff stats parsing and stash imported from src/git/commands.js
 const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../src/git/commands');
+
+// Server process command parsing
+const { parseCommand } = require('../src/server/process');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
