@@ -98,14 +98,17 @@ async function getAllBranches(options = {}) {
     const seenBranches = new Set();
 
     // Get local branches
+    // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
+    const delimiter = '\x1f';
     const localResult = await execGitSilent(
-      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', 'refs/heads/'],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
       { cwd }
     );
 
     if (localResult) {
       for (const line of localResult.stdout.split('\n').filter(Boolean)) {
-        const [name, dateStr, commit, subject] = line.split('|');
+        const [name, dateStr, commit, ...subjectParts] = line.split(delimiter);
+        const subject = subjectParts.join(delimiter);
         if (!seenBranches.has(name) && isValidBranchName(name)) {
           seenBranches.add(name);
           branchList.push({
@@ -123,14 +126,15 @@ async function getAllBranches(options = {}) {
 
     // Get remote branches
     const remoteResult = await execGitSilent(
-      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', `refs/remotes/${remoteName}/`],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${remoteName}/`],
       { cwd }
     );
 
     if (remoteResult) {
       const remotePrefix = `${remoteName}/`;
       for (const line of remoteResult.stdout.split('\n').filter(Boolean)) {
-        const [fullName, dateStr, commit, subject] = line.split('|');
+        const [fullName, dateStr, commit, ...subjectParts] = line.split(delimiter);
+        const subject = subjectParts.join(delimiter);
         const name = fullName.replace(remotePrefix, '');
 
         if (name === 'HEAD') continue;
@@ -265,9 +269,10 @@ async function getPreviewData(branchName, options = {}) {
     const safeName = sanitizeBranchName(branchName);
 
     // Get recent commits
+    // Use %x1f (Unit Separator) as delimiter since | can appear in commit subjects
     const commitLog = await log(safeName, {
       count: commitCount,
-      format: '%h|%s|%cr',
+      format: '%h%x1f%s%x1f%cr',
       cwd,
     });
 
@@ -275,7 +280,9 @@ async function getPreviewData(branchName, options = {}) {
       .split('\n')
       .filter(Boolean)
       .map((line) => {
-        const [hash, subject, time] = line.split('|');
+        const [hash, ...rest] = line.split('\x1f');
+        const time = rest.pop() || '';
+        const subject = rest.join('\x1f');
         return { hash, subject, time };
       });
 
