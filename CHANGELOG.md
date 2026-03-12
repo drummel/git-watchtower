@@ -1,3 +1,10 @@
+## [1.8.6](https://github.com/drummel/git-watchtower/compare/v1.8.5...v1.8.6) (2026-03-12)
+
+
+### Bug Fixes
+
+* anchor branch name prefix strip to start of string ([d924f40](https://github.com/drummel/git-watchtower/commit/d924f40fafa03455511a18d5929695debd4633e4))
+
 ## [1.8.5](https://github.com/drummel/git-watchtower/compare/v1.8.4...v1.8.5) (2026-03-11)
 
 
