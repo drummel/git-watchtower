@@ -225,7 +225,7 @@ async function checkout(branchName, options = {}) {
     const { stdout: localBranches } = await execGit(['branch', '--list'], { cwd });
     const hasLocal = localBranches
       .split('\n')
-      .some((b) => b.trim().replace('* ', '') === safeName);
+      .some((b) => b.trim().replace(/^\* /, '') === safeName);
 
     if (hasLocal) {
       // Local branch exists - just check out
@@ -335,7 +335,7 @@ async function getLocalBranches(cwd) {
     const { stdout } = await execGit(['branch', '--list'], { cwd });
     return stdout
       .split('\n')
-      .map((b) => b.trim().replace('* ', ''))
+      .map((b) => b.trim().replace(/^\* /, ''))
       .filter(Boolean);
   } catch (error) {
     return [];
