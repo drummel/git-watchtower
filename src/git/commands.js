@@ -13,6 +13,9 @@ const DEFAULT_TIMEOUT = 30000;
 // Longer timeout for fetch operations (60 seconds)
 const FETCH_TIMEOUT = 60000;
 
+// Short timeout for quick local operations (5 seconds)
+const SHORT_TIMEOUT = 5000;
+
 /**
  * Execute a git command safely using execFile (no shell).
  * @param {string | string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
@@ -393,6 +396,51 @@ async function deleteLocalBranch(branchName, options = {}) {
   }
 }
 
+/**
+ * Get ahead/behind counts for a branch relative to a base ref.
+ * Uses `git rev-list --left-right --count base...branch`.
+ * @param {string} branchRef - Branch ref (e.g. "feature/foo" or "origin/feature/foo")
+ * @param {string} baseRef - Base ref to compare against (e.g. "origin/main")
+ * @param {Object} [options] - Options
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{ahead: number, behind: number}>}
+ */
+async function getAheadBehind(branchRef, baseRef, options = {}) {
+  try {
+    const { stdout } = await execGit(
+      ['rev-list', '--left-right', '--count', `${baseRef}...${branchRef}`],
+      { ...options, timeout: SHORT_TIMEOUT }
+    );
+    const parts = stdout.trim().split(/\s+/);
+    return {
+      behind: parseInt(parts[0], 10) || 0,
+      ahead: parseInt(parts[1], 10) || 0,
+    };
+  } catch (e) {
+    return { ahead: 0, behind: 0 };
+  }
+}
+
+/**
+ * Get diff stats (lines added/deleted) between two refs using three-dot syntax.
+ * @param {string} baseRef - Base ref (e.g. "origin/main")
+ * @param {string} branchRef - Branch ref (e.g. "feature/foo")
+ * @param {Object} [options] - Options
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{added: number, deleted: number}>}
+ */
+async function getDiffShortstat(baseRef, branchRef, options = {}) {
+  try {
+    const { stdout } = await execGit(
+      ['diff', '--shortstat', `${baseRef}...${branchRef}`],
+      { ...options, timeout: SHORT_TIMEOUT }
+    );
+    return parseDiffStats(stdout);
+  } catch (e) {
+    return { added: 0, deleted: 0 };
+  }
+}
+
 module.exports = {
   execGit,
   execGitSilent,
@@ -411,6 +459,8 @@ module.exports = {
   parseDiffStats,
   getDiffStats,
   deleteLocalBranch,
+  getAheadBehind,
+  getDiffShortstat,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 };
