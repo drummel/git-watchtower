@@ -21,9 +21,27 @@ const {
   visibleLength,
   stripAnsi,
 } = require('../ui/ansi');
-const { formatTimeAgo } = require('../utils/time');
+const { formatTimeAgo, formatTimeCompact } = require('../utils/time');
 const { isBaseBranch } = require('../git/pr');
 const { version: PACKAGE_VERSION } = require('../../package.json');
+
+// ---------------------------------------------------------------------------
+// Compact number formatting
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a number compactly: 0-999 as-is, 1k-9.9k with decimal,
+ * 10k-999k without decimal, 1m+ with decimal.
+ * @param {number} n
+ * @returns {string}
+ */
+function fmtCompact(n) {
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1) + 'k';
+  if (n < 1000000) return Math.round(n / 1000) + 'k';
+  if (n < 10000000) return (n / 1000000).toFixed(1) + 'm';
+  return Math.round(n / 1000000) + 'm';
+}
 
 // ---------------------------------------------------------------------------
 // renderHeader
@@ -167,16 +185,58 @@ function renderBranchList(state, write) {
     const branch = displayBranches[i];
     const isSelected = i === state.selectedIndex;
     const isCurrent = branch.name === state.currentBranch;
-    const timeAgo = formatTimeAgo(branch.date);
+    const timeAgo = formatTimeCompact(branch.date);
     const sparkline = state.sparklineCache.get(branch.name) || '       ';
     const prStatus = state.branchPrStatusMap.get(branch.name);
     const isBranchBase = isBaseBranch(branch.name);
     const isMerged = !isBranchBase && prStatus && prStatus.state === 'MERGED';
     const hasOpenPr = prStatus && prStatus.state === 'OPEN';
+    const aheadBehind = state.aheadBehindCache ? state.aheadBehindCache.get(branch.name) : null;
+
+    // Diff stats: two right-justified columns, always reserving space for alignment
+    // Col 1: "+N/-N commits" right-justified in 16 chars
+    // Col 2: "+N/-N lines"   right-justified in 14 chars
+    // Total: 16 + 1(gap) + 14 + 1(gap) = 32 chars always reserved
+    const COL_COMMITS = 16;
+    const COL_LINES = 14;
+    const DIFF_TAG_FIXED_LEN = COL_COMMITS + 1 + COL_LINES + 1; // 32 total
+    let diffTag = ' '.repeat(DIFF_TAG_FIXED_LEN); // blank by default for alignment
+    if (!isBranchBase && !branch.isDeleted && aheadBehind) {
+      const a = aheadBehind.ahead;
+      const b = aheadBehind.behind;
+      const la = aheadBehind.linesAdded || 0;
+      const ld = aheadBehind.linesDeleted || 0;
+
+      // Commits: "+N/-N commits", right-justified in COL_COMMITS
+      const aFmt = fmtCompact(a);
+      const bFmt = fmtCompact(b);
+      const commitText = '+' + aFmt + '/-' + bFmt + ' commits';
+      const cPad = ' '.repeat(Math.max(0, COL_COMMITS - commitText.length));
+      const commitColored = cPad +
+        (a > 0 ? ansi.brightCyan : ansi.dim + ansi.gray) + '+' + aFmt + ansi.reset +
+        ansi.gray + '/' + ansi.reset +
+        (b > 0 ? ansi.fg256(209) : ansi.dim + ansi.gray) + '-' + bFmt + ansi.reset +
+        ansi.gray + ' commits' + ansi.reset;
+
+      // Lines: "+N/-N lines", right-justified in COL_LINES
+      const laFmt = fmtCompact(la);
+      const ldFmt = fmtCompact(ld);
+      const linesText = '+' + laFmt + '/-' + ldFmt + ' lines';
+      const lPad = ' '.repeat(Math.max(0, COL_LINES - linesText.length));
+      const linesColored = lPad +
+        (la > 0 ? ansi.green : ansi.dim + ansi.gray) + '+' + laFmt + ansi.reset +
+        ansi.gray + '/' + ansi.reset +
+        (ld > 0 ? ansi.red : ansi.dim + ansi.gray) + '-' + ldFmt + ansi.reset +
+        ansi.gray + ' lines' + ansi.reset;
+
+      diffTag = commitColored + ' ' + linesColored + ' ';
+    }
 
     write(ansi.moveTo(row, 2));
     const cursor = isSelected ? ' \u25B6 ' : '   ';
-    const maxNameLen = contentWidth - 38;
+    // Reserve: cursor(3) + sparkline(7) + PR dot(1) + diffTag(32) + status(9) + gap(1) + time(4) + padding(2)
+    const fixedWidth = 27 + DIFF_TAG_FIXED_LEN;
+    const maxNameLen = contentWidth - fixedWidth;
     const displayName = truncate(branch.name, maxNameLen);
     const namePadding = Math.max(1, maxNameLen - displayName.length + 2);
 
@@ -201,17 +261,18 @@ function renderBranchList(state, write) {
 
     write(' '.repeat(namePadding));
 
-    // Sparkline
+    // Sparkline (inside highlight)
     if (isSelected) write(ansi.reset);
     if (isMerged && !isCurrent) {
       write(ansi.dim + ansi.fg256(60) + sparkline + ansi.reset);
     } else {
       write(ansi.fg256(39) + sparkline + ansi.reset);
     }
-    if (isSelected) write(ansi.inverse);
 
-    // PR status dot
+    // End the selected-row highlight here — everything after is outside
     if (isSelected) write(ansi.reset);
+
+    // PR status dot (just before columns)
     if (isMerged) {
       write(ansi.dim + ansi.magenta + '\u25CF' + ansi.reset);
     } else if (hasOpenPr) {
@@ -219,38 +280,28 @@ function renderBranchList(state, write) {
     } else {
       write(' ');
     }
-    if (isSelected) write(ansi.inverse);
+
+    // Diff stats columns
+    write(diffTag);
 
     // Status badge
     if (branch.isDeleted) {
-      if (isSelected) write(ansi.reset);
       write(ansi.red + ansi.dim + '\u2717 DELETED' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
     } else if (isMerged && !isCurrent && !branch.isNew && !branch.hasUpdates) {
-      if (isSelected) write(ansi.reset);
       write(ansi.dim + ansi.magenta + '\u2713 MERGED ' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
     } else if (isCurrent) {
-      if (isSelected) write(ansi.reset);
       write(ansi.green + '\u2605 CURRENT' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
     } else if (branch.isNew) {
-      if (isSelected) write(ansi.reset);
       write(ansi.magenta + '\u2726 NEW    ' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
     } else if (branch.hasUpdates) {
-      if (isSelected) write(ansi.reset);
       write(ansi.yellow + '\u2193 UPDATES' + ansi.reset);
-      if (isSelected) write(ansi.inverse);
     } else {
       write('         ');
     }
 
-    // Time ago
-    write('  ');
-    if (isSelected) write(ansi.reset);
-    write(ansi.gray + padLeft(timeAgo, 10) + ansi.reset);
-    if (isSelected) write(ansi.reset);
+    // Time ago (compact)
+    write(' ');
+    write(ansi.gray + padLeft(timeAgo, 4) + ansi.reset);
 
     row++;
 
@@ -317,6 +368,110 @@ function renderActivityLog(state, write, startRow) {
   if (state.activityLog.length === 0) {
     write(ansi.moveTo(startRow + 1, 3));
     write(ansi.gray + 'No activity yet...' + ansi.reset);
+  }
+
+  return startRow + height;
+}
+
+// ---------------------------------------------------------------------------
+// renderSessionStats
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the session statistics panel (always visible in normal mode).
+ *
+ * @param {object} state
+ * @param {function} write
+ * @param {number} startRow - Row where the box should begin.
+ * @returns {number} The row immediately after the session stats box.
+ */
+function renderSessionStats(state, write, startRow) {
+  if (state.casinoModeEnabled) return startRow;
+
+  const stats = state.sessionStats;
+  if (!stats) return startRow;
+
+  const boxWidth = state.terminalWidth;
+  const contentWidth = boxWidth - 4;
+  const STALE_DAYS = 30;
+  const STALE_WARNING_THRESHOLD = 5;
+
+  // Count active vs stale branches
+  const branches = state.branches || [];
+  const now = Date.now();
+  const staleMs = STALE_DAYS * 24 * 60 * 60 * 1000;
+  let staleBranches = 0;
+  let activeBranches = 0;
+  for (const b of branches) {
+    if (b.date && (now - b.date.getTime()) > staleMs) {
+      staleBranches++;
+    } else {
+      activeBranches++;
+    }
+  }
+
+  const showStaleHint = staleBranches >= STALE_WARNING_THRESHOLD;
+
+  // Build the stats line to measure if it fits in one row
+  // Parts: Duration | Lines | Polls (hits, %) | Last update | Branches: N active, N stale
+  let partsPlain = 'Duration: ' + stats.sessionDuration
+    + '  |  Lines: +' + stats.linesAdded + '/-' + stats.linesDeleted
+    + '  |  Polls: ' + stats.totalPolls;
+  if (stats.pollsWithUpdates > 0) {
+    partsPlain += ' (' + stats.pollsWithUpdates + ' hits, ' + stats.hitRate + '%)';
+  }
+  if (stats.lastUpdate) {
+    partsPlain += '  |  Last update: ' + stats.lastUpdate;
+  }
+  partsPlain += '  |  Branches: ' + activeBranches + ' active';
+  if (staleBranches > 0) {
+    partsPlain += ', ' + staleBranches + ' stale (>' + STALE_DAYS + 'd)';
+  }
+  if (showStaleHint) {
+    partsPlain += '  — press d to clean up';
+  }
+
+  const fitOneLine = partsPlain.length <= contentWidth;
+  const height = fitOneLine ? 4 : 5;
+
+  // Don't draw if not enough space
+  if (startRow + height > state.terminalHeight - 3) return startRow;
+
+  write(drawBox(startRow, 1, boxWidth, height, 'SESSION STATS', ansi.gray));
+
+  // Clear content area
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(startRow + i, 2));
+    write(' '.repeat(boxWidth - 2));
+  }
+
+  // Line 1: duration, lines, polls, last update
+  write(ansi.moveTo(startRow + 1, 3));
+  write(ansi.gray + 'Duration: ' + ansi.reset + ansi.cyan + stats.sessionDuration + ansi.reset);
+  write(ansi.gray + '  |  Lines: ' + ansi.reset);
+  write(ansi.green + '+' + stats.linesAdded + ansi.reset);
+  write(ansi.gray + '/' + ansi.reset);
+  write(ansi.red + '-' + stats.linesDeleted + ansi.reset);
+  write(ansi.gray + '  |  Polls: ' + ansi.reset + stats.totalPolls);
+  if (stats.pollsWithUpdates > 0) {
+    write(ansi.gray + ' (' + ansi.reset + ansi.green + stats.pollsWithUpdates + ' hits' + ansi.reset + ansi.gray + ', ' + stats.hitRate + '%)' + ansi.reset);
+  }
+  if (stats.lastUpdate) {
+    write(ansi.gray + '  |  Last update: ' + ansi.reset + ansi.yellow + stats.lastUpdate + ansi.reset);
+  }
+
+  // Branch counts — same line or next line depending on width
+  const branchRow = fitOneLine ? startRow + 1 : startRow + 2;
+  if (!fitOneLine) {
+    write(ansi.moveTo(branchRow, 3));
+  }
+  write(ansi.gray + '  |  Branches: ' + ansi.reset + ansi.green + activeBranches + ' active' + ansi.reset);
+  if (staleBranches > 0) {
+    write(ansi.gray + ', ' + ansi.reset + ansi.yellow + staleBranches + ' stale' + ansi.reset);
+    write(ansi.gray + ' (>' + STALE_DAYS + 'd)' + ansi.reset);
+  }
+  if (showStaleHint) {
+    write(ansi.gray + '  \u2014 press ' + ansi.reset + ansi.white + 'd' + ansi.reset + ansi.gray + ' to clean up' + ansi.reset);
   }
 
   return startRow + height;
@@ -1424,6 +1579,7 @@ module.exports = {
   renderHeader,
   renderBranchList,
   renderActivityLog,
+  renderSessionStats,
   renderCasinoStats,
   renderFooter,
   renderFlash,

@@ -58,9 +58,16 @@ async function promptIfNeeded(promptYesNo) {
   console.log('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518');
   console.log('');
 
+  const distinctId = config.getOrCreateDistinctId();
+
+  // Fire analytics_prompt_shown event — always sent regardless of user's choice
+  analytics.captureAlways('analytics_prompt_shown', distinctId);
+
   const answer = await promptYesNo('Enable anonymous telemetry to help improve Git Watchtower?', false);
 
-  const distinctId = config.getOrCreateDistinctId();
+  // Fire analytics_decision event — always sent so we know opt-in/out rates
+  analytics.captureAlways('analytics_decision', distinctId, { opted_in: answer });
+
   config.saveTelemetryConfig({
     telemetryEnabled: answer,
     distinctId,
@@ -79,6 +86,7 @@ module.exports = {
   init: analytics.init,
   capture: analytics.capture,
   captureError: analytics.captureError,
+  captureAlways: analytics.captureAlways,
   shutdown: analytics.shutdown,
   isEnabled: analytics.isEnabled,
 

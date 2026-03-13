@@ -95,6 +95,7 @@
  * @property {boolean} casinoModeEnabled - Casino mode enabled
  * @property {Map<string, string>} sparklineCache - Branch sparkline cache
  * @property {Map<string, Object>} branchPrStatusMap - Branch PR status cache
+ * @property {Map<string, Object>} aheadBehindCache - Branch ahead/behind cache
  * @property {string} serverMode - Server mode ('static' | 'command' | 'none')
  * @property {boolean} noServer - No server mode
  * @property {number} port - Server port
@@ -176,6 +177,7 @@ function getInitialState() {
     // Caches (Maps — shallow-copied by getState())
     sparklineCache: new Map(),
     branchPrStatusMap: new Map(),
+    aheadBehindCache: new Map(),
 
     // Config (set once at startup, treated as read-only after)
     serverMode: 'static',

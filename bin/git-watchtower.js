@@ -66,7 +66,7 @@ const casinoSounds = require('../src/casino/sounds');
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
 
-// Telemetry (opt-in PostHog analytics)
+// Telemetry (opt-in analytics via PostHog HTTP API — zero dependencies)
 const telemetry = require('../src/telemetry');
 
 // Extracted modules
@@ -82,7 +82,10 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
-const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat } = require('../src/git/commands');
+
+// Session stats (always-on, non-casino stats)
+const sessionStats = require('../src/stats/session');
 
 // ============================================================================
 // Configuration (imports from src/config/, inline wizard kept here)
@@ -858,6 +861,53 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD') {
   return getDiffStatsSafe(fromCommit, toCommit, { cwd: PROJECT_ROOT });
 }
 
+// Ahead/behind: detect default branch and fetch counts
+let detectedDefaultBranch = null;
+
+async function detectDefaultBranch() {
+  const candidates = ['main', 'master', 'develop', 'development', 'trunk'];
+  for (const name of candidates) {
+    try {
+      await execGit(['rev-parse', '--verify', `${REMOTE_NAME}/${name}`], { cwd: PROJECT_ROOT });
+      detectedDefaultBranch = `${REMOTE_NAME}/${name}`;
+      return;
+    } catch (e) {
+      // Try next candidate
+    }
+  }
+  // Fallback: try HEAD of remote
+  try {
+    const { stdout } = await execGit(['symbolic-ref', `refs/remotes/${REMOTE_NAME}/HEAD`], { cwd: PROJECT_ROOT });
+    detectedDefaultBranch = stdout.trim().replace('refs/remotes/', '');
+  } catch (e) {
+    detectedDefaultBranch = null;
+  }
+}
+
+async function fetchAheadBehindForBranches(branches) {
+  if (!detectedDefaultBranch) return;
+  const visible = branches.slice(0, store.get('visibleBranchCount'));
+  const cache = new Map(store.get('aheadBehindCache'));
+  const promises = visible.map(async (branch) => {
+    if (isBaseBranch(branch.name)) return;
+    // Use local ref if local, otherwise remote ref
+    const branchRef = branch.isLocal ? branch.name : `${REMOTE_NAME}/${branch.name}`;
+    const [abResult, diffResult] = await Promise.all([
+      getAheadBehind(branchRef, detectedDefaultBranch, { cwd: PROJECT_ROOT }),
+      getDiffShortstat(detectedDefaultBranch, branchRef, { cwd: PROJECT_ROOT }),
+    ]);
+    cache.set(branch.name, {
+      ahead: abResult.ahead,
+      behind: abResult.behind,
+      linesAdded: diffResult.added,
+      linesDeleted: diffResult.deleted,
+    });
+  });
+  await Promise.all(promises);
+  store.setState({ aheadBehindCache: cache });
+  render();
+}
+
 // formatTimeAgo imported from src/utils/time.js
 
 // truncate imported from src/ui/ansi.js
@@ -1118,6 +1168,7 @@ function renderCasinoStats(startRow) {
 function getRenderState() {
   const s = store.getState();
   s.clientCount = clients.size;
+  s.sessionStats = sessionStats.getStats();
   return s;
 }
 
@@ -1141,7 +1192,8 @@ function render() {
   renderer.renderHeader(state, write);
   const logStart = renderer.renderBranchList(state, write);
   const statsStart = renderer.renderActivityLog(state, write, logStart);
-  renderCasinoStats(statsStart);
+  const casinoStart = renderer.renderSessionStats(state, write, statsStart);
+  renderCasinoStats(casinoStart);
   renderer.renderFooter(state, write);
 
   // Casino mode: full border (top, bottom, left, right)
@@ -1819,6 +1871,9 @@ async function pollGitChanges() {
       casino.recordPoll(false);
     }
 
+    // Session stats: always track polls (independent of casino mode)
+    sessionStats.recordPoll(notifyBranches.length > 0);
+
     // Remember which branch was selected before updating the list
     const { selectedBranchName: prevSelName, selectedIndex: prevSelIdx } = store.getState();
     const previouslySelectedName = prevSelName || (currentBranches[prevSelIdx] ? currentBranches[prevSelIdx].name : null);
@@ -1875,6 +1930,9 @@ async function pollGitChanges() {
       });
     }
 
+    // Background ahead/behind fetch for visible branches
+    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => {});
+
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
     const autoPullBranchName = store.get('currentBranch');
     const currentInfo = store.get('branches').find(b => b.name === autoPullBranchName);
@@ -1897,11 +1955,14 @@ async function pollGitChanges() {
         // Reload browsers
         notifyClients();
 
-        // Casino mode: calculate actual diff and trigger win effect
-        if (store.get('casinoModeEnabled') && oldCommit) {
+        // Calculate actual diff for stats tracking
+        if (oldCommit) {
           const diffStats = await getDiffStats(oldCommit, 'HEAD');
           const totalLines = diffStats.added + diffStats.deleted;
-          if (totalLines > 0) {
+          // Always track session churn
+          sessionStats.recordChurn(diffStats.added, diffStats.deleted);
+          // Casino mode: trigger win effect
+          if (store.get('casinoModeEnabled') && totalLines > 0) {
             casino.triggerWin(diffStats.added, diffStats.deleted, render);
             const winLevel = casino.getWinLevel(totalLines);
             if (winLevel) {
@@ -2974,6 +3035,11 @@ async function start() {
   } else if (initBranches.length > 0) {
     store.setState({ selectedBranchName: initBranches[0].name });
   }
+
+  // Detect default branch for ahead/behind counts, then fetch initial data
+  detectDefaultBranch().then(() => {
+    fetchAheadBehindForBranches(initBranches).catch(() => {});
+  }).catch(() => {});
 
   // Load sparklines and action cache in background
   refreshAllSparklines().catch(() => {});
