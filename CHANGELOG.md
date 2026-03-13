@@ -1,3 +1,16 @@
+# [1.9.0](https://github.com/drummel/git-watchtower/compare/v1.8.6...v1.9.0) (2026-03-13)
+
+
+### Bug Fixes
+
+* resolve typecheck errors in store and analytics ([b16145b](https://github.com/drummel/git-watchtower/commit/b16145b77d046ea0d88c63b3efab46cf939c99e2))
+
+
+### Features
+
+* add ahead/behind counters, line diffs, and session stats panel ([d6fbd52](https://github.com/drummel/git-watchtower/commit/d6fbd523ea834dd889224a30f6db298c0948816f))
+* remove posthog-node dependency, use direct HTTP API ([fb88536](https://github.com/drummel/git-watchtower/commit/fb885361bf661e0ec595ab03b9e08244c9edf504))
+
 ## [1.8.6](https://github.com/drummel/git-watchtower/compare/v1.8.5...v1.8.6) (2026-03-12)
 
 
