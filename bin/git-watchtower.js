@@ -66,7 +66,7 @@ const casinoSounds = require('../src/casino/sounds');
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
 
-// Telemetry (opt-in PostHog analytics)
+// Telemetry (opt-in analytics via PostHog HTTP API — zero dependencies)
 const telemetry = require('../src/telemetry');
 
 // Extracted modules

@@ -87,8 +87,5 @@
         }
       ]
     ]
-  },
-  "dependencies": {
-    "posthog-node": "^5.28.0"
   }
 }
