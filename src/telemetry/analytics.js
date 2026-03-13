@@ -150,10 +150,10 @@ function captureError(error) {
  * Used for prompt_shown and analytics_decision events that fire
  * before the user has made their telemetry choice.
  * @param {string} event - Event name
- * @param {Record<string, any>} [properties] - Event properties
  * @param {string} userDistinctId - The user's distinct ID
+ * @param {Record<string, any>} [properties] - Event properties
  */
-function captureAlways(event, properties = {}, userDistinctId) {
+function captureAlways(event, userDistinctId, properties = {}) {
   try {
     const payload = JSON.stringify({
       api_key: POSTHOG_API_KEY,

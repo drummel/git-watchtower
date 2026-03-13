@@ -92,8 +92,8 @@ describe('telemetry/analytics', () => {
       analytics.init({ version: '1.0.0' });
       assert.equal(analytics.isEnabled(), false);
       // Should not throw — sends directly via HTTPS, bypasses enabled check
-      analytics.captureAlways('analytics_prompt_shown', {}, 'test-distinct-id');
-      analytics.captureAlways('analytics_decision', { opted_in: false }, 'test-distinct-id');
+      analytics.captureAlways('analytics_prompt_shown', 'test-distinct-id');
+      analytics.captureAlways('analytics_decision', 'test-distinct-id', { opted_in: false });
     });
   });
 

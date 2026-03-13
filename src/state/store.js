@@ -95,6 +95,7 @@
  * @property {boolean} casinoModeEnabled - Casino mode enabled
  * @property {Map<string, string>} sparklineCache - Branch sparkline cache
  * @property {Map<string, Object>} branchPrStatusMap - Branch PR status cache
+ * @property {Map<string, Object>} aheadBehindCache - Branch ahead/behind cache
  * @property {string} serverMode - Server mode ('static' | 'command' | 'none')
  * @property {boolean} noServer - No server mode
  * @property {number} port - Server port

@@ -61,12 +61,12 @@ async function promptIfNeeded(promptYesNo) {
   const distinctId = config.getOrCreateDistinctId();
 
   // Fire analytics_prompt_shown event — always sent regardless of user's choice
-  analytics.captureAlways('analytics_prompt_shown', {}, distinctId);
+  analytics.captureAlways('analytics_prompt_shown', distinctId);
 
   const answer = await promptYesNo('Enable anonymous telemetry to help improve Git Watchtower?', false);
 
   // Fire analytics_decision event — always sent so we know opt-in/out rates
-  analytics.captureAlways('analytics_decision', { opted_in: answer }, distinctId);
+  analytics.captureAlways('analytics_decision', distinctId, { opted_in: answer });
 
   config.saveTelemetryConfig({
     telemetryEnabled: answer,
