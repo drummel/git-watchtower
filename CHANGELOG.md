@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/drummel/git-watchtower/compare/v1.9.0...v1.9.1) (2026-03-13)
+
+
+### Bug Fixes
+
+* use unit separator instead of pipe delimiter in getAllBranches and getPreviewData ([5b897bd](https://github.com/drummel/git-watchtower/commit/5b897bdb760854a39d6c670c467fe7dbc1477998))
+
 # [1.9.0](https://github.com/drummel/git-watchtower/compare/v1.8.6...v1.9.0) (2026-03-13)
 
 
