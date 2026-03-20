@@ -1817,6 +1817,28 @@ async function pollGitChanges() {
       }
     }
 
+    // Prune stale entries: remove branches from tracking sets/caches
+    // that no longer exist in git (deleted >30s ago or already gone)
+    const DELETED_RETENTION_MS = 30 * 1000;
+    for (const knownName of [...knownBranchNames]) {
+      if (fetchedBranchNames.has(knownName)) continue;
+      const deletedBranch = allBranches.find(b => b.name === knownName && b.isDeleted);
+      if (deletedBranch && deletedBranch.deletedAt && (now - deletedBranch.deletedAt) > DELETED_RETENTION_MS) {
+        knownBranchNames.delete(knownName);
+        previousBranchStates.delete(knownName);
+        prInfoCache.delete(knownName);
+        store.get('sparklineCache').delete(knownName);
+        store.get('aheadBehindCache').delete(knownName);
+      } else if (!deletedBranch) {
+        // Not in allBranches at all — stale entry, clean up immediately
+        knownBranchNames.delete(knownName);
+        previousBranchStates.delete(knownName);
+        prInfoCache.delete(knownName);
+        store.get('sparklineCache').delete(knownName);
+        store.get('aheadBehindCache').delete(knownName);
+      }
+    }
+
     // Note: isNew flag is only cleared when branch becomes current (see below)
 
     // Keep deleted branches in the list (don't remove them)
