@@ -993,11 +993,11 @@ async function refreshAllSparklines() {
     return; // Don't refresh too often
   }
 
-  try {
-    const currentBranches = store.get('branches');
-    for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
-      if (branch.isDeleted) continue;
+  const currentBranches = store.get('branches');
+  for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
+    if (branch.isDeleted) continue;
 
+    try {
       // Get commit counts for last 7 days (try remote, fall back to local)
       const sparkResult = await execGitSilent(
         ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
@@ -1027,11 +1027,11 @@ async function refreshAllSparklines() {
 
       const counts = Array.from(dayCounts.values());
       store.get('sparklineCache').set(branch.name, generateSparkline(counts));
+    } catch (e) {
+      // Skip this branch - don't let one failure abort all sparkline updates
     }
-    lastSparklineUpdate = now;
-  } catch (e) {
-    // Silently fail - sparklines are optional
   }
+  lastSparklineUpdate = now;
 }
 
 async function getPreviewData(branchName) {
