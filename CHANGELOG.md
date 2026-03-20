@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/drummel/git-watchtower/compare/v1.9.1...v1.9.2) (2026-03-20)
+
+
+### Bug Fixes
+
+* move try/catch inside sparkline refresh loop to prevent one branch failure from aborting all updates ([90b1968](https://github.com/drummel/git-watchtower/commit/90b19681706efb113361734d5d5ef3b8e1430b67))
+
 ## [1.9.1](https://github.com/drummel/git-watchtower/compare/v1.9.0...v1.9.1) (2026-03-13)
 
 
