@@ -1,3 +1,10 @@
+## [1.9.3](https://github.com/drummel/git-watchtower/compare/v1.9.2...v1.9.3) (2026-03-21)
+
+
+### Bug Fixes
+
+* prune stale branch entries from tracking maps and caches ([97a3a45](https://github.com/drummel/git-watchtower/commit/97a3a452b5c05aa554efb18f72804a53f5bb77a8))
+
 ## [1.9.2](https://github.com/drummel/git-watchtower/compare/v1.9.1...v1.9.2) (2026-03-20)
 
 
