@@ -82,6 +82,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
+const { pruneStaleEntries } = require('../src/polling/engine');
 const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
@@ -1819,25 +1820,13 @@ async function pollGitChanges() {
 
     // Prune stale entries: remove branches from tracking sets/caches
     // that no longer exist in git (deleted >30s ago or already gone)
-    const DELETED_RETENTION_MS = 30 * 1000;
-    for (const knownName of [...knownBranchNames]) {
-      if (fetchedBranchNames.has(knownName)) continue;
-      const deletedBranch = allBranches.find(b => b.name === knownName && b.isDeleted);
-      if (deletedBranch && deletedBranch.deletedAt && (now - deletedBranch.deletedAt) > DELETED_RETENTION_MS) {
-        knownBranchNames.delete(knownName);
-        previousBranchStates.delete(knownName);
-        prInfoCache.delete(knownName);
-        store.get('sparklineCache').delete(knownName);
-        store.get('aheadBehindCache').delete(knownName);
-      } else if (!deletedBranch) {
-        // Not in allBranches at all — stale entry, clean up immediately
-        knownBranchNames.delete(knownName);
-        previousBranchStates.delete(knownName);
-        prInfoCache.delete(knownName);
-        store.get('sparklineCache').delete(knownName);
-        store.get('aheadBehindCache').delete(knownName);
-      }
-    }
+    pruneStaleEntries({
+      knownBranchNames,
+      fetchedBranchNames,
+      allBranches,
+      caches: [previousBranchStates, prInfoCache, store.get('sparklineCache'), store.get('aheadBehindCache')],
+      now,
+    });
 
     // Note: isNew flag is only cleared when branch becomes current (see below)
 
