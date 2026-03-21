@@ -82,6 +82,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
+const { pruneStaleEntries } = require('../src/polling/engine');
 const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
@@ -1816,6 +1817,16 @@ async function pollGitChanges() {
         // Remove from known set after a delay (handled below)
       }
     }
+
+    // Prune stale entries: remove branches from tracking sets/caches
+    // that no longer exist in git (deleted >30s ago or already gone)
+    pruneStaleEntries({
+      knownBranchNames,
+      fetchedBranchNames,
+      allBranches,
+      caches: [previousBranchStates, prInfoCache, store.get('sparklineCache'), store.get('aheadBehindCache')],
+      now,
+    });
 
     // Note: isNew flag is only cleared when branch becomes current (see below)
 
