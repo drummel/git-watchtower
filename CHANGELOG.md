@@ -1,3 +1,10 @@
+## [1.9.4](https://github.com/drummel/git-watchtower/compare/v1.9.3...v1.9.4) (2026-03-24)
+
+
+### Bug Fixes
+
+* use unit separator delimiter in getAllBranches to prevent data corruption ([f00c5d6](https://github.com/drummel/git-watchtower/commit/f00c5d68954e17f098df6c8315d48e9126dd89fd))
+
 ## [1.9.3](https://github.com/drummel/git-watchtower/compare/v1.9.2...v1.9.3) (2026-03-21)
 
 
