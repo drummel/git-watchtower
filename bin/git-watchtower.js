@@ -1424,13 +1424,16 @@ async function getAllBranches() {
     const seenBranches = new Set();
 
     // Get local branches
+    // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
+    const delimiter = '\x1f';
     const { stdout: localOutput } = await execGit(
-      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', 'refs/heads/'],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
       { cwd: PROJECT_ROOT }
     );
 
     for (const line of localOutput.split('\n').filter(Boolean)) {
-      const [name, dateStr, commit, subject] = line.split('|');
+      const [name, dateStr, commit, ...subjectParts] = line.split(delimiter);
+      const subject = subjectParts.join(delimiter);
       if (!seenBranches.has(name) && isValidBranchName(name)) {
         seenBranches.add(name);
         branchList.push({
@@ -1447,14 +1450,15 @@ async function getAllBranches() {
 
     // Get remote branches (using configured remote name)
     const remoteResult = await execGitSilent(
-      ['for-each-ref', '--sort=-committerdate', '--format=%(refname:short)|%(committerdate:iso8601)|%(objectname:short)|%(subject)', `refs/remotes/${REMOTE_NAME}/`],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${REMOTE_NAME}/`],
       { cwd: PROJECT_ROOT }
     );
     const remoteOutput = remoteResult ? remoteResult.stdout : '';
 
     const remotePrefix = `${REMOTE_NAME}/`;
     for (const line of remoteOutput.split('\n').filter(Boolean)) {
-      const [fullName, dateStr, commit, subject] = line.split('|');
+      const [fullName, dateStr, commit, ...subjectParts] = line.split(delimiter);
+      const subject = subjectParts.join(delimiter);
       const name = fullName.replace(remotePrefix, '');
       if (name === 'HEAD') continue;
       if (!isValidBranchName(name)) continue;
