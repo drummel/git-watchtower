@@ -1,3 +1,10 @@
+## [1.9.5](https://github.com/drummel/git-watchtower/compare/v1.9.4...v1.9.5) (2026-03-25)
+
+
+### Bug Fixes
+
+* clear justUpdated flag at start of each poll cycle ([b7935e7](https://github.com/drummel/git-watchtower/commit/b7935e729db142a0aa5a633e0d639777d3569b9e))
+
 ## [1.9.4](https://github.com/drummel/git-watchtower/compare/v1.9.3...v1.9.4) (2026-03-24)
 
 
