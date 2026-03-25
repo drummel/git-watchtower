@@ -81,9 +81,9 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
-const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches } = require('../src/git/branch');
+const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
 const { pruneStaleEntries } = require('../src/polling/engine');
-const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
 const sessionStats = require('../src/stats/session');
@@ -743,8 +743,9 @@ const actions = require('../src/ui/actions');
 // Diff stats parsing and stash imported from src/git/commands.js
 const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../src/git/commands');
 
-// Server process command parsing
+// Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
+const { getMimeType, injectLiveReload } = require('../src/server/static');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
@@ -781,39 +782,7 @@ const MAX_HISTORY = 20;
 let lastSparklineUpdate = 0;
 const SPARKLINE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-// MIME types
-const MIME_TYPES = {
-  '.html': 'text/html',
-  '.css': 'text/css',
-  '.js': 'application/javascript',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.webp': 'image/webp',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.xml': 'application/xml',
-  '.txt': 'text/plain',
-  '.md': 'text/markdown',
-  '.pdf': 'application/pdf',
-};
-
-// Live reload script
-const LIVE_RELOAD_SCRIPT = `
-<script>
-(function() {
-  var source = new EventSource('/livereload');
-  source.onmessage = function(e) {
-    if (e.data === 'reload') location.reload();
-  };
-})();
-</script>
-</body>`;
+// MIME_TYPES and LIVE_RELOAD_SCRIPT imported from src/server/static.js (via getMimeType and injectLiveReload)
 
 // ============================================================================
 // Utility Functions
@@ -1379,20 +1348,9 @@ function hideStashConfirm() {
 // ============================================================================
 
 async function getCurrentBranch() {
-  try {
-    const { stdout } = await execGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: PROJECT_ROOT });
-    // Check for detached HEAD state
-    if (stdout === 'HEAD') {
-      store.setState({ isDetachedHead: true });
-      // Get the short commit hash instead
-      const { stdout: commitHash } = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
-      return `HEAD@${commitHash}`;
-    }
-    store.setState({ isDetachedHead: false });
-    return stdout;
-  } catch (e) {
-    return null;
-  }
+  const result = await getCurrentBranchRaw(PROJECT_ROOT);
+  store.setState({ isDetachedHead: result.isDetached });
+  return result.name;
 }
 
 async function checkRemoteExists() {
@@ -1406,91 +1364,14 @@ async function checkRemoteExists() {
 }
 
 async function hasUncommittedChanges() {
-  try {
-    const { stdout } = await execGit(['status', '--porcelain'], { cwd: PROJECT_ROOT, timeout: 5000 });
-    return stdout.length > 0;
-  } catch (e) {
-    return false;
-  }
+  return checkUncommittedChanges(PROJECT_ROOT);
 }
 
 // isAuthError, isMergeConflict, isNetworkError imported from src/utils/errors.js
 
 async function getAllBranches() {
   try {
-    await execGitSilent(['fetch', '--all', '--prune'], { cwd: PROJECT_ROOT, timeout: 60000 });
-
-    const branchList = [];
-    const seenBranches = new Set();
-
-    // Get local branches
-    // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
-    const delimiter = '\x1f';
-    const { stdout: localOutput } = await execGit(
-      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
-      { cwd: PROJECT_ROOT }
-    );
-
-    for (const line of localOutput.split('\n').filter(Boolean)) {
-      const [name, dateStr, commit, ...subjectParts] = line.split(delimiter);
-      const subject = subjectParts.join(delimiter);
-      if (!seenBranches.has(name) && isValidBranchName(name)) {
-        seenBranches.add(name);
-        branchList.push({
-          name,
-          commit,
-          subject: subject || '',
-          date: new Date(dateStr),
-          isLocal: true,
-          hasRemote: false,
-          hasUpdates: false,
-        });
-      }
-    }
-
-    // Get remote branches (using configured remote name)
-    const remoteResult = await execGitSilent(
-      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${REMOTE_NAME}/`],
-      { cwd: PROJECT_ROOT }
-    );
-    const remoteOutput = remoteResult ? remoteResult.stdout : '';
-
-    const remotePrefix = `${REMOTE_NAME}/`;
-    for (const line of remoteOutput.split('\n').filter(Boolean)) {
-      const [fullName, dateStr, commit, ...subjectParts] = line.split(delimiter);
-      const subject = subjectParts.join(delimiter);
-      const name = fullName.replace(remotePrefix, '');
-      if (name === 'HEAD') continue;
-      if (!isValidBranchName(name)) continue;
-
-      const existing = branchList.find(b => b.name === name);
-      if (existing) {
-        existing.hasRemote = true;
-        existing.remoteCommit = commit;
-        existing.remoteDate = new Date(dateStr);
-        existing.remoteSubject = subject || '';
-        if (commit !== existing.commit) {
-          existing.hasUpdates = true;
-          // Use remote's date when it has updates (so it sorts to top)
-          existing.date = new Date(dateStr);
-          existing.subject = subject || existing.subject;
-        }
-      } else if (!seenBranches.has(name)) {
-        seenBranches.add(name);
-        branchList.push({
-          name,
-          commit,
-          subject: subject || '',
-          date: new Date(dateStr),
-          isLocal: false,
-          hasRemote: true,
-          hasUpdates: false,
-        });
-      }
-    }
-
-    branchList.sort((a, b) => b.date - a.date);
-    return branchList; // Return all branches, caller will slice
+    return await getAllBranchesRaw({ remoteName: REMOTE_NAME, fetch: true, cwd: PROJECT_ROOT });
   } catch (e) {
     addLog(`Failed to get branches: ${e.message || e}`, 'error');
     return [];
@@ -2109,7 +1990,7 @@ function handleLiveReload(req, res) {
 
 function serveFile(res, filePath, logPath) {
   const ext = path.extname(filePath).toLowerCase();
-  const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
+  const mimeType = getMimeType(ext);
 
   fs.readFile(filePath, (err, data) => {
     if (err) {
@@ -2120,10 +2001,7 @@ function serveFile(res, filePath, logPath) {
     }
 
     if (mimeType === 'text/html') {
-      let html = data.toString();
-      if (html.includes('</body>')) {
-        html = html.replace('</body>', LIVE_RELOAD_SCRIPT);
-      }
+      const html = injectLiveReload(data.toString());
       res.writeHead(200, { 'Content-Type': mimeType });
       res.end(html);
     } else {
