@@ -1722,6 +1722,8 @@ async function pollGitChanges() {
     const updatedBranches = [];
     const currentBranchName = store.get('currentBranch');
     for (const branch of pollFilteredBranches) {
+      // Clear previous cycle's flag so only freshly-updated branches are highlighted
+      branch.justUpdated = false;
       if (branch.isDeleted) continue;
       const prevCommit = previousBranchStates.get(branch.name);
       if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {

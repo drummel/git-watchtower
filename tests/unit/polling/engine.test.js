@@ -105,6 +105,17 @@ describe('detectUpdatedBranches', () => {
     const prev = new Map([['feature', 'same']]);
     assert.equal(detectUpdatedBranches(branches, prev, 'main').length, 0);
   });
+
+  it('should clear justUpdated from previous cycle', () => {
+    const branches = [
+      { name: 'feature', commit: 'abc', justUpdated: true },
+      { name: 'other', commit: 'def', justUpdated: true },
+    ];
+    const prev = new Map([['feature', 'abc'], ['other', 'def']]);
+    detectUpdatedBranches(branches, prev, 'main');
+    assert.equal(branches[0].justUpdated, false);
+    assert.equal(branches[1].justUpdated, false);
+  });
 });
 
 describe('sortBranches', () => {
