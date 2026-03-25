@@ -57,6 +57,8 @@ function detectDeletedBranches(knownBranchNames, fetchedBranchNames, existingBra
 function detectUpdatedBranches(branches, previousStates, currentBranch) {
   const updated = [];
   for (const branch of branches) {
+    // Clear previous cycle's flag so only freshly-updated branches are highlighted
+    branch.justUpdated = false;
     if (branch.isDeleted) continue;
     const prevCommit = previousStates.get(branch.name);
     if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranch) {
