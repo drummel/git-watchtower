@@ -1,3 +1,10 @@
+## [1.9.7](https://github.com/drummel/git-watchtower/compare/v1.9.6...v1.9.7) (2026-03-26)
+
+
+### Bug Fixes
+
+* prevent deleted branches from duplicating in the branch list ([e244630](https://github.com/drummel/git-watchtower/commit/e244630b924418f90e5acb9ccd3c511468191e8b))
+
 ## [1.9.6](https://github.com/drummel/git-watchtower/compare/v1.9.5...v1.9.6) (2026-03-26)
 
 
