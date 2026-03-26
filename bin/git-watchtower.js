@@ -1669,6 +1669,7 @@ async function pollGitChanges() {
     const currentBranches = store.get('branches');
 
     // Detect NEW branches (not seen before)
+    const NEW_BADGE_TTL = 30000; // 30 seconds
     const newBranchList = [];
     for (const branch of allBranches) {
       if (!knownBranchNames.has(branch.name)) {
@@ -1677,9 +1678,9 @@ async function pollGitChanges() {
         addLog(`New branch: ${branch.name}`, 'success');
         newBranchList.push(branch);
       } else {
-        // Preserve isNew flag from previous poll cycle for branches not yet switched to
+        // Preserve isNew flag from previous poll cycle, but expire after TTL
         const prevBranch = currentBranches.find(b => b.name === branch.name);
-        if (prevBranch && prevBranch.isNew) {
+        if (prevBranch && prevBranch.isNew && (now - prevBranch.newAt) < NEW_BADGE_TTL) {
           branch.isNew = true;
           branch.newAt = prevBranch.newAt;
         }
