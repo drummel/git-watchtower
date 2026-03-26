@@ -29,7 +29,7 @@ const { stripAnsi } = require('../../../src/ui/ansi');
 
 function makeState(overrides = {}) {
   return {
-    terminalWidth: 80,
+    terminalWidth: 90,
     terminalHeight: 24,
     branches: [],
     currentBranch: 'main',
