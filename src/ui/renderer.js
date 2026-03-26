@@ -194,12 +194,12 @@ function renderBranchList(state, write) {
     const aheadBehind = state.aheadBehindCache ? state.aheadBehindCache.get(branch.name) : null;
 
     // Diff stats: two right-justified columns, always reserving space for alignment
-    // Col 1: "+N/-N commits" right-justified in 16 chars
-    // Col 2: "+N/-N lines"   right-justified in 14 chars
-    // Total: 16 + 1(gap) + 14 + 1(gap) = 32 chars always reserved
-    const COL_COMMITS = 16;
-    const COL_LINES = 14;
-    const DIFF_TAG_FIXED_LEN = COL_COMMITS + 1 + COL_LINES + 1; // 32 total
+    // Col 1: "+N/-N commits" right-justified in 18 chars (accommodates e.g. "+18/-967 commits")
+    // Col 2: "+N/-N lines"   right-justified in 18 chars (accommodates e.g. "+3.5k/-1.9k lines")
+    // Total: 18 + 1(gap) + 18 + 1(gap) = 38 chars always reserved
+    const COL_COMMITS = 18;
+    const COL_LINES = 18;
+    const DIFF_TAG_FIXED_LEN = COL_COMMITS + 1 + COL_LINES + 1; // 38 total
     let diffTag = ' '.repeat(DIFF_TAG_FIXED_LEN); // blank by default for alignment
     if (!isBranchBase && !branch.isDeleted && aheadBehind) {
       const a = aheadBehind.ahead;
