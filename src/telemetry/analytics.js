@@ -22,40 +22,46 @@ const FLUSH_INTERVAL = 30000; // 30 seconds
 const FLUSH_AT = 10; // flush when 10 events accumulated
 
 /**
- * Send a batch of events to PostHog via HTTPS POST (fire-and-forget)
+ * Send a batch of events to PostHog via HTTPS POST.
+ * Returns a promise that resolves when the request completes (or fails).
+ * Callers that don't need to wait can ignore the return value.
  * @param {Array<Record<string, any>>} events
+ * @returns {Promise<void>}
  */
 function sendBatch(events) {
-  if (events.length === 0) return;
+  if (events.length === 0) return Promise.resolve();
 
-  const payload = JSON.stringify({ api_key: POSTHOG_API_KEY, batch: events });
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({ api_key: POSTHOG_API_KEY, batch: events });
 
-  const req = https.request({
-    hostname: POSTHOG_HOST,
-    port: 443,
-    path: '/batch',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload),
-    },
-    timeout: 5000,
+    const req = https.request({
+      hostname: POSTHOG_HOST,
+      port: 443,
+      path: '/batch',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: 5000,
+    });
+
+    req.on('error', () => resolve());
+    req.on('timeout', () => { req.destroy(); resolve(); });
+    req.on('response', () => resolve());
+    req.end(payload);
   });
-
-  // Fire-and-forget: ignore all errors and responses
-  req.on('error', () => {});
-  req.on('timeout', () => req.destroy());
-  req.end(payload);
 }
 
 /**
- * Flush pending events
+ * Flush pending events.
+ * @returns {Promise<void>} Resolves when the batch has been sent (or fails).
  */
 function flush() {
-  if (eventQueue.length === 0) return;
+  if (eventQueue.length === 0) return Promise.resolve();
   const batch = eventQueue;
   eventQueue = [];
-  sendBatch(batch);
+  return sendBatch(batch);
 }
 
 /**
@@ -79,6 +85,15 @@ function queueEvent(event, properties, overrideDistinctId) {
   if (eventQueue.length >= FLUSH_AT) {
     flush();
   }
+}
+
+/**
+ * Set the app version so that even pre-init events include $lib_version.
+ * Call this before promptIfNeeded() so consent events carry the version.
+ * @param {string} version
+ */
+function setVersion(version) {
+  appVersion = version;
 }
 
 /**
@@ -190,7 +205,7 @@ function captureAlways(event, userDistinctId, properties = {}) {
 }
 
 /**
- * Flush pending events and shutdown
+ * Flush pending events and shutdown.
  * Call this before process exit to ensure events are sent.
  * @returns {Promise<void>}
  */
@@ -203,7 +218,7 @@ async function shutdown() {
   if (!enabled) return;
 
   try {
-    flush();
+    await flush();
   } catch {
     // Best-effort flush
   } finally {
@@ -220,6 +235,7 @@ function isEnabled() {
 }
 
 module.exports = {
+  setVersion,
   init,
   capture,
   captureError,
