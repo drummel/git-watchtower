@@ -2839,13 +2839,14 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', async (err) => {
   telemetry.captureError(err);
   write(ansi.showCursor);
   write(ansi.restoreScreen);
   restoreTerminalTitle();
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
   console.error('Uncaught exception:', err);
+  await telemetry.shutdown();
   process.exit(1);
 });
 
@@ -2867,7 +2868,8 @@ async function start() {
   const config = await ensureConfig(cliArgs);
   applyConfig(config);
 
-  // Telemetry: opt-in prompt (first run only) and initialization
+  // Telemetry: set version early so consent events include $lib_version
+  telemetry.setVersion(PACKAGE_VERSION);
   await telemetry.promptIfNeeded(promptYesNo);
   telemetry.init({ version: PACKAGE_VERSION });
   sessionStartTime = Date.now();

@@ -83,6 +83,7 @@ async function promptIfNeeded(promptYesNo) {
 
 module.exports = {
   // Analytics
+  setVersion: analytics.setVersion,
   init: analytics.init,
   capture: analytics.capture,
   captureError: analytics.captureError,
