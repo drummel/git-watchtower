@@ -1,3 +1,11 @@
+## [1.9.6](https://github.com/drummel/git-watchtower/compare/v1.9.5...v1.9.6) (2026-03-26)
+
+
+### Bug Fixes
+
+* ensure analytics events are delivered on shutdown ([0d540ef](https://github.com/drummel/git-watchtower/commit/0d540ef6ae5b9acbd38cceca706252ae24c7343a))
+* prevent tests from sending real analytics events to PostHog ([5b738e5](https://github.com/drummel/git-watchtower/commit/5b738e528689d5a68c39e5e9d2c154a417aaf9e5))
+
 ## [1.9.5](https://github.com/drummel/git-watchtower/compare/v1.9.4...v1.9.5) (2026-03-25)
 
 
