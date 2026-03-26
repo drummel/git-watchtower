@@ -1,3 +1,10 @@
+## [1.9.8](https://github.com/drummel/git-watchtower/compare/v1.9.7...v1.9.8) (2026-03-26)
+
+
+### Bug Fixes
+
+* widen diff stats columns to prevent misalignment with large numbers ([4968fb4](https://github.com/drummel/git-watchtower/commit/4968fb46c9196b2ecf7e0f4893cabbac71366d96))
+
 ## [1.9.7](https://github.com/drummel/git-watchtower/compare/v1.9.6...v1.9.7) (2026-03-26)
 
 
