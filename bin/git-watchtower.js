@@ -1691,11 +1691,17 @@ async function pollGitChanges() {
     for (const knownName of knownBranchNames) {
       if (!fetchedBranchNames.has(knownName)) {
         // This branch was deleted from remote
+        // Check if already present in allBranches (avoid duplicates)
+        const alreadyInList = allBranches.some(b => b.name === knownName);
+        if (alreadyInList) continue;
+
         const existingInList = currentBranches.find(b => b.name === knownName);
-        if (existingInList && !existingInList.isDeleted) {
-          existingInList.isDeleted = true;
-          existingInList.deletedAt = now;
-          addLog(`Branch deleted: ${knownName}`, 'warning');
+        if (existingInList) {
+          if (!existingInList.isDeleted) {
+            existingInList.isDeleted = true;
+            existingInList.deletedAt = now;
+            addLog(`Branch deleted: ${knownName}`, 'warning');
+          }
           // Keep it in the list temporarily
           allBranches.push(existingInList);
         }
