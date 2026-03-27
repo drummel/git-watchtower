@@ -1,3 +1,10 @@
+## [1.9.11](https://github.com/drummel/git-watchtower/compare/v1.9.10...v1.9.11) (2026-03-27)
+
+
+### Bug Fixes
+
+* use Mutex instead of boolean guard to prevent concurrent polling ([fbc5130](https://github.com/drummel/git-watchtower/commit/fbc51305707e3824ad8cf298d4cabb3db1667e9f))
+
 ## [1.9.10](https://github.com/drummel/git-watchtower/compare/v1.9.9...v1.9.10) (2026-03-27)
 
 
