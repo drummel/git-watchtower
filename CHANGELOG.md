@@ -1,3 +1,10 @@
+## [1.9.9](https://github.com/drummel/git-watchtower/compare/v1.9.8...v1.9.9) (2026-03-27)
+
+
+### Bug Fixes
+
+* expire isNew badge after 30 seconds instead of persisting forever ([74f7988](https://github.com/drummel/git-watchtower/commit/74f7988a8408db7ade2e860ebe69b7af44343030))
+
 ## [1.9.8](https://github.com/drummel/git-watchtower/compare/v1.9.7...v1.9.8) (2026-03-26)
 
 
