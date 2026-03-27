@@ -1,3 +1,10 @@
+## [1.9.10](https://github.com/drummel/git-watchtower/compare/v1.9.9...v1.9.10) (2026-03-27)
+
+
+### Bug Fixes
+
+* prune previousBranchStates entries for branches no longer in poll results ([41f1abf](https://github.com/drummel/git-watchtower/commit/41f1abf17dbb85d5721afff4c85a586989439f75))
+
 ## [1.9.9](https://github.com/drummel/git-watchtower/compare/v1.9.8...v1.9.9) (2026-03-27)
 
 
