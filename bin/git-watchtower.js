@@ -1728,16 +1728,26 @@ async function pollGitChanges() {
     // Detect updates on other branches (for flash notification)
     const updatedBranches = [];
     const currentBranchName = store.get('currentBranch');
+    const activeBranchNames = new Set();
     for (const branch of pollFilteredBranches) {
       // Clear previous cycle's flag so only freshly-updated branches are highlighted
       branch.justUpdated = false;
       if (branch.isDeleted) continue;
+      activeBranchNames.add(branch.name);
       const prevCommit = previousBranchStates.get(branch.name);
       if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {
         updatedBranches.push(branch);
         branch.justUpdated = true;
       }
       previousBranchStates.set(branch.name, branch.commit);
+    }
+
+    // Remove stale entries from previousBranchStates for branches
+    // that no longer exist in the current poll results
+    for (const name of previousBranchStates.keys()) {
+      if (!activeBranchNames.has(name)) {
+        previousBranchStates.delete(name);
+      }
     }
 
     // Flash and sound for updates or new branches
