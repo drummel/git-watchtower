@@ -732,6 +732,7 @@ const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, p
 
 // Error detection utilities imported from src/utils/errors.js
 const { ErrorHandler, isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
+const { Mutex } = require('../src/utils/async');
 
 // Keyboard handling utilities imported from src/ui/keybindings.js
 const { filterBranches } = require('../src/ui/keybindings');
@@ -1606,8 +1607,12 @@ async function stashAndRetry() {
 // Polling
 // ============================================================================
 
+const pollMutex = new Mutex();
+
 async function pollGitChanges() {
-  if (store.get('isPolling')) return;
+  // Skip if a poll is already in progress (don't queue)
+  if (pollMutex.isLocked()) return;
+  await pollMutex.acquire();
   store.setState({ isPolling: true, pollingStatus: 'fetching' });
 
   // Casino mode: start slot reels spinning (no sound - too annoying)
@@ -1966,6 +1971,7 @@ async function pollGitChanges() {
     }
   } finally {
     store.setState({ isPolling: false });
+    pollMutex.release();
     render();
   }
 }
