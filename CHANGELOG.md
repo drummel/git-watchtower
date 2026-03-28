@@ -1,3 +1,10 @@
+## [1.9.12](https://github.com/drummel/git-watchtower/compare/v1.9.11...v1.9.12) (2026-03-28)
+
+
+### Bug Fixes
+
+* remove unconditional git checkout -- . that could discard changes ([0eccb27](https://github.com/drummel/git-watchtower/commit/0eccb27616d054483f17a8751386305464cd62c9))
+
 ## [1.9.11](https://github.com/drummel/git-watchtower/compare/v1.9.10...v1.9.11) (2026-03-27)
 
 
