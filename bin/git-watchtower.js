@@ -1403,7 +1403,6 @@ async function switchToBranch(branchName, recordHistory = true) {
     const hasLocal = localBranches.split('\n').some(b => b.trim().replace(/^\* /, '') === safeBranchName);
 
     if (hasLocal) {
-      await execGitSilent(['checkout', '--', '.'], { cwd: PROJECT_ROOT });
       await execGit(['checkout', safeBranchName], { cwd: PROJECT_ROOT });
     } else {
       await execGit(['checkout', '-b', safeBranchName, `${REMOTE_NAME}/${safeBranchName}`], { cwd: PROJECT_ROOT });
