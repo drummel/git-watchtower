@@ -1,3 +1,10 @@
+## [1.9.13](https://github.com/drummel/git-watchtower/compare/v1.9.12...v1.9.13) (2026-03-29)
+
+
+### Bug Fixes
+
+* prune all branch caches for branches no longer in poll results ([5ba3c79](https://github.com/drummel/git-watchtower/commit/5ba3c7993ec1017ef04dbea0efb426910ea43176))
+
 ## [1.9.12](https://github.com/drummel/git-watchtower/compare/v1.9.11...v1.9.12) (2026-03-28)
 
 
