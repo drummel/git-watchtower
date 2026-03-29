@@ -1746,11 +1746,15 @@ async function pollGitChanges() {
       previousBranchStates.set(branch.name, branch.commit);
     }
 
-    // Remove stale entries from previousBranchStates for branches
+    // Remove stale entries from caches for branches
     // that no longer exist in the current poll results
-    for (const name of previousBranchStates.keys()) {
-      if (!activeBranchNames.has(name)) {
-        previousBranchStates.delete(name);
+    const staleCaches = [previousBranchStates, prInfoCache, store.get('sparklineCache'), store.get('aheadBehindCache')];
+    for (const cache of staleCaches) {
+      if (!cache) continue;
+      for (const name of cache.keys()) {
+        if (!activeBranchNames.has(name)) {
+          cache.delete(name);
+        }
       }
     }
 
