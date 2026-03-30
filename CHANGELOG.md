@@ -1,3 +1,10 @@
+## [1.9.15](https://github.com/drummel/git-watchtower/compare/v1.9.14...v1.9.15) (2026-03-30)
+
+
+### Bug Fixes
+
+* remove restartPolling() calls from within pollGitChanges() ([486c886](https://github.com/drummel/git-watchtower/commit/486c886825d2126bc2d641058f9a4621cce2215c))
+
 ## [1.9.14](https://github.com/drummel/git-watchtower/compare/v1.9.13...v1.9.14) (2026-03-30)
 
 
