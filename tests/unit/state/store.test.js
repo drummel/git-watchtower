@@ -240,8 +240,8 @@ describe('Store convenience methods', () => {
       }
       const log = store.get('activityLog');
       assert.strictEqual(log.length, 10);
-      assert.strictEqual(log[0].message, 'Entry 5');
-      assert.strictEqual(log[9].message, 'Entry 14');
+      assert.strictEqual(log[0].message, 'Entry 14');
+      assert.strictEqual(log[9].message, 'Entry 5');
     });
 
     it('should accept custom max entries', () => {
