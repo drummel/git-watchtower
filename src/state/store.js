@@ -355,7 +355,7 @@ class Store {
    */
   addLog(message, type = 'info', maxEntries = 10) {
     const entry = { message, type, timestamp: new Date() };
-    const activityLog = [...this.state.activityLog, entry].slice(-maxEntries);
+    const activityLog = [entry, ...this.state.activityLog].slice(0, maxEntries);
     this.setState({ activityLog });
   }
 
