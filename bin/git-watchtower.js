@@ -1979,11 +1979,18 @@ async function pollGitChanges() {
   }
 }
 
+function schedulePoll() {
+  pollIntervalId = setTimeout(async () => {
+    await pollGitChanges();
+    schedulePoll();
+  }, store.get('adaptivePollInterval'));
+}
+
 function restartPolling() {
   if (pollIntervalId) {
-    clearInterval(pollIntervalId);
+    clearTimeout(pollIntervalId);
   }
-  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
+  schedulePoll();
 }
 
 // ============================================================================
@@ -2837,7 +2844,7 @@ async function shutdown() {
   }
 
   if (fileWatcher) fileWatcher.close();
-  if (pollIntervalId) clearInterval(pollIntervalId);
+  if (pollIntervalId) clearTimeout(pollIntervalId);
 
   // Stop server based on mode
   if (SERVER_MODE === 'command') {
@@ -3025,8 +3032,8 @@ async function start() {
     render();
   });
 
-  // Start polling with adaptive interval
-  pollIntervalId = setInterval(pollGitChanges, store.get('adaptivePollInterval'));
+  // Start polling with adaptive interval (setTimeout-based to avoid queuing)
+  schedulePoll();
 
   // Initial render
   render();
