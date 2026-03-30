@@ -1,3 +1,10 @@
+## [1.9.16](https://github.com/drummel/git-watchtower/compare/v1.9.15...v1.9.16) (2026-03-30)
+
+
+### Bug Fixes
+
+* make Store.addLog prepend entries (newest first) to match bin/ ([03171ab](https://github.com/drummel/git-watchtower/commit/03171ab11b35d5b46076f50924e50c1baed4582e))
+
 ## [1.9.15](https://github.com/drummel/git-watchtower/compare/v1.9.14...v1.9.15) (2026-03-30)
 
 
