@@ -1647,7 +1647,6 @@ async function pollGitChanges() {
       const newInterval = Math.min(store.get('adaptivePollInterval') * 2, 60000);
       store.setState({ adaptivePollInterval: newInterval });
       addLog(`Polling interval increased to ${newInterval / 1000}s`, 'info');
-      restartPolling();
     } else if (lastFetchDuration > 15000 && !slowFetchWarningShown) {
       addLog(`Fetches taking ${Math.round(lastFetchDuration / 1000)}s`, 'warning');
       slowFetchWarningShown = true;
@@ -1658,7 +1657,6 @@ async function pollGitChanges() {
       if (store.get('adaptivePollInterval') > GIT_POLL_INTERVAL) {
         store.setState({ adaptivePollInterval: GIT_POLL_INTERVAL });
         addLog(`Polling interval restored to ${GIT_POLL_INTERVAL / 1000}s`, 'info');
-        restartPolling();
       }
     }
 
