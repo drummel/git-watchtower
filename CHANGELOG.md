@@ -1,3 +1,10 @@
+## [1.9.14](https://github.com/drummel/git-watchtower/compare/v1.9.13...v1.9.14) (2026-03-30)
+
+
+### Bug Fixes
+
+* use setTimeout-based polling to avoid queuing during slow fetches ([e48cf98](https://github.com/drummel/git-watchtower/commit/e48cf98526b04f74964983c630bb026a105b14d6))
+
 ## [1.9.13](https://github.com/drummel/git-watchtower/compare/v1.9.12...v1.9.13) (2026-03-29)
 
 
