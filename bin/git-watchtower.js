@@ -1413,9 +1413,11 @@ async function switchToBranch(branchName, recordHistory = true) {
     store.setState({ currentBranch: safeBranchName, isDetachedHead: false });
 
     // Clear NEW flag when branch becomes current
-    const branchInfo = store.get('branches').find(b => b.name === safeBranchName);
+    const branches = store.get('branches');
+    const branchInfo = branches.find(b => b.name === safeBranchName);
     if (branchInfo && branchInfo.isNew) {
       branchInfo.isNew = false;
+      store.setState({ branches: [...branches] });
     }
 
     // Record in history (for undo)
@@ -1870,10 +1872,10 @@ async function pollGitChanges() {
         await execGit(['pull', REMOTE_NAME, autoPullBranchName], { cwd: PROJECT_ROOT, timeout: 60000 });
         addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
-        store.setState({ hasMergeConflict: false });
         // Update the stored commit to the new one
         const newCommit = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
         currentInfo.commit = newCommit.stdout.trim();
+        store.setState({ hasMergeConflict: false, branches: [...store.get('branches')] });
         previousBranchStates.set(autoPullBranchName, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
