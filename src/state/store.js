@@ -367,7 +367,7 @@ class Store {
    */
   addToHistory(from, to, maxEntries = 20) {
     const entry = { from, to, timestamp: new Date() };
-    const switchHistory = [...this.state.switchHistory, entry].slice(-maxEntries);
+    const switchHistory = [entry, ...this.state.switchHistory].slice(0, maxEntries);
     this.setState({ switchHistory });
   }
 
@@ -377,14 +377,14 @@ class Store {
    */
   getLastSwitch() {
     const history = this.state.switchHistory;
-    return history.length > 0 ? history[history.length - 1] : null;
+    return history.length > 0 ? history[0] : null;
   }
 
   /**
    * Remove the last switch from history (after undo)
    */
   popHistory() {
-    const switchHistory = this.state.switchHistory.slice(0, -1);
+    const switchHistory = this.state.switchHistory.slice(1);
     this.setState({ switchHistory });
   }
 
