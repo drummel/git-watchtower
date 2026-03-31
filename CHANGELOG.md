@@ -1,3 +1,10 @@
+## [1.9.18](https://github.com/drummel/git-watchtower/compare/v1.9.17...v1.9.18) (2026-03-31)
+
+
+### Bug Fixes
+
+* only create HTTP server in static mode ([120c0f6](https://github.com/drummel/git-watchtower/commit/120c0f6a1e939ab4acc356e603824313109038d6))
+
 ## [1.9.17](https://github.com/drummel/git-watchtower/compare/v1.9.16...v1.9.17) (2026-03-31)
 
 
