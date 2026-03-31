@@ -48,6 +48,7 @@
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
  *   i       - Show server info (port, connections)
+ *   W       - Toggle web dashboard (starts server + opens browser)
  *   1-0     - Set visible branch count (1-10)
  *   +/-     - Increase/decrease visible branches
  *   q/Esc   - Quit (Esc also clears search)
@@ -2782,6 +2783,91 @@ function setupKeyboardInput() {
         const goneBranches = await getGoneBranches();
         applyUpdates(actions.openCleanupConfirm(actionState, goneBranches));
         render();
+        break;
+      }
+
+      case 'W': { // Toggle web dashboard
+        if (webDashboard) {
+          // Stop web dashboard
+          const wasPort = webDashboard.port;
+          webDashboard.stop();
+          webDashboard = null;
+          addLog(`Web dashboard stopped (was on :${wasPort})`, 'info');
+          showFlash('Web dashboard stopped');
+          render();
+        } else {
+          // Start web dashboard
+          webDashboard = new WebDashboardServer({
+            port: WEB_PORT,
+            store,
+            getExtraState: () => ({
+              clientCount: clients.size,
+              sessionStats: sessionStats.getStats(),
+            }),
+            onAction: async (action, payload) => {
+              try {
+                switch (action) {
+                  case 'switchBranch':
+                    if (payload.branch && payload.branch !== store.get('currentBranch')) {
+                      await switchToBranch(payload.branch);
+                      await pollGitChanges();
+                    }
+                    break;
+                  case 'pull':
+                    addLog('Force pulling (from web)...', 'update');
+                    render();
+                    await pullCurrentBranch();
+                    await pollGitChanges();
+                    break;
+                  case 'fetch':
+                    addLog('Fetching all branches (from web)...', 'info');
+                    render();
+                    await pollGitChanges();
+                    await refreshAllSparklines();
+                    render();
+                    break;
+                  case 'undo': {
+                    const last = store.getLastSwitch();
+                    if (last) {
+                      await switchToBranch(last.from);
+                      store.popHistory();
+                      await pollGitChanges();
+                    }
+                    break;
+                  }
+                  case 'toggleSound': {
+                    const current = store.get('soundEnabled');
+                    store.setState({ soundEnabled: !current });
+                    render();
+                    break;
+                  }
+                  case 'preview':
+                    if (payload.branch) {
+                      const pvData = await getPreviewData(payload.branch);
+                      if (webDashboard) {
+                        webDashboard.sendPreview({ branch: payload.branch, ...pvData });
+                      }
+                    }
+                    break;
+                }
+              } catch (err) {
+                addLog(`Web action error: ${err.message}`, 'error');
+                render();
+              }
+            },
+          });
+          webDashboard.start().then(({ port }) => {
+            WEB_PORT = port; // Remember actual port (may have auto-incremented)
+            addLog(`Web dashboard: http://localhost:${port}`, 'success');
+            showFlash(`Web dashboard on :${port}`);
+            openInBrowser(`http://localhost:${port}`);
+            render();
+          }).catch((err) => {
+            addLog(`Web dashboard failed: ${err.message}`, 'error');
+            webDashboard = null;
+            render();
+          });
+        }
         break;
       }
 

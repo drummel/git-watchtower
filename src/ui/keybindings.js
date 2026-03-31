@@ -154,6 +154,8 @@ function getNormalModeAction(key) {
       return 'toggle_casino';
     case 'd':
       return 'cleanup_branches';
+    case 'W':
+      return 'toggle_web';
     case 'q':
     case KEYS.CTRL_C:
       return 'quit';

@@ -277,6 +277,10 @@ describe('getNormalModeAction', () => {
     assert.equal(getNormalModeAction('d'), 'cleanup_branches');
   });
 
+  it('should map W to toggle_web', () => {
+    assert.equal(getNormalModeAction('W'), 'toggle_web');
+  });
+
   it('should return null for unrecognized keys', () => {
     assert.equal(getNormalModeAction('x'), null);
     assert.equal(getNormalModeAction('Z'), null);
