@@ -52,6 +52,11 @@ class WebDashboardServer {
     this.pushInterval = null;
     this.lastPushedJson = '';
 
+    // Multi-project support (populated by coordinator)
+    /** @type {Map<string, Object>} */
+    this.projects = new Map();
+    this.localProjectId = null;
+
     // Cache the HTML (regenerated only if port changes)
     this._cachedHtml = getWebDashboardHtml(this.port);
   }
@@ -114,9 +119,73 @@ class WebDashboardServer {
       // Metadata
       version: PACKAGE_VERSION,
 
+      // Multi-project data
+      projects: this._getProjectsList(),
+      activeProjectId: this.localProjectId,
+
       // Extra state from the main process
       ...extra,
     };
+  }
+
+  /**
+   * Update the full projects list (called by coordinator).
+   * @param {Array<{id: string, projectName: string, projectPath: string, state: Object}>} projects
+   */
+  setProjects(projects) {
+    this.projects.clear();
+    for (const p of projects) {
+      this.projects.set(p.id, p);
+    }
+  }
+
+  /**
+   * Set the local project ID.
+   * @param {string} id
+   */
+  setLocalProjectId(id) {
+    this.localProjectId = id;
+  }
+
+  /**
+   * Get a serializable state for a specific project (by ID).
+   * @param {string} projectId
+   * @returns {Object|null}
+   */
+  getProjectState(projectId) {
+    if (projectId === this.localProjectId) {
+      return this.getSerializableState();
+    }
+    const project = this.projects.get(projectId);
+    return project ? project.state : null;
+  }
+
+  /**
+   * Get projects list for the frontend.
+   * @returns {Array<{id: string, name: string, active: boolean}>}
+   * @private
+   */
+  _getProjectsList() {
+    const list = [];
+    for (const [id, p] of this.projects) {
+      list.push({
+        id,
+        name: p.projectName,
+        path: p.projectPath,
+        active: id === this.localProjectId,
+      });
+    }
+    // If no projects from coordinator, at least show ourselves
+    if (list.length === 0 && this.localProjectId) {
+      const s = this.store.getState();
+      list.push({
+        id: this.localProjectId,
+        name: s.projectName || 'unknown',
+        path: '',
+        active: true,
+      });
+    }
+    return list;
   }
 
   /**
@@ -202,6 +271,20 @@ class WebDashboardServer {
   }
 
   /**
+   * Send action result feedback to all connected clients.
+   * @param {Object} result - { action, success, message, type }
+   */
+  sendActionResult(result) {
+    const json = JSON.stringify(result);
+    for (const client of this.clients) {
+      try {
+        client.write('event: actionResult\n');
+        client.write('data: ' + json + '\n\n');
+      } catch (e) { /* ignore dead clients */ }
+    }
+  }
+
+  /**
    * Get the number of connected web clients.
    * @returns {number}
    */
@@ -249,6 +332,26 @@ class WebDashboardServer {
 
     if (pathname === '/api/events' && req.method === 'GET') {
       this._handleSSE(req, res);
+      return;
+    }
+
+    if (pathname === '/api/projects' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(this._getProjectsList()));
+      return;
+    }
+
+    // /api/projects/:id/state
+    const projectStateMatch = pathname.match(/^\/api\/projects\/([a-f0-9]+)\/state$/);
+    if (projectStateMatch && req.method === 'GET') {
+      const projectState = this.getProjectState(projectStateMatch[1]);
+      if (projectState) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(projectState));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Project not found' }));
+      }
       return;
     }
 
@@ -322,6 +425,8 @@ class WebDashboardServer {
         const allowedActions = [
           'switchBranch', 'pull', 'fetch', 'undo',
           'toggleSound', 'preview',
+          'restartServer', 'reloadBrowsers', 'toggleCasino',
+          'openBrowser',
         ];
 
         if (!allowedActions.includes(action)) {
@@ -329,6 +434,10 @@ class WebDashboardServer {
           res.end(JSON.stringify({ error: 'Unknown action: ' + action }));
           return;
         }
+
+        // Include projectId if provided (for multi-project routing)
+        const projectId = data.projectId || this.localProjectId;
+        payload._projectId = projectId;
 
         // Dispatch to the main process
         this.onAction(action, payload);

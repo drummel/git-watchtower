@@ -111,6 +111,7 @@ function getWebDashboardHtml(port) {
     grid-template-columns: 1fr 320px;
     grid-template-rows: 1fr auto;
     height: calc(100vh - 49px);
+    min-height: 0;
     gap: 0;
   }
 
@@ -483,6 +484,138 @@ function getWebDashboardHtml(port) {
     font-size: 13px;
   }
   .empty-state-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.5; }
+
+  /* ── Tab Bar ───────────────────────────────────────────────────── */
+  .tab-bar {
+    display: none;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+    gap: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar.visible { display: flex; }
+  .tab {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab .tab-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    background: var(--green);
+  }
+
+  /* ── Confirm Dialog ────────────────────────────────────────────── */
+  .confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+  }
+  .confirm-overlay.active { display: flex; }
+  .confirm-box {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    min-width: 360px;
+    max-width: 480px;
+  }
+  .confirm-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .confirm-message {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .confirm-btn {
+    padding: 6px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.15s;
+  }
+  .confirm-btn:hover { background: var(--bg-surface-hover); }
+  .confirm-btn.primary {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+    color: #fff;
+  }
+  .confirm-btn.primary:hover { background: var(--accent); }
+  .confirm-btn.danger {
+    background: var(--red-dim);
+    border-color: var(--red-dim);
+    color: #fff;
+  }
+  .confirm-btn.danger:hover { background: var(--red); }
+
+  /* ── Toast Notifications ───────────────────────────────────────── */
+  .toast-container {
+    position: fixed;
+    bottom: 60px;
+    right: 20px;
+    z-index: 150;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.3s, transform 0.3s;
+    max-width: 360px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid;
+  }
+  .toast.visible { opacity: 1; transform: translateX(0); }
+  .toast.success { background: rgba(35,134,54,0.9); border-color: var(--green); color: #fff; }
+  .toast.error { background: rgba(218,54,51,0.9); border-color: var(--red); color: #fff; }
+  .toast.info { background: rgba(31,111,235,0.9); border-color: var(--accent); color: #fff; }
+  .toast.warning { background: rgba(210,153,34,0.9); border-color: var(--yellow); color: #000; }
+  .toast-icon { font-size: 14px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -498,6 +631,8 @@ function getWebDashboardHtml(port) {
     <span class="connection-dot disconnected" id="connection-dot"></span>
   </div>
 </div>
+
+<div class="tab-bar" id="tab-bar"></div>
 
 <div class="layout">
   <div class="branch-panel">
@@ -518,12 +653,16 @@ function getWebDashboardHtml(port) {
 
   <div class="footer" id="footer">
     <span><kbd>j</kbd><kbd>k</kbd> navigate</span>
-    <span><kbd>Enter</kbd> switch branch</span>
+    <span><kbd>Enter</kbd> switch</span>
     <span><kbd>/</kbd> search</span>
     <span><kbd>v</kbd> preview</span>
     <span><kbd>p</kbd> pull</span>
     <span><kbd>f</kbd> fetch</span>
+    <span><kbd>r</kbd> reload</span>
+    <span><kbd>R</kbd> restart</span>
     <span><kbd>h</kbd> history</span>
+    <span><kbd>c</kbd> casino</span>
+    <span><kbd>1</kbd>-<kbd>9</kbd> tabs</span>
     <span><kbd>Esc</kbd> close</span>
   </div>
 </div>
@@ -532,6 +671,10 @@ function getWebDashboardHtml(port) {
 <div class="preview-overlay" id="preview-overlay">
   <div class="preview-box" id="preview-box"></div>
 </div>
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box" id="confirm-box"></div>
+</div>
+<div class="toast-container" id="toast-container"></div>
 
 <script>
 (function() {
@@ -543,8 +686,11 @@ function getWebDashboardHtml(port) {
   var searchMode = false;
   var searchQuery = '';
   var previewMode = false;
+  var confirmMode = false;
+  var confirmCallback = null;
   var connected = false;
   var flashTimer = null;
+  var activeTabId = null;
 
   // ── SSE Connection ─────────────────────────────────────────────
   var evtSource = null;
@@ -561,6 +707,10 @@ function getWebDashboardHtml(port) {
     evtSource.addEventListener('state', function(e) {
       try {
         state = JSON.parse(e.data);
+        if (!activeTabId && state.activeProjectId) {
+          activeTabId = state.activeProjectId;
+        }
+        renderTabs();
         render();
       } catch (err) { /* ignore parse errors */ }
     });
@@ -569,6 +719,13 @@ function getWebDashboardHtml(port) {
       try {
         var data = JSON.parse(e.data);
         showFlash(data.text, data.type);
+      } catch (err) { /* ignore */ }
+    });
+
+    evtSource.addEventListener('actionResult', function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        showToast(data.message, data.success ? 'success' : 'error');
       } catch (err) { /* ignore */ }
     });
 
@@ -597,7 +754,9 @@ function getWebDashboardHtml(port) {
     var xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/action');
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.send(JSON.stringify({ action: action, payload: payload || {} }));
+    var data = { action: action, payload: payload || {} };
+    if (activeTabId) data.projectId = activeTabId;
+    xhr.send(JSON.stringify(data));
   }
 
   // ── Flash Messages ─────────────────────────────────────────────
@@ -609,6 +768,108 @@ function getWebDashboardHtml(port) {
     flashTimer = setTimeout(function() {
       el.className = 'flash';
     }, 3000);
+  }
+
+  // ── Toast Notifications ────────────────────────────────────────
+  function showToast(text, type) {
+    var container = document.getElementById('toast-container');
+    var toast = document.createElement('div');
+    var icons = { success: '\\u2713', error: '\\u2717', info: '\\u2139', warning: '\\u26a0' };
+    toast.className = 'toast ' + (type || 'info');
+    toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span>' + escHtml(text);
+    container.appendChild(toast);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { toast.classList.add('visible'); });
+    });
+    setTimeout(function() {
+      toast.classList.remove('visible');
+      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 4000);
+  }
+
+  // ── Confirm Dialog ─────────────────────────────────────────────
+  function showConfirm(title, message, onConfirm, opts) {
+    opts = opts || {};
+    confirmMode = true;
+    confirmCallback = onConfirm;
+    var box = document.getElementById('confirm-box');
+    box.innerHTML =
+      '<div class="confirm-title">' + escHtml(title) + '</div>' +
+      '<div class="confirm-message">' + escHtml(message) + '</div>' +
+      '<div class="confirm-actions">' +
+        '<button class="confirm-btn" id="confirm-cancel">Cancel</button>' +
+        '<button class="confirm-btn ' + (opts.danger ? 'danger' : 'primary') + '" id="confirm-ok">' +
+          escHtml(opts.label || 'Confirm') +
+        '</button>' +
+      '</div>';
+    document.getElementById('confirm-overlay').className = 'confirm-overlay active';
+    document.getElementById('confirm-cancel').onclick = hideConfirm;
+    document.getElementById('confirm-ok').onclick = function() {
+      hideConfirm();
+      if (confirmCallback) confirmCallback();
+    };
+  }
+
+  function hideConfirm() {
+    confirmMode = false;
+    confirmCallback = null;
+    document.getElementById('confirm-overlay').className = 'confirm-overlay';
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────
+  function renderTabs() {
+    var tabBar = document.getElementById('tab-bar');
+    var projects = (state && state.projects) || [];
+    if (projects.length <= 1) {
+      tabBar.className = 'tab-bar';
+      return;
+    }
+    tabBar.className = 'tab-bar visible';
+    var html = '';
+    for (var i = 0; i < projects.length; i++) {
+      var p = projects[i];
+      var isActive = p.id === activeTabId;
+      html += '<div class="tab' + (isActive ? ' active' : '') + '" data-project-id="' + escHtml(p.id) + '">';
+      html += '<span class="tab-dot"></span>';
+      html += escHtml(p.name);
+      html += '</div>';
+    }
+    tabBar.innerHTML = html;
+  }
+
+  function switchTab(projectId) {
+    if (projectId === activeTabId) return;
+    activeTabId = projectId;
+    selectedIndex = 0;
+    searchQuery = '';
+    searchMode = false;
+    document.getElementById('search-bar').className = 'search-bar';
+    document.getElementById('search-input').value = '';
+    renderTabs();
+    // Fetch the project's state
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/projects/' + projectId + '/state');
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        try {
+          var pState = JSON.parse(xhr.responseText);
+          // Merge into current state for rendering
+          state.branches = pState.branches || [];
+          state.currentBranch = pState.currentBranch;
+          state.activityLog = pState.activityLog || [];
+          state.switchHistory = pState.switchHistory || [];
+          state.sparklineCache = pState.sparklineCache || {};
+          state.branchPrStatusMap = pState.branchPrStatusMap || {};
+          state.aheadBehindCache = pState.aheadBehindCache || {};
+          state.projectName = pState.projectName || '';
+          state.pollingStatus = pState.pollingStatus || 'idle';
+          state.isOffline = pState.isOffline || false;
+          state.serverMode = pState.serverMode || 'none';
+          render();
+        } catch (err) { /* ignore */ }
+      }
+    };
+    xhr.send();
   }
 
   // ── Time Formatting ────────────────────────────────────────────
@@ -842,6 +1103,19 @@ function getWebDashboardHtml(port) {
   document.addEventListener('keydown', function(e) {
     // Ignore when typing in input fields (other than search)
     if (e.target.tagName === 'INPUT' && e.target.id !== 'search-input') return;
+    if (e.target.tagName === 'BUTTON') return;
+
+    // Confirm dialog mode — Escape to cancel, Enter to confirm
+    if (confirmMode) {
+      if (e.key === 'Escape') { e.preventDefault(); hideConfirm(); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var cb = confirmCallback;
+        hideConfirm();
+        if (cb) cb();
+      }
+      return;
+    }
 
     // Preview mode
     if (previewMode) {
@@ -880,7 +1154,28 @@ function getWebDashboardHtml(port) {
         moveSelection(-1);
         return;
       }
-      // Let other keys go to the input
+      return;
+    }
+
+    // Tab switching with number keys (1-9)
+    var projects = (state && state.projects) || [];
+    if (projects.length > 1 && e.key >= '1' && e.key <= '9') {
+      var tabIdx = parseInt(e.key, 10) - 1;
+      if (tabIdx < projects.length) {
+        e.preventDefault();
+        switchTab(projects[tabIdx].id);
+        return;
+      }
+    }
+
+    // Tab cycling with Tab key
+    if (e.key === 'Tab' && projects.length > 1) {
+      e.preventDefault();
+      var curIdx = projects.findIndex(function(p) { return p.id === activeTabId; });
+      var nextIdx = e.shiftKey
+        ? (curIdx - 1 + projects.length) % projects.length
+        : (curIdx + 1) % projects.length;
+      switchTab(projects[nextIdx].id);
       return;
     }
 
@@ -901,9 +1196,20 @@ function getWebDashboardHtml(port) {
         var branches = getDisplayBranches();
         if (branches.length > 0 && selectedIndex < branches.length) {
           var b = branches[selectedIndex];
-          if (!b.isDeleted && b.name !== state.currentBranch) {
-            sendAction('switchBranch', { branch: b.name });
-            showFlash('Switching to ' + b.name + '...', 'info');
+          if (b.isDeleted) {
+            showToast('Cannot switch to a deleted branch', 'error');
+          } else if (b.name === state.currentBranch) {
+            showToast('Already on ' + b.name, 'info');
+          } else {
+            showConfirm(
+              'Switch Branch',
+              'Switch from ' + state.currentBranch + ' to ' + b.name + '?',
+              function() {
+                sendAction('switchBranch', { branch: b.name });
+                showToast('Switching to ' + b.name + '...', 'info');
+              },
+              { label: 'Switch' }
+            );
           }
         }
         break;
@@ -927,16 +1233,45 @@ function getWebDashboardHtml(port) {
       case 'p':
         e.preventDefault();
         sendAction('pull');
-        showFlash('Pulling...', 'info');
+        showToast('Pulling current branch...', 'info');
         break;
       case 'f':
         e.preventDefault();
         sendAction('fetch');
-        showFlash('Fetching all branches...', 'info');
+        showToast('Fetching all branches...', 'info');
+        break;
+      case 'r':
+        e.preventDefault();
+        if (state && state.serverMode === 'static') {
+          sendAction('reloadBrowsers');
+          showToast('Reloading browsers...', 'info');
+        }
+        break;
+      case 'R':
+        e.preventDefault();
+        if (state && state.serverMode === 'command') {
+          showConfirm(
+            'Restart Server',
+            'Restart the dev server process?',
+            function() {
+              sendAction('restartServer');
+              showToast('Restarting server...', 'info');
+            },
+            { label: 'Restart' }
+          );
+        }
+        break;
+      case 'c':
+        e.preventDefault();
+        sendAction('toggleCasino');
+        break;
+      case 'o':
+        e.preventDefault();
+        sendAction('openBrowser');
+        showToast('Opening in browser...', 'info');
         break;
       case 'h':
         e.preventDefault();
-        // Show history in preview overlay
         if (state && state.switchHistory && state.switchHistory.length > 0) {
           previewMode = true;
           document.getElementById('preview-overlay').className = 'preview-overlay active';
@@ -951,17 +1286,18 @@ function getWebDashboardHtml(port) {
           }
           document.getElementById('preview-box').innerHTML = hHtml;
         } else {
-          showFlash('No switch history yet', 'info');
+          showToast('No switch history yet', 'info');
         }
         break;
       case 'u':
         e.preventDefault();
         sendAction('undo');
-        showFlash('Undoing last switch...', 'info');
+        showToast('Undoing last switch...', 'info');
         break;
       case 's':
         e.preventDefault();
         sendAction('toggleSound');
+        showToast(state && state.soundEnabled ? 'Sound off' : 'Sound on', 'info');
         break;
       case 'Escape':
         e.preventDefault();
@@ -995,18 +1331,33 @@ function getWebDashboardHtml(port) {
     selectedIndex = idx;
     renderBranches();
 
-    // Double-click to switch
+    // Double-click to switch with confirmation
     if (e.detail === 2) {
       var branches = getDisplayBranches();
-      if (branches[idx] && !branches[idx].isDeleted && branches[idx].name !== state.currentBranch) {
-        sendAction('switchBranch', { branch: branches[idx].name });
-        showFlash('Switching to ' + branches[idx].name + '...', 'info');
+      var br = branches[idx];
+      if (br && !br.isDeleted && br.name !== state.currentBranch) {
+        showConfirm('Switch Branch', 'Switch to ' + br.name + '?', function() {
+          sendAction('switchBranch', { branch: br.name });
+          showToast('Switching to ' + br.name + '...', 'info');
+        }, { label: 'Switch' });
       }
     }
   });
 
   document.getElementById('preview-overlay').addEventListener('click', function(e) {
     if (e.target === this) hidePreview();
+  });
+
+  document.getElementById('confirm-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideConfirm();
+  });
+
+  // Tab clicks
+  document.getElementById('tab-bar').addEventListener('click', function(e) {
+    var tab = e.target.closest('.tab');
+    if (!tab) return;
+    var projectId = tab.getAttribute('data-project-id');
+    if (projectId) switchTab(projectId);
   });
 
   // ── SSE event for preview data ─────────────────────────────────

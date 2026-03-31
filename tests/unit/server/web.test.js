@@ -364,6 +364,140 @@ describe('WebDashboardServer', () => {
       });
     });
   });
+
+  describe('sendActionResult', () => {
+    it('should not throw with no clients', () => {
+      server = new WebDashboardServer({ store });
+      assert.doesNotThrow(() => {
+        server.sendActionResult({ action: 'pull', success: true, message: 'Pull complete' });
+      });
+    });
+  });
+
+  describe('multi-project support', () => {
+    it('should set and get local project ID', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc123');
+      assert.equal(server.localProjectId, 'abc123');
+    });
+
+    it('should include projects in serializable state', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc123');
+      const state = server.getSerializableState();
+      assert.ok(Array.isArray(state.projects));
+      assert.equal(state.activeProjectId, 'abc123');
+    });
+
+    it('should set projects from coordinator data', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc');
+      server.setProjects([
+        { id: 'abc', projectName: 'proj-a', projectPath: '/a', state: {} },
+        { id: 'def', projectName: 'proj-b', projectPath: '/b', state: { branches: [] } },
+      ]);
+
+      const state = server.getSerializableState();
+      assert.equal(state.projects.length, 2);
+      assert.equal(state.projects[0].name, 'proj-a');
+      assert.equal(state.projects[1].name, 'proj-b');
+    });
+
+    it('should return project state by ID', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc');
+      server.setProjects([
+        { id: 'def', projectName: 'proj-b', projectPath: '/b', state: { branches: [{ name: 'main' }] } },
+      ]);
+
+      const ps = server.getProjectState('def');
+      assert.ok(ps);
+      assert.equal(ps.branches[0].name, 'main');
+    });
+
+    it('should return null for unknown project ID', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc');
+      assert.equal(server.getProjectState('unknown'), null);
+    });
+
+    it('should return local state for own project ID', () => {
+      server = new WebDashboardServer({ store });
+      server.setLocalProjectId('abc');
+      const state = server.getProjectState('abc');
+      assert.ok(state);
+      assert.equal(state.currentBranch, 'main');
+    });
+  });
+
+  describe('expanded actions', () => {
+    beforeEach(async () => {
+      server = new WebDashboardServer({ store, port: 19881 });
+      await server.start();
+    });
+
+    function httpPost(urlPath, data) {
+      return new Promise((resolve, reject) => {
+        const body = JSON.stringify(data);
+        const req = http.request(`http://127.0.0.1:${server.port}${urlPath}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'Connection': 'close',
+          },
+        }, (res) => {
+          let respBody = '';
+          res.on('data', (chunk) => { respBody += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: respBody }));
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+      });
+    }
+
+    it('should accept restartServer action', async () => {
+      let received = null;
+      server.onAction = (action, payload) => { received = action; };
+      const res = await httpPost('/api/action', { action: 'restartServer' });
+      assert.equal(res.status, 200);
+      assert.equal(received, 'restartServer');
+    });
+
+    it('should accept reloadBrowsers action', async () => {
+      let received = null;
+      server.onAction = (action, payload) => { received = action; };
+      const res = await httpPost('/api/action', { action: 'reloadBrowsers' });
+      assert.equal(res.status, 200);
+      assert.equal(received, 'reloadBrowsers');
+    });
+
+    it('should accept toggleCasino action', async () => {
+      let received = null;
+      server.onAction = (action, payload) => { received = action; };
+      const res = await httpPost('/api/action', { action: 'toggleCasino' });
+      assert.equal(res.status, 200);
+      assert.equal(received, 'toggleCasino');
+    });
+
+    it('should accept openBrowser action', async () => {
+      let received = null;
+      server.onAction = (action, payload) => { received = action; };
+      const res = await httpPost('/api/action', { action: 'openBrowser' });
+      assert.equal(res.status, 200);
+      assert.equal(received, 'openBrowser');
+    });
+
+    it('should include projectId in payload', async () => {
+      let receivedPayload = null;
+      server.onAction = (action, payload) => { receivedPayload = payload; };
+      server.setLocalProjectId('myproj');
+      const res = await httpPost('/api/action', { action: 'fetch', projectId: 'otherproj' });
+      assert.equal(res.status, 200);
+      assert.equal(receivedPayload._projectId, 'otherproj');
+    });
+  });
 });
 
 describe('getWebDashboardHtml', () => {
@@ -414,5 +548,49 @@ describe('getWebDashboardHtml', () => {
     const html = getWebDashboardHtml(4000);
     assert.ok(html.includes('<kbd>'));
     assert.ok(html.includes('navigate'));
+  });
+
+  it('should include tab bar element', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('tab-bar'));
+    assert.ok(html.includes('renderTabs'));
+  });
+
+  it('should include confirm dialog', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('confirm-overlay'));
+    assert.ok(html.includes('confirm-box'));
+    assert.ok(html.includes('showConfirm'));
+    assert.ok(html.includes('hideConfirm'));
+  });
+
+  it('should include toast notification system', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('toast-container'));
+    assert.ok(html.includes('showToast'));
+  });
+
+  it('should include actionResult SSE listener', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('actionResult'));
+  });
+
+  it('should include tab switching keyboard shortcuts', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('switchTab'));
+    assert.ok(html.includes('Tab'));
+  });
+
+  it('should include expanded action keybindings', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('restartServer'));
+    assert.ok(html.includes('reloadBrowsers'));
+    assert.ok(html.includes('toggleCasino'));
+    assert.ok(html.includes('openBrowser'));
+  });
+
+  it('should include confirmation for branch switch', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.ok(html.includes('Switch Branch'));
   });
 });

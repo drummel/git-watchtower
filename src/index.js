@@ -35,6 +35,7 @@ const configLoader = require('./config/loader');
 const serverProcess = require('./server/process');
 const serverWeb = require('./server/web');
 const serverWebUi = require('./server/web-ui');
+const serverCoordinator = require('./server/coordinator');
 
 // Telemetry
 const telemetryModule = require('./telemetry');
@@ -162,6 +163,12 @@ module.exports = {
   WebDashboardServer: serverWeb.WebDashboardServer,
   DEFAULT_WEB_PORT: serverWeb.DEFAULT_WEB_PORT,
   getWebDashboardHtml: serverWebUi.getWebDashboardHtml,
+
+  // Multi-instance coordinator
+  Coordinator: serverCoordinator.Coordinator,
+  Worker: serverCoordinator.Worker,
+  generateProjectId: serverCoordinator.generateProjectId,
+  getActiveCoordinator: serverCoordinator.getActiveCoordinator,
 
   // CLI argument parsing
   parseArgs: cliArgs.parseArgs,
