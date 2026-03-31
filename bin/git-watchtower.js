@@ -964,6 +964,7 @@ async function refreshAllSparklines() {
     return; // Don't refresh too often
   }
 
+  const sparklineCache = new Map(store.get('sparklineCache'));
   const currentBranches = store.get('branches');
   for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
     if (branch.isDeleted) continue;
@@ -997,11 +998,12 @@ async function refreshAllSparklines() {
       }
 
       const counts = Array.from(dayCounts.values());
-      store.get('sparklineCache').set(branch.name, generateSparkline(counts));
+      sparklineCache.set(branch.name, generateSparkline(counts));
     } catch (e) {
       // Skip this branch - don't let one failure abort all sparkline updates
     }
   }
+  store.setState({ sparklineCache });
   lastSparklineUpdate = now;
 }
 
