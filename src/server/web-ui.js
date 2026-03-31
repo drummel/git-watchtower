@@ -38,11 +38,16 @@ function getWebDashboardHtml(port) {
     --magenta: #bc8cff;
     --orange: #db6d28;
     --sparkline: #58a6ff;
-    --header-bg: #0550ae;
+    --header-bg: linear-gradient(135deg, #0550ae 0%, #0969da 100%);
     --radius: 8px;
     --radius-sm: 4px;
     --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
     --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', Consolas, monospace;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+    --merged-text: #484f58;
+    --merged-bg: rgba(72,79,88,0.06);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -59,34 +64,41 @@ function getWebDashboardHtml(port) {
   /* ── Header ────────────────────────────────────────────────────── */
   .header {
     background: var(--header-bg);
-    padding: 12px 20px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
     user-select: none;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.3);
+    position: relative;
+    z-index: 10;
   }
   .header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
   }
   .header-title {
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 700;
     color: #fff;
+    letter-spacing: -0.2px;
   }
   .header-version {
-    font-size: 12px;
-    color: rgba(255,255,255,0.5);
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    font-weight: 500;
   }
   .header-project {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
-    color: rgba(255,255,255,0.9);
-    background: rgba(255,255,255,0.1);
-    padding: 2px 10px;
+    color: rgba(255,255,255,0.95);
+    background: rgba(255,255,255,0.12);
+    padding: 3px 12px;
     border-radius: var(--radius-sm);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.08);
   }
   .header-right {
     display: flex;
@@ -94,15 +106,15 @@ function getWebDashboardHtml(port) {
     gap: 12px;
   }
   .badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
   }
-  .badge-online { background: var(--green-dim); color: #fff; }
-  .badge-offline { background: var(--red-dim); color: #fff; }
+  .badge-online { background: var(--green-dim); color: #fff; box-shadow: 0 0 8px rgba(63,185,80,0.3); }
+  .badge-offline { background: var(--red-dim); color: #fff; box-shadow: 0 0 8px rgba(248,81,73,0.3); }
   .badge-fetching { background: var(--yellow); color: #000; }
 
   /* ── Layout ────────────────────────────────────────────────────── */
@@ -117,18 +129,17 @@ function getWebDashboardHtml(port) {
 
   /* ── Branch List ───────────────────────────────────────────────── */
   .branch-panel {
-    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
   .panel-header {
-    padding: 10px 16px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 12px 20px;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-dim);
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
     border-bottom: 1px solid var(--border);
     background: var(--bg-surface);
     display: flex;
@@ -153,20 +164,24 @@ function getWebDashboardHtml(port) {
     display: grid;
     grid-template-columns: 24px 1fr auto;
     align-items: center;
-    padding: 8px 16px;
+    padding: 10px 20px;
     border-bottom: 1px solid var(--border-subtle);
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background 0.15s, opacity 0.15s;
   }
   .branch-item:hover { background: var(--bg-surface-hover); }
-  .branch-item.selected { background: var(--bg-surface-active); }
+  .branch-item.selected { background: var(--bg-surface-active); border-left: 2px solid var(--accent); padding-left: 18px; }
   .branch-item.selected .branch-name { color: var(--accent); }
+  .branch-item.merged { opacity: 0.45; }
+  .branch-item.merged:hover { opacity: 0.7; }
+  .branch-item.merged .branch-name { color: var(--text-muted); }
 
   .branch-cursor {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--accent);
     opacity: 0;
-    transition: opacity 0.1s;
+    transition: opacity 0.15s;
+    filter: drop-shadow(0 0 3px var(--accent));
   }
   .branch-item.selected .branch-cursor { opacity: 1; }
 
@@ -248,13 +263,17 @@ function getWebDashboardHtml(port) {
     flex-direction: column;
     align-items: flex-end;
     gap: 4px;
-    padding-left: 12px;
+    padding-left: 16px;
     flex-shrink: 0;
+    min-width: 60px;
   }
   .branch-time {
-    font-size: 11px;
-    color: var(--text-muted);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
     white-space: nowrap;
+    font-weight: 500;
+    letter-spacing: -0.3px;
   }
   .sparkline-bar {
     display: flex;
@@ -272,13 +291,16 @@ function getWebDashboardHtml(port) {
 
   .branch-diff {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     font-size: 11px;
     font-family: var(--font-mono);
+    justify-content: flex-end;
+    text-align: right;
+    white-space: nowrap;
   }
   .diff-added { color: var(--green); }
   .diff-deleted { color: var(--red); }
-  .diff-label { color: var(--text-muted); }
+  .diff-label { color: var(--text-muted); font-size: 10px; }
 
   .pr-badge {
     font-size: 10px;
@@ -297,6 +319,8 @@ function getWebDashboardHtml(port) {
     flex-direction: column;
     overflow: hidden;
     background: var(--bg-surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -2px 0 8px rgba(0,0,0,0.15);
   }
 
   /* ── Activity Log ──────────────────────────────────────────────── */
@@ -364,13 +388,13 @@ function getWebDashboardHtml(port) {
   /* ── Footer ────────────────────────────────────────────────────── */
   .footer {
     grid-column: 1 / -1;
-    padding: 8px 16px;
+    padding: 8px 20px;
     background: var(--bg-surface);
     border-top: 1px solid var(--border);
     font-size: 11px;
     color: var(--text-muted);
     display: flex;
-    gap: 16px;
+    gap: 14px;
     flex-wrap: wrap;
     user-select: none;
   }
@@ -385,6 +409,7 @@ function getWebDashboardHtml(port) {
     color: var(--text-dim);
     line-height: 18px;
     margin-right: 2px;
+    box-shadow: 0 1px 0 var(--border);
   }
 
   /* ── Flash Message ─────────────────────────────────────────────── */
@@ -426,7 +451,8 @@ function getWebDashboardHtml(port) {
     max-width: 700px;
     max-height: 70vh;
     overflow-y: auto;
-    padding: 20px;
+    padding: 24px;
+    box-shadow: var(--shadow-lg);
   }
   .preview-title {
     font-family: var(--font-mono);
@@ -470,8 +496,9 @@ function getWebDashboardHtml(port) {
     border-radius: 50%;
     display: inline-block;
   }
-  .connection-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .connection-dot.disconnected { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .connection-dot.connected { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,0.5), 0 0 2px var(--green); }
+  .connection-dot.disconnected { background: var(--red); box-shadow: 0 0 6px rgba(248,81,73,0.5), 0 0 2px var(--red); animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
   /* ── Empty state ───────────────────────────────────────────────── */
   .empty-state {
@@ -488,40 +515,55 @@ function getWebDashboardHtml(port) {
   /* ── Tab Bar ───────────────────────────────────────────────────── */
   .tab-bar {
     display: none;
-    background: var(--bg);
+    background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
-    padding: 0 12px;
-    gap: 0;
+    padding: 0 16px;
+    gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
     flex-shrink: 0;
+    align-items: stretch;
+    box-shadow: inset 0 -1px 0 var(--border);
   }
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-bar.visible { display: flex; }
   .tab {
-    padding: 8px 16px;
-    font-size: 12px;
+    padding: 10px 20px 9px;
+    font-size: 13px;
     font-weight: 500;
-    color: var(--text-dim);
+    color: var(--text-muted);
     cursor: pointer;
     border-bottom: 2px solid transparent;
     white-space: nowrap;
-    transition: color 0.15s, border-color 0.15s;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
     user-select: none;
+    position: relative;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   }
-  .tab:hover { color: var(--text); }
+  .tab:hover { color: var(--text-dim); background: rgba(255,255,255,0.03); }
   .tab.active {
-    color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
     border-bottom-color: var(--accent);
+    background: var(--bg);
   }
   .tab .tab-dot {
     display: inline-block;
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    margin-right: 6px;
+    margin-right: 8px;
     background: var(--green);
+    box-shadow: 0 0 4px rgba(63,185,80,0.4);
   }
+  .tab .tab-number {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-left: 6px;
+    font-family: var(--font-mono);
+    opacity: 0.6;
+  }
+  .tab.active .tab-number { color: var(--accent); opacity: 0.8; }
 
   /* ── Confirm Dialog ────────────────────────────────────────────── */
   .confirm-overlay {
@@ -538,9 +580,10 @@ function getWebDashboardHtml(port) {
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 24px;
+    padding: 28px;
     min-width: 360px;
     max-width: 480px;
+    box-shadow: var(--shadow-lg);
   }
   .confirm-title {
     font-size: 15px;
@@ -825,6 +868,8 @@ function getWebDashboardHtml(port) {
       return;
     }
     tabBar.className = 'tab-bar visible';
+    // Adjust layout height for tab bar
+    document.querySelector('.layout').style.height = 'calc(100vh - 49px - 40px)';
     var html = '';
     for (var i = 0; i < projects.length; i++) {
       var p = projects[i];
@@ -832,6 +877,7 @@ function getWebDashboardHtml(port) {
       html += '<div class="tab' + (isActive ? ' active' : '') + '" data-project-id="' + escHtml(p.id) + '">';
       html += '<span class="tab-dot"></span>';
       html += escHtml(p.name);
+      if (i < 9) html += '<span class="tab-number">' + (i + 1) + '</span>';
       html += '</div>';
     }
     tabBar.innerHTML = html;
@@ -875,15 +921,18 @@ function getWebDashboardHtml(port) {
   // ── Time Formatting ────────────────────────────────────────────
   function timeAgo(dateStr) {
     if (!dateStr) return '';
-    var diff = Date.now() - new Date(dateStr).getTime();
+    var ts = new Date(dateStr).getTime();
+    if (isNaN(ts)) return '';
+    var diff = Date.now() - ts;
+    if (diff < 0) return 'now';
     var s = Math.floor(diff / 1000);
-    if (s < 60) return s + 's';
+    if (s < 60) return s + 's ago';
     var m = Math.floor(s / 60);
-    if (m < 60) return m + 'm';
+    if (m < 60) return m + 'm ago';
     var h = Math.floor(m / 60);
-    if (h < 24) return h + 'h';
+    if (h < 24) return h + 'h ago';
     var d = Math.floor(h / 24);
-    return d + 'd';
+    return d + 'd ago';
   }
 
   // ── Sparkline Rendering ────────────────────────────────────────
@@ -930,8 +979,15 @@ function getWebDashboardHtml(port) {
   function render() {
     if (!state) return;
 
-    // Header
-    document.getElementById('project-name').textContent = state.projectName || '-';
+    // Header — hide project name pill when tabs are showing it
+    var projectEl = document.getElementById('project-name');
+    var hasTabs = state.projects && state.projects.length > 1;
+    if (hasTabs) {
+      projectEl.style.display = 'none';
+    } else {
+      projectEl.style.display = '';
+      projectEl.textContent = state.projectName || '-';
+    }
     var versionEl = document.getElementById('version');
     if (state.version) versionEl.textContent = 'v' + state.version;
 
@@ -983,11 +1039,16 @@ function getWebDashboardHtml(port) {
 
       // PR status
       var prStatus = state.branchPrStatusMap ? state.branchPrStatusMap[b.name] : null;
+      var isMerged = prStatus && prStatus.state === 'MERGED';
 
       // Ahead/behind
       var ab = state.aheadBehindCache ? state.aheadBehindCache[b.name] : null;
 
-      html += '<div class="branch-item' + (isSelected ? ' selected' : '') + '" data-index="' + i + '">';
+      var itemClasses = 'branch-item';
+      if (isSelected) itemClasses += ' selected';
+      if (isMerged) itemClasses += ' merged';
+
+      html += '<div class="' + itemClasses + '" data-index="' + i + '">';
       html += '<span class="branch-cursor">&#x25b6;</span>';
       html += '<div class="branch-info">';
       html += '<div class="branch-name-row">';
@@ -1007,23 +1068,23 @@ function getWebDashboardHtml(port) {
       html += '<div class="branch-meta">';
       html += '<span class="branch-commit">' + escHtml(b.commit || '') + '</span>';
       html += '<span class="branch-subject">' + escHtml(b.subject || '') + '</span>';
-      if (ab && (ab.ahead || ab.behind)) {
-        html += '<span class="branch-diff">';
-        html += '<span class="diff-added">+' + fmtCompact(ab.ahead || 0) + '</span>';
-        html += '<span class="diff-deleted">-' + fmtCompact(ab.behind || 0) + '</span>';
-        html += '<span class="diff-label">commits</span>';
-        if (ab.linesAdded || ab.linesDeleted) {
-          html += '<span class="diff-added">+' + fmtCompact(ab.linesAdded || 0) + '</span>';
-          html += '<span class="diff-deleted">-' + fmtCompact(ab.linesDeleted || 0) + '</span>';
-          html += '<span class="diff-label">lines</span>';
-        }
-        html += '</span>';
-      }
       html += '</div>'; // branch-meta
       html += '</div>'; // branch-info
 
       html += '<div class="branch-right">';
       html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
+      if (ab && (ab.ahead || ab.behind)) {
+        html += '<div class="branch-diff">';
+        html += '<span class="diff-added">+' + fmtCompact(ab.ahead || 0) + '</span>';
+        html += '<span class="diff-deleted">-' + fmtCompact(ab.behind || 0) + '</span>';
+        html += '<span class="diff-label">commits</span>';
+        if (ab.linesAdded || ab.linesDeleted) {
+          html += ' <span class="diff-added">+' + fmtCompact(ab.linesAdded || 0) + '</span>';
+          html += '<span class="diff-deleted">-' + fmtCompact(ab.linesDeleted || 0) + '</span>';
+          html += '<span class="diff-label">lines</span>';
+        }
+        html += '</div>';
+      }
       html += renderSparklineBars(sparkStr);
       html += '</div>';
       html += '</div>'; // branch-item
@@ -1048,7 +1109,11 @@ function getWebDashboardHtml(port) {
     var html = '';
     for (var i = 0; i < log.length; i++) {
       var entry = log[i];
-      var t = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+      var t = '';
+      if (entry.timestamp) {
+        var d = new Date(entry.timestamp);
+        t = isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
+      }
       html += '<div class="log-entry">';
       html += '<span class="log-dot ' + (entry.type || 'info') + '"></span>';
       html += '<span class="log-text">' + escHtml(entry.message) + '</span>';
