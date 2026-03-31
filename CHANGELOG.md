@@ -1,3 +1,17 @@
+## [1.9.20](https://github.com/drummel/git-watchtower/compare/v1.9.19...v1.9.20) (2026-03-31)
+
+
+### Bug Fixes
+
+* notify store after mutating branch objects in place ([5c71ab6](https://github.com/drummel/git-watchtower/commit/5c71ab6c1367c325b23c3b9cedbe8e896d99feca))
+
+## [1.9.19](https://github.com/drummel/git-watchtower/compare/v1.9.18...v1.9.19) (2026-03-31)
+
+
+### Bug Fixes
+
+* update sparklineCache via setState instead of mutating in place ([c23cdab](https://github.com/drummel/git-watchtower/commit/c23cdabdb3f10c4b7ea02d8545b3c7f4f8031d8d))
+
 ## [1.9.18](https://github.com/drummel/git-watchtower/compare/v1.9.17...v1.9.18) (2026-03-31)
 
 

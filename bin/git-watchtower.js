@@ -983,6 +983,7 @@ async function refreshAllSparklines() {
     return; // Don't refresh too often
   }
 
+  const sparklineCache = new Map(store.get('sparklineCache'));
   const currentBranches = store.get('branches');
   for (const branch of currentBranches.slice(0, 20)) { // Limit to top 20
     if (branch.isDeleted) continue;
@@ -1016,11 +1017,12 @@ async function refreshAllSparklines() {
       }
 
       const counts = Array.from(dayCounts.values());
-      store.get('sparklineCache').set(branch.name, generateSparkline(counts));
+      sparklineCache.set(branch.name, generateSparkline(counts));
     } catch (e) {
       // Skip this branch - don't let one failure abort all sparkline updates
     }
   }
+  store.setState({ sparklineCache });
   lastSparklineUpdate = now;
 }
 
@@ -1430,9 +1432,11 @@ async function switchToBranch(branchName, recordHistory = true) {
     store.setState({ currentBranch: safeBranchName, isDetachedHead: false });
 
     // Clear NEW flag when branch becomes current
-    const branchInfo = store.get('branches').find(b => b.name === safeBranchName);
+    const branches = store.get('branches');
+    const branchInfo = branches.find(b => b.name === safeBranchName);
     if (branchInfo && branchInfo.isNew) {
       branchInfo.isNew = false;
+      store.setState({ branches: [...branches] });
     }
 
     // Record in history (for undo)
@@ -1887,10 +1891,10 @@ async function pollGitChanges() {
         await execGit(['pull', REMOTE_NAME, autoPullBranchName], { cwd: PROJECT_ROOT, timeout: 60000 });
         addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
-        store.setState({ hasMergeConflict: false });
         // Update the stored commit to the new one
         const newCommit = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
         currentInfo.commit = newCommit.stdout.trim();
+        store.setState({ hasMergeConflict: false, branches: [...store.get('branches')] });
         previousBranchStates.set(autoPullBranchName, newCommit.stdout.trim());
         // Reload browsers
         notifyClients();
