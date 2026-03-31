@@ -166,12 +166,20 @@ function getWebDashboardHtml(port) {
     align-items: center;
     padding: 10px 20px;
     border-bottom: 1px solid var(--border-subtle);
+    border-left: 2px solid transparent;
     cursor: pointer;
-    transition: background 0.15s, opacity 0.15s;
+    transition: background 0.15s, opacity 0.15s, border-color 0.15s;
   }
   .branch-item:hover { background: var(--bg-surface-hover); }
-  .branch-item.selected { background: var(--bg-surface-active); border-left: 2px solid var(--accent); padding-left: 18px; }
+  .branch-item.selected { background: var(--bg-surface-active); border-left-color: var(--accent); }
   .branch-item.selected .branch-name { color: var(--accent); }
+  .branch-item.current {
+    background: rgba(63,185,80,0.06);
+    border-left-color: var(--green);
+  }
+  .branch-item.current:hover { background: rgba(63,185,80,0.10); }
+  .branch-item.current.selected { border-left-color: var(--green); background: rgba(63,185,80,0.10); }
+  .branch-item.current .branch-name { color: var(--green); font-weight: 600; }
   .branch-item.merged { opacity: 0.45; }
   .branch-item.merged:hover { opacity: 0.7; }
   .branch-item.merged .branch-name { color: var(--text-muted); }
@@ -184,6 +192,14 @@ function getWebDashboardHtml(port) {
     filter: drop-shadow(0 0 3px var(--accent));
   }
   .branch-item.selected .branch-cursor { opacity: 1; }
+  .branch-current-icon {
+    font-size: 10px;
+    color: var(--green);
+    filter: drop-shadow(0 0 4px rgba(63,185,80,0.6));
+  }
+  .branch-item.current .branch-cursor { display: none; }
+  .branch-item.current.selected .branch-current-icon { display: none; }
+  .branch-item.current.selected .branch-cursor { display: inline; opacity: 1; }
 
   .branch-info {
     min-width: 0;
@@ -1046,14 +1062,18 @@ function getWebDashboardHtml(port) {
 
       var itemClasses = 'branch-item';
       if (isSelected) itemClasses += ' selected';
+      if (isCurrent) itemClasses += ' current';
       if (isMerged) itemClasses += ' merged';
 
       html += '<div class="' + itemClasses + '" data-index="' + i + '">';
+      if (isCurrent) {
+        html += '<span class="branch-current-icon">&#x25cf;</span>';
+      }
       html += '<span class="branch-cursor">&#x25b6;</span>';
       html += '<div class="branch-info">';
       html += '<div class="branch-name-row">';
       html += '<span class="branch-name">' + escHtml(b.name) + '</span>';
-      if (isCurrent) html += '<span class="branch-current-badge">current</span>';
+      if (isCurrent) html += '<span class="branch-current-badge">HEAD</span>';
       if (b.isNew) html += '<span class="branch-new-badge">new</span>';
       if (b.isDeleted) html += '<span class="branch-deleted-badge">deleted</span>';
       if (b.justUpdated) html += '<span class="branch-updated-badge">updated</span>';
