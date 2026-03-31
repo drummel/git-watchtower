@@ -1,3 +1,10 @@
+## [1.9.20](https://github.com/drummel/git-watchtower/compare/v1.9.19...v1.9.20) (2026-03-31)
+
+
+### Bug Fixes
+
+* notify store after mutating branch objects in place ([5c71ab6](https://github.com/drummel/git-watchtower/commit/5c71ab6c1367c325b23c3b9cedbe8e896d99feca))
+
 ## [1.9.19](https://github.com/drummel/git-watchtower/compare/v1.9.18...v1.9.19) (2026-03-31)
 
 
