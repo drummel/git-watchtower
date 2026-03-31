@@ -98,6 +98,9 @@ const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, C
 const { Store } = require('../src/state/store');
 const store = new Store();
 
+// Web dashboard server
+const { WebDashboardServer } = require('../src/server/web');
+
 const PROJECT_ROOT = process.cwd();
 
 function loadConfig() {
@@ -383,6 +386,11 @@ let sessionStartTime = null;
 // Server process management (for command mode)
 let serverProcess = null;
 
+// Web dashboard
+let WEB_ENABLED = false;
+let WEB_PORT = 4000;
+let webDashboard = null;
+
 function applyConfig(config) {
   // Server settings
   SERVER_MODE = config.server?.mode || 'static';
@@ -414,6 +422,12 @@ function applyConfig(config) {
   // Casino mode
   if (casinoEnabled) {
     casino.enable();
+  }
+
+  // Web dashboard
+  if (config.web) {
+    WEB_ENABLED = config.web.enabled === true;
+    WEB_PORT = config.web.port || 4000;
   }
 }
 
@@ -2860,6 +2874,12 @@ async function shutdown() {
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
 
+  // Stop web dashboard
+  if (webDashboard) {
+    webDashboard.stop();
+    webDashboard = null;
+  }
+
   // Flush telemetry
   telemetry.capture('session_ended', {
     duration_seconds: sessionStartTime ? Math.round((Date.now() - sessionStartTime) / 1000) : 0,
@@ -3026,6 +3046,77 @@ async function start() {
 
     // Setup file watcher (only for static mode)
     setupFileWatcher();
+  }
+
+  // Start web dashboard if enabled
+  if (WEB_ENABLED) {
+    webDashboard = new WebDashboardServer({
+      port: WEB_PORT,
+      store,
+      getExtraState: () => ({
+        clientCount: clients.size,
+        sessionStats: sessionStats.getStats(),
+      }),
+      onAction: async (action, payload) => {
+        try {
+          switch (action) {
+            case 'switchBranch':
+              if (payload.branch && payload.branch !== store.get('currentBranch')) {
+                await switchToBranch(payload.branch);
+                await pollGitChanges();
+              }
+              break;
+            case 'pull':
+              addLog('Force pulling (from web)...', 'update');
+              render();
+              await pullCurrentBranch();
+              await pollGitChanges();
+              break;
+            case 'fetch':
+              addLog('Fetching all branches (from web)...', 'info');
+              render();
+              await pollGitChanges();
+              await refreshAllSparklines();
+              render();
+              break;
+            case 'undo': {
+              const last = store.getLastSwitch();
+              if (last) {
+                await switchToBranch(last.from);
+                store.popHistory();
+                await pollGitChanges();
+              }
+              break;
+            }
+            case 'toggleSound': {
+              const current = store.get('soundEnabled');
+              store.setState({ soundEnabled: !current });
+              render();
+              break;
+            }
+            case 'preview':
+              if (payload.branch) {
+                const pvData = await getPreviewData(payload.branch);
+                if (webDashboard) {
+                  webDashboard.sendPreview({ branch: payload.branch, ...pvData });
+                }
+              }
+              break;
+          }
+        } catch (err) {
+          addLog(`Web action error: ${err.message}`, 'error');
+          render();
+        }
+      },
+    });
+
+    webDashboard.start().then(({ port }) => {
+      addLog(`Web dashboard: http://localhost:${port}`, 'success');
+      render();
+    }).catch((err) => {
+      addLog(`Web dashboard failed: ${err.message}`, 'error');
+      render();
+    });
   }
 
   // Setup keyboard input

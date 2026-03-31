@@ -20,6 +20,8 @@ const { version: PACKAGE_VERSION } = require('../../package.json');
  * @property {number|null} visibleBranches - Visible branches override
  * @property {boolean} init - Run configuration wizard
  * @property {boolean} casino - Enable casino mode
+ * @property {boolean} web - Enable web dashboard mode
+ * @property {number|null} webPort - Web dashboard port override
  */
 
 /**
@@ -47,6 +49,9 @@ function parseArgs(argv, options = {}) {
     // UI settings
     sound: null,
     visibleBranches: null,
+    // Web dashboard
+    web: false,
+    webPort: null,
     // Actions
     init: false,
     casino: false,
@@ -107,6 +112,16 @@ function parseArgs(argv, options = {}) {
       i++;
     } else if (args[i] === '--casino') {
       result.casino = true;
+    }
+    // Web dashboard
+    else if (args[i] === '--web' || args[i] === '-w') {
+      result.web = true;
+    } else if (args[i] === '--web-port') {
+      const webPortValue = parseInt(args[i + 1], 10);
+      if (!isNaN(webPortValue) && webPortValue > 0 && webPortValue < 65536) {
+        result.webPort = webPortValue;
+      }
+      i++;
     }
     // Actions and info
     else if (args[i] === '--init') {
@@ -175,6 +190,14 @@ function applyCliArgsToConfig(config, cliArgs) {
     merged.casinoMode = true;
   }
 
+  // Web dashboard
+  if (cliArgs.web) {
+    merged.web = { ...merged.web, enabled: true };
+  }
+  if (cliArgs.webPort !== null) {
+    merged.web = { ...merged.web, port: cliArgs.webPort };
+  }
+
   return merged;
 }
 
@@ -211,6 +234,10 @@ UI Options:
   --visible-branches <n>  Number of branches to display (default: 7)
   --casino                Enable casino mode
 
+Web Dashboard:
+  -w, --web               Launch web dashboard alongside TUI
+  --web-port <port>       Web dashboard port (default: 4000)
+
 General:
   --init                  Run the configuration wizard
   -v, --version           Show version number
@@ -232,6 +259,8 @@ Examples:
   git-watchtower --no-server                  # Branch monitoring only
   git-watchtower -p 8080                      # Override port
   git-watchtower -m command -c "npm run dev"  # Use custom dev server
+  git-watchtower --web                             # TUI + web dashboard on :4000
+  git-watchtower --web --web-port 8080              # Web dashboard on custom port
   git-watchtower --no-sound --poll-interval 10000
 `;
 }

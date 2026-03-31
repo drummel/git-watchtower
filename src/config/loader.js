@@ -147,6 +147,14 @@ function applyCliArgs(config, cliArgs) {
     result.server.restartOnSwitch = cliArgs.restartOnSwitch;
   }
 
+  // Web dashboard
+  if (cliArgs.web) {
+    result.web = { ...result.web, enabled: true };
+  }
+  if (cliArgs.webPort !== undefined && cliArgs.webPort !== null) {
+    result.web = { ...result.web, port: cliArgs.webPort };
+  }
+
   // Git settings
   if (cliArgs.remote !== undefined && cliArgs.remote !== null) {
     result.remoteName = cliArgs.remote;
