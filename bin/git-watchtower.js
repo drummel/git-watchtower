@@ -2045,7 +2045,10 @@ function serveFile(res, filePath, logPath) {
   });
 }
 
-const server = http.createServer((req, res) => {
+let server = null;
+
+function createStaticServer() {
+  return http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   let pathname = url.pathname;
   const logPath = pathname; // Keep original for logging
@@ -2084,7 +2087,8 @@ const server = http.createServer((req, res) => {
   }
 
   serveFile(res, filePath, logPath);
-});
+  });
+}
 
 // ============================================================================
 // File Watcher
@@ -2994,6 +2998,7 @@ async function start() {
     startServerProcess();
   } else {
     // Static mode
+    server = createStaticServer();
     server.listen(PORT, () => {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
