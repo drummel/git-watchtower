@@ -1,3 +1,10 @@
+## [1.9.17](https://github.com/drummel/git-watchtower/compare/v1.9.16...v1.9.17) (2026-03-31)
+
+
+### Bug Fixes
+
+* make Store switch history methods use newest-first ordering ([c50ea98](https://github.com/drummel/git-watchtower/commit/c50ea9831471afd6942b8afad205faf577edfb4b))
+
 ## [1.9.16](https://github.com/drummel/git-watchtower/compare/v1.9.15...v1.9.16) (2026-03-30)
 
 
