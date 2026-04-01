@@ -1286,15 +1286,8 @@ function getWebDashboardHtml(port) {
           } else if (b.name === state.currentBranch) {
             showToast('Already on ' + b.name, 'info');
           } else {
-            showConfirm(
-              'Switch Branch',
-              'Switch from ' + state.currentBranch + ' to ' + b.name + '?',
-              function() {
-                sendAction('switchBranch', { branch: b.name });
-                showToast('Switching to ' + b.name + '...', 'info');
-              },
-              { label: 'Switch' }
-            );
+            sendAction('switchBranch', { branch: b.name });
+            showToast('Switching to ' + b.name + '...', 'info');
           }
         }
         break;
@@ -1421,10 +1414,8 @@ function getWebDashboardHtml(port) {
       var branches = getDisplayBranches();
       var br = branches[idx];
       if (br && !br.isDeleted && br.name !== state.currentBranch) {
-        showConfirm('Switch Branch', 'Switch to ' + br.name + '?', function() {
-          sendAction('switchBranch', { branch: br.name });
-          showToast('Switching to ' + br.name + '...', 'info');
-        }, { label: 'Switch' });
+        sendAction('switchBranch', { branch: br.name });
+        showToast('Switching to ' + br.name + '...', 'info');
       }
     }
   });

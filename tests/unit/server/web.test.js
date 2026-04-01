@@ -589,8 +589,10 @@ describe('getWebDashboardHtml', () => {
     assert.ok(html.includes('openBrowser'));
   });
 
-  it('should include confirmation for branch switch', () => {
+  it('should switch branches directly without confirmation', () => {
     const html = getWebDashboardHtml(4000);
-    assert.ok(html.includes('Switch Branch'));
+    assert.ok(html.includes('switchBranch'));
+    // No confirmation dialog for branch switch
+    assert.ok(!html.includes("showConfirm('Switch Branch"));
   });
 });
