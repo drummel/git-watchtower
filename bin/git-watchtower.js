@@ -48,6 +48,7 @@
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
  *   i       - Show server info (port, connections)
+ *   W       - Toggle web dashboard (starts server + opens browser)
  *   1-0     - Set visible branch count (1-10)
  *   +/-     - Increase/decrease visible branches
  *   q/Esc   - Quit (Esc also clears search)
@@ -97,6 +98,10 @@ const { getConfigPath, loadConfig: loadConfigFile, saveConfig: saveConfigFile, C
 // Centralized state store
 const { Store } = require('../src/state/store');
 const store = new Store();
+
+// Web dashboard server
+const { WebDashboardServer } = require('../src/server/web');
+const { Coordinator, Worker, generateProjectId, getActiveCoordinator, writeLock, removeLock } = require('../src/server/coordinator');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -383,6 +388,15 @@ let sessionStartTime = null;
 // Server process management (for command mode)
 let serverProcess = null;
 
+// Web dashboard
+let WEB_ENABLED = false;
+let WEB_PORT = 4000;
+let webDashboard = null;
+let coordinator = null;
+let worker = null;
+let projectId = null;
+let webStateInterval = null;
+
 function applyConfig(config) {
   // Server settings
   SERVER_MODE = config.server?.mode || 'static';
@@ -414,6 +428,12 @@ function applyConfig(config) {
   // Casino mode
   if (casinoEnabled) {
     casino.enable();
+  }
+
+  // Web dashboard
+  if (config.web) {
+    WEB_ENABLED = config.web.enabled === true;
+    WEB_PORT = config.web.port || 4000;
   }
 }
 
@@ -2775,6 +2795,20 @@ function setupKeyboardInput() {
         break;
       }
 
+      case 'W': { // Toggle web dashboard
+        if (webDashboard || worker) {
+          const wasPort = stopWebDashboard();
+          addLog(`Web dashboard stopped (was on :${wasPort})`, 'info');
+          showFlash('Web dashboard stopped');
+          render();
+        } else {
+          startWebDashboard(true).then(() => {
+            showFlash(`Web dashboard on :${WEB_PORT}`);
+          }).catch(() => {});
+        }
+        break;
+      }
+
       // Number keys to set visible branch count
       case '1': case '2': case '3': case '4': case '5':
       case '6': case '7': case '8': case '9':
@@ -2831,6 +2865,237 @@ function setupKeyboardInput() {
 }
 
 // ============================================================================
+// Web Dashboard
+// ============================================================================
+
+/**
+ * Handle an action from the web dashboard.
+ */
+async function handleWebAction(action, payload) {
+  const sendResult = (success, message) => {
+    if (webDashboard) webDashboard.sendActionResult({ action, success, message });
+  };
+
+  try {
+    switch (action) {
+      case 'switchBranch':
+        if (payload.branch && payload.branch !== store.get('currentBranch')) {
+          await switchToBranch(payload.branch);
+          await pollGitChanges();
+          sendResult(true, `Switched to ${payload.branch}`);
+        }
+        break;
+      case 'pull':
+        addLog('Force pulling (from web)...', 'update');
+        render();
+        await pullCurrentBranch();
+        await pollGitChanges();
+        sendResult(true, 'Pull complete');
+        break;
+      case 'fetch':
+        addLog('Fetching all branches (from web)...', 'info');
+        render();
+        await pollGitChanges();
+        await refreshAllSparklines();
+        render();
+        sendResult(true, 'Fetch complete');
+        break;
+      case 'undo': {
+        const last = store.getLastSwitch();
+        if (last) {
+          await switchToBranch(last.from);
+          store.popHistory();
+          await pollGitChanges();
+          sendResult(true, `Switched back to ${last.from}`);
+        } else {
+          sendResult(false, 'No switch to undo');
+        }
+        break;
+      }
+      case 'toggleSound': {
+        const current = store.get('soundEnabled');
+        store.setState({ soundEnabled: !current });
+        render();
+        sendResult(true, current ? 'Sound off' : 'Sound on');
+        break;
+      }
+      case 'toggleCasino': {
+        const casinoOn = store.get('casinoModeEnabled');
+        store.setState({ casinoModeEnabled: !casinoOn });
+        if (!casinoOn) casino.enable(); else casino.disable();
+        render();
+        sendResult(true, casinoOn ? 'Casino mode off' : 'Casino mode on');
+        break;
+      }
+      case 'restartServer':
+        if (SERVER_MODE === 'command') {
+          addLog('Restarting server (from web)...', 'update');
+          restartServerProcess();
+          render();
+          sendResult(true, 'Server restarting');
+        } else {
+          sendResult(false, 'Not in command mode');
+        }
+        break;
+      case 'reloadBrowsers':
+        if (SERVER_MODE === 'static') {
+          addLog('Force reloading browsers (from web)...', 'update');
+          notifyClients();
+          render();
+          sendResult(true, 'Browsers reloaded');
+        } else {
+          sendResult(false, 'Not in static mode');
+        }
+        break;
+      case 'openBrowser':
+        if (!NO_SERVER) {
+          openInBrowser(`http://localhost:${PORT}`);
+          sendResult(true, 'Opened in browser');
+        }
+        break;
+      case 'preview':
+        if (payload.branch) {
+          const pvData = await getPreviewData(payload.branch);
+          if (webDashboard) {
+            webDashboard.sendPreview({ branch: payload.branch, ...pvData });
+          }
+        }
+        break;
+    }
+  } catch (err) {
+    addLog(`Web action error: ${err.message}`, 'error');
+    sendResult(false, err.message);
+    render();
+  }
+}
+
+/**
+ * Create and start the web dashboard, with coordinator support.
+ * @param {boolean} openBrowser - Whether to auto-open the browser
+ */
+async function startWebDashboard(openBrowser) {
+  projectId = generateProjectId(PROJECT_ROOT);
+
+  webDashboard = new WebDashboardServer({
+    port: WEB_PORT,
+    store,
+    getExtraState: () => ({
+      clientCount: clients.size,
+      sessionStats: sessionStats.getStats(),
+    }),
+    onAction: handleWebAction,
+  });
+  webDashboard.setLocalProjectId(projectId);
+
+  // Resolve and cache the repo web URL for link building in the web UI
+  getRemoteWebUrl(null).then((url) => {
+    if (url) webDashboard.setRepoWebUrl(url);
+  }).catch(() => {});
+
+  // Check if a coordinator is already running
+  const existing = getActiveCoordinator();
+
+  if (existing) {
+    // Connect as a worker to the existing coordinator
+    try {
+      worker = new Worker({
+        id: projectId,
+        projectPath: PROJECT_ROOT,
+        projectName: path.basename(PROJECT_ROOT),
+        socketPath: existing.socketPath,
+      });
+      worker.onCommand = (action, payload) => handleWebAction(action, payload);
+      await worker.connect();
+      addLog(`Joined web dashboard at http://localhost:${existing.port} (tab)`, 'success');
+
+      // Push state periodically
+      webStateInterval = setInterval(() => {
+        if (worker && worker.isConnected()) {
+          worker.pushState(webDashboard.getSerializableState());
+        } else {
+          clearInterval(webStateInterval);
+          webStateInterval = null;
+        }
+      }, 500);
+
+      // Don't start our own server — piggyback on the coordinator's.
+      // Don't open browser either — the existing tab will show this project automatically.
+      WEB_PORT = existing.port;
+      render();
+      return;
+    } catch (err) {
+      // Couldn't connect — become coordinator instead
+      worker = null;
+    }
+  }
+
+  // We are the coordinator
+  try {
+    coordinator = new Coordinator();
+    coordinator.onProjectsChanged = (projects) => {
+      if (webDashboard) webDashboard.setProjects(projects);
+    };
+    coordinator.onActionRequest = (pId, action, payload) => {
+      if (pId === projectId) {
+        handleWebAction(action, payload);
+      }
+    };
+    await coordinator.start();
+    coordinator.registerLocal(projectId, PROJECT_ROOT, path.basename(PROJECT_ROOT), webDashboard.getSerializableState());
+
+    // Update coordinator with our latest state periodically
+    webStateInterval = setInterval(() => {
+      if (coordinator && webDashboard) {
+        coordinator.updateLocal(projectId, webDashboard.getSerializableState());
+      } else {
+        clearInterval(webStateInterval);
+        webStateInterval = null;
+      }
+    }, 500);
+
+    const { port } = await webDashboard.start();
+    WEB_PORT = port;
+    writeLock(process.pid, port, coordinator.socketPath);
+
+    addLog(`Web dashboard: http://localhost:${port}`, 'success');
+    if (openBrowser) openInBrowser(`http://localhost:${port}`);
+    render();
+  } catch (err) {
+    addLog(`Web dashboard failed: ${err.message}`, 'error');
+    webDashboard = null;
+    coordinator = null;
+    render();
+  }
+}
+
+/**
+ * Stop the web dashboard and coordinator/worker.
+ */
+function stopWebDashboard() {
+  const wasPort = webDashboard ? webDashboard.port : WEB_PORT;
+
+  if (webStateInterval) {
+    clearInterval(webStateInterval);
+    webStateInterval = null;
+  }
+  if (worker) {
+    worker.disconnect();
+    worker = null;
+  }
+  if (coordinator) {
+    coordinator.stop();
+    coordinator = null;
+  }
+  if (webDashboard) {
+    webDashboard.stop();
+    webDashboard = null;
+  }
+  projectId = null;
+
+  return wasPort;
+}
+
+// ============================================================================
 // Shutdown
 // ============================================================================
 
@@ -2863,6 +3128,9 @@ async function shutdown() {
     const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
+
+  // Stop web dashboard and coordinator
+  stopWebDashboard();
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3030,6 +3298,11 @@ async function start() {
 
     // Setup file watcher (only for static mode)
     setupFileWatcher();
+  }
+
+  // Start web dashboard if enabled
+  if (WEB_ENABLED) {
+    await startWebDashboard(true);
   }
 
   // Setup keyboard input

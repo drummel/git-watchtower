@@ -18,6 +18,8 @@ describe('parseArgs', () => {
     assert.equal(result.visibleBranches, null);
     assert.equal(result.init, false);
     assert.equal(result.casino, false);
+    assert.equal(result.web, false);
+    assert.equal(result.webPort, null);
   });
 
   // Server settings
@@ -207,6 +209,46 @@ describe('parseArgs', () => {
     });
   });
 
+  // Web dashboard
+  describe('--web', () => {
+    it('should enable web dashboard', () => {
+      const result = parseArgs(['--web']);
+      assert.equal(result.web, true);
+    });
+
+    it('should parse -w shorthand', () => {
+      const result = parseArgs(['-w']);
+      assert.equal(result.web, true);
+    });
+  });
+
+  describe('--web-port', () => {
+    it('should parse --web-port with valid value', () => {
+      const result = parseArgs(['--web-port', '5000']);
+      assert.equal(result.webPort, 5000);
+    });
+
+    it('should reject port 0', () => {
+      const result = parseArgs(['--web-port', '0']);
+      assert.equal(result.webPort, null);
+    });
+
+    it('should reject negative port', () => {
+      const result = parseArgs(['--web-port', '-1']);
+      assert.equal(result.webPort, null);
+    });
+
+    it('should reject port >= 65536', () => {
+      const result = parseArgs(['--web-port', '65536']);
+      assert.equal(result.webPort, null);
+    });
+
+    it('should reject non-numeric port', () => {
+      const result = parseArgs(['--web-port', 'abc']);
+      assert.equal(result.webPort, null);
+    });
+  });
+
   describe('--init', () => {
     it('should set init flag', () => {
       const result = parseArgs(['--init']);
@@ -359,6 +401,22 @@ describe('applyCliArgsToConfig', () => {
     assert.equal(result.casinoMode, true);
   });
 
+  it('should apply --web flag', () => {
+    const result = applyCliArgsToConfig(getBaseConfig(), parseArgs(['--web']));
+    assert.equal(result.web.enabled, true);
+  });
+
+  it('should apply --web-port override', () => {
+    const result = applyCliArgsToConfig(getBaseConfig(), parseArgs(['--web-port', '5000']));
+    assert.equal(result.web.port, 5000);
+  });
+
+  it('should apply --web and --web-port together', () => {
+    const result = applyCliArgsToConfig(getBaseConfig(), parseArgs(['--web', '--web-port', '8888']));
+    assert.equal(result.web.enabled, true);
+    assert.equal(result.web.port, 8888);
+  });
+
   it('should not modify values for null CLI args', () => {
     const result = applyCliArgsToConfig(getBaseConfig(), parseArgs([]));
     assert.equal(result.server.mode, 'static');
@@ -390,6 +448,13 @@ describe('getHelpText', () => {
     assert.ok(text.includes('static'));
     assert.ok(text.includes('command'));
     assert.ok(text.includes('none'));
+  });
+
+  it('should include web dashboard options', () => {
+    const text = getHelpText('1.0.0');
+    assert.ok(text.includes('--web'));
+    assert.ok(text.includes('--web-port'));
+    assert.ok(text.includes('Web Dashboard'));
   });
 });
 

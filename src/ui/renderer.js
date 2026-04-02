@@ -538,6 +538,7 @@ function renderFooter(state, write) {
   }
 
   write(ansi.gray + '[d]' + ansi.reset + ansi.bgBlack + ' Cleanup  ');
+  write(ansi.gray + '[W]' + ansi.reset + ansi.bgBlack + ' Web  ');
   write(ansi.gray + '[q]' + ansi.reset + ansi.bgBlack + ' Quit  ');
   write(ansi.reset);
 }

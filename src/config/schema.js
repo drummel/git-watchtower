@@ -20,8 +20,15 @@ const { ConfigError, ValidationError } = require('../utils/errors');
  */
 
 /**
+ * @typedef {Object} WebConfig
+ * @property {boolean} enabled - Web dashboard enabled
+ * @property {number} port - Web dashboard port
+ */
+
+/**
  * @typedef {Object} Config
  * @property {ServerConfig} server - Server configuration
+ * @property {WebConfig} web - Web dashboard configuration
  * @property {string} remoteName - Git remote name
  * @property {boolean} autoPull - Auto-pull enabled
  * @property {number} gitPollInterval - Polling interval in ms
@@ -47,6 +54,10 @@ const DEFAULTS = {
     port: 3000,
     restartOnSwitch: true,
   },
+  web: {
+    enabled: false,
+    port: 4000,
+  },
   remoteName: 'origin',
   autoPull: true,
   gitPollInterval: 5000,
@@ -71,6 +82,7 @@ const LIMITS = {
 function getDefaultConfig() {
   return {
     server: { ...DEFAULTS.server },
+    web: { ...DEFAULTS.web },
     remoteName: DEFAULTS.remoteName,
     autoPull: DEFAULTS.autoPull,
     gitPollInterval: DEFAULTS.gitPollInterval,
@@ -220,6 +232,19 @@ function validateConfig(config) {
 
     if (config.server.restartOnSwitch !== undefined) {
       result.server.restartOnSwitch = Boolean(config.server.restartOnSwitch);
+    }
+  }
+
+  // Validate web dashboard config
+  if (config.web) {
+    if (typeof config.web !== 'object') {
+      throw ConfigError.invalid('web must be an object');
+    }
+    if (config.web.enabled !== undefined) {
+      result.web.enabled = Boolean(config.web.enabled);
+    }
+    if (config.web.port !== undefined) {
+      result.web.port = validatePort(config.web.port);
     }
   }
 
