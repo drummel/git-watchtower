@@ -25,6 +25,16 @@ const DEFAULT_WEB_PORT = 4000;
 const STATE_PUSH_INTERVAL = 500;
 
 /**
+ * Maximum number of port retries on EADDRINUSE
+ */
+const MAX_PORT_RETRIES = 20;
+
+/**
+ * SSE keepalive interval (ms) — prevents proxies from dropping idle connections
+ */
+const SSE_KEEPALIVE_INTERVAL = 15000;
+
+/**
  * @typedef {Object} WebDashboardOptions
  * @property {number} [port=4000] - Port to listen on
  * @property {import('../state/store').Store} store - State store instance
@@ -194,13 +204,15 @@ class WebDashboardServer {
    */
   start() {
     return new Promise((resolve, reject) => {
+      let retries = 0;
+
       this.server = http.createServer((req, res) => {
         this._handleRequest(req, res);
       });
 
       this.server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          // Try next port
+        if (err.code === 'EADDRINUSE' && retries < MAX_PORT_RETRIES) {
+          retries++;
           this.port++;
           this._cachedHtml = getWebDashboardHtml(this.port);
           this.server.listen(this.port, '127.0.0.1');
@@ -342,7 +354,7 @@ class WebDashboardServer {
     }
 
     // /api/projects/:id/state
-    const projectStateMatch = pathname.match(/^\/api\/projects\/([a-f0-9]+)\/state$/);
+    const projectStateMatch = pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)\/state$/);
     if (projectStateMatch && req.method === 'GET') {
       const projectState = this.getProjectState(projectStateMatch[1]);
       if (projectState) {
@@ -386,7 +398,13 @@ class WebDashboardServer {
 
     this.clients.add(res);
 
+    // Keepalive heartbeat to prevent proxy/LB timeouts
+    const keepalive = setInterval(() => {
+      try { res.write(': keepalive\\n\\n'); } catch (e) { clearInterval(keepalive); }
+    }, SSE_KEEPALIVE_INTERVAL);
+
     req.on('close', () => {
+      clearInterval(keepalive);
       this.clients.delete(res);
     });
   }
@@ -399,10 +417,12 @@ class WebDashboardServer {
    */
   _handleAction(req, res) {
     let body = '';
+    let aborted = false;
     req.on('data', (chunk) => {
       body += chunk;
       // Limit body size to 10KB
-      if (body.length > 10240) {
+      if (body.length > 10240 && !aborted) {
+        aborted = true;
         res.writeHead(413, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Payload too large' }));
         req.destroy();
@@ -410,6 +430,7 @@ class WebDashboardServer {
     });
 
     req.on('end', () => {
+      if (aborted) return;
       try {
         const data = JSON.parse(body);
         const action = data.action;
@@ -456,7 +477,10 @@ class WebDashboardServer {
    * @private
    */
   _pushState() {
-    if (this.clients.size === 0) return;
+    if (this.clients.size === 0) {
+      this.lastPushedJson = ''; // Invalidate so next client gets immediate state
+      return;
+    }
 
     const state = this.getSerializableState();
     const json = JSON.stringify(state);

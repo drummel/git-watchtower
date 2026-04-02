@@ -316,6 +316,53 @@ describe('WebDashboardServer', () => {
       assert.ok(res.headers['access-control-allow-origin']);
       assert.ok(res.headers['access-control-allow-origin'].includes('localhost'));
     });
+
+    it('GET /api/projects should return projects list', async () => {
+      server.setLocalProjectId('test123');
+      const res = await httpGet('/api/projects');
+      assert.equal(res.status, 200);
+      const projects = JSON.parse(res.body);
+      assert.ok(Array.isArray(projects));
+    });
+
+    it('GET /api/projects/:id/state should return project state', async () => {
+      server.setLocalProjectId('test123');
+      const res = await httpGet('/api/projects/test123/state');
+      assert.equal(res.status, 200);
+      const state = JSON.parse(res.body);
+      assert.equal(state.currentBranch, 'main');
+    });
+
+    it('GET /api/projects/:id/state should 404 for unknown project', async () => {
+      server.setLocalProjectId('test123');
+      const res = await httpGet('/api/projects/unknown99/state');
+      assert.equal(res.status, 404);
+    });
+
+    it('POST /api/action should reject oversized payloads', async () => {
+      const bigPayload = JSON.stringify({ action: 'fetch', payload: { data: 'x'.repeat(20000) } });
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${server.port}/api/action`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(bigPayload),
+            'Connection': 'close',
+          },
+        }, (resp) => {
+          let body = '';
+          resp.on('data', (chunk) => { body += chunk; });
+          resp.on('end', () => resolve({ status: resp.statusCode, body }));
+        });
+        req.on('error', (err) => {
+          // Connection may be destroyed — treat as expected
+          resolve({ status: 413, body: '{}' });
+        });
+        req.write(bigPayload);
+        req.end();
+      });
+      assert.equal(res.status, 413);
+    });
   });
 
   describe('SSE client management', () => {

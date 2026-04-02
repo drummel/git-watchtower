@@ -275,7 +275,7 @@ class Coordinator {
         if (line.trim()) {
           try {
             const msg = JSON.parse(line);
-            this._handleWorkerMessage(socket, msg, (id) => { workerId = id; });
+            this._handleWorkerMessage(socket, msg, (id) => { workerId = id; }, () => workerId);
           } catch (e) { /* ignore bad JSON */ }
         }
       }
@@ -305,7 +305,7 @@ class Coordinator {
    * @param {Function} setWorkerId
    * @private
    */
-  _handleWorkerMessage(socket, msg, setWorkerId) {
+  _handleWorkerMessage(socket, msg, setWorkerId, getWorkerId) {
     switch (msg.type) {
       case 'register':
         setWorkerId(msg.id);
@@ -321,21 +321,26 @@ class Coordinator {
         this._notifyProjectsChanged();
         break;
 
-      case 'state':
-        if (msg.id && this.projects.has(msg.id)) {
+      case 'state': {
+        // Validate sender — only accept state for the worker's own registered ID
+        const registeredId = getWorkerId();
+        if (msg.id && msg.id === registeredId && this.projects.has(msg.id)) {
           this.projects.get(msg.id).state = msg.state;
           this.projects.get(msg.id).lastUpdate = Date.now();
           this._notifyProjectsChanged();
         }
         break;
+      }
 
-      case 'unregister':
-        if (msg.id) {
+      case 'unregister': {
+        const regId = getWorkerId();
+        if (msg.id && msg.id === regId) {
           this.projects.delete(msg.id);
           this.workerSockets.delete(msg.id);
           this._notifyProjectsChanged();
         }
         break;
+      }
     }
   }
 

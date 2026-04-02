@@ -395,6 +395,7 @@ let webDashboard = null;
 let coordinator = null;
 let worker = null;
 let projectId = null;
+let webStateInterval = null;
 
 function applyConfig(config) {
   // Server settings
@@ -3003,11 +3004,12 @@ async function startWebDashboard(openBrowser) {
       addLog(`Joined web dashboard at http://localhost:${existing.port} (tab)`, 'success');
 
       // Push state periodically
-      const pushInterval = setInterval(() => {
+      webStateInterval = setInterval(() => {
         if (worker && worker.isConnected()) {
           worker.pushState(webDashboard.getSerializableState());
         } else {
-          clearInterval(pushInterval);
+          clearInterval(webStateInterval);
+          webStateInterval = null;
         }
       }, 500);
 
@@ -3037,11 +3039,12 @@ async function startWebDashboard(openBrowser) {
     coordinator.registerLocal(projectId, PROJECT_ROOT, path.basename(PROJECT_ROOT), webDashboard.getSerializableState());
 
     // Update coordinator with our latest state periodically
-    const updateInterval = setInterval(() => {
-      if (coordinator) {
+    webStateInterval = setInterval(() => {
+      if (coordinator && webDashboard) {
         coordinator.updateLocal(projectId, webDashboard.getSerializableState());
       } else {
-        clearInterval(updateInterval);
+        clearInterval(webStateInterval);
+        webStateInterval = null;
       }
     }, 500);
 
@@ -3066,6 +3069,10 @@ async function startWebDashboard(openBrowser) {
 function stopWebDashboard() {
   const wasPort = webDashboard ? webDashboard.port : WEB_PORT;
 
+  if (webStateInterval) {
+    clearInterval(webStateInterval);
+    webStateInterval = null;
+  }
   if (worker) {
     worker.disconnect();
     worker = null;
