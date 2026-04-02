@@ -873,6 +873,131 @@ function getWebDashboardHtml(port) {
     color: var(--yellow);
     font-style: italic;
   }
+
+  /* ── Clickable Links ────────────────────────────────────────── */
+  .branch-name a, .branch-commit a, .pr-badge a {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.15s, text-decoration 0.15s;
+  }
+  .branch-name a:hover { text-decoration: underline; color: var(--accent); }
+  .branch-commit a:hover { text-decoration: underline; color: var(--yellow); }
+  .pr-badge a:hover { text-decoration: underline; }
+
+  /* ── Copy to Clipboard Button ───────────────────────────────── */
+  .copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    flex-shrink: 0;
+    padding: 0;
+    vertical-align: middle;
+  }
+  .branch-item:hover .copy-btn,
+  .copy-btn:focus { opacity: 0.7; }
+  .copy-btn:hover { opacity: 1; background: var(--bg-surface-active); color: var(--text); }
+  .copy-btn.copied { color: var(--green); opacity: 1; }
+
+  /* ── Notification Permission Button ─────────────────────────── */
+  .notif-btn {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-dim);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .notif-btn:hover { background: var(--bg-surface-hover); border-color: var(--accent); }
+  .notif-btn.granted { background: var(--green-dim); color: #fff; border-color: var(--green-dim); cursor: default; }
+  .notif-btn.denied { background: var(--red-dim); color: #fff; border-color: var(--red-dim); cursor: default; opacity: 0.6; }
+
+  /* ── Responsive Multi-Column Layout ─────────────────────────── */
+  .layout.split-view {
+    grid-template-columns: 1fr 1fr 320px;
+  }
+  .layout.split-view.sidebar-collapsed {
+    grid-template-columns: 1fr 1fr 0px;
+  }
+  .inline-preview-panel {
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border);
+  }
+  .layout.split-view .inline-preview-panel { display: flex; }
+  .inline-preview-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .inline-preview-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    gap: 8px;
+  }
+  .inline-preview-empty-icon { font-size: 28px; opacity: 0.4; }
+
+  /* ── Sidebar Toggle ─────────────────────────────────────────── */
+  .sidebar-toggle {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    transition: color 0.15s, background 0.15s;
+  }
+  .sidebar-toggle:hover { color: var(--text); background: var(--bg-surface-hover); }
+
+  /* ── Collapsed sidebar ──────────────────────────────────────── */
+  .layout.sidebar-collapsed { grid-template-columns: 1fr 0px; }
+  .layout.sidebar-collapsed .side-panel { display: none; }
+  .layout.split-view.sidebar-collapsed .side-panel { display: none; }
+
+  /* ── Preferences bar in footer ──────────────────────────────── */
+  .pref-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 10px;
+    padding: 1px 8px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .pref-btn:hover { background: var(--bg-surface-hover); color: var(--text-dim); border-color: var(--text-muted); }
+  .pref-btn.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
+
+  @media (max-width: 900px) {
+    .layout.split-view { grid-template-columns: 1fr 280px; }
+    .layout.split-view .inline-preview-panel { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -884,6 +1009,7 @@ function getWebDashboardHtml(port) {
     <span class="header-project" id="project-name">-</span>
   </div>
   <div class="header-right">
+    <button class="notif-btn" id="notif-btn" title="Enable desktop notifications">notifications</button>
     <span class="badge" id="status-badge">connecting</span>
     <span class="connection-dot disconnected" id="connection-dot"></span>
   </div>
@@ -903,8 +1029,18 @@ function getWebDashboardHtml(port) {
     <div class="branch-list" id="branch-list"></div>
   </div>
 
-  <div class="side-panel">
-    <div class="panel-header">Activity Log</div>
+  <div class="inline-preview-panel" id="inline-preview-panel">
+    <div class="panel-header">Preview <button class="sidebar-toggle" id="close-inline-preview" title="Close preview">&times;</button></div>
+    <div class="inline-preview-content" id="inline-preview-content">
+      <div class="inline-preview-empty">
+        <div class="inline-preview-empty-icon">&#x1f50d;</div>
+        Select a branch and press <kbd>v</kbd> to preview
+      </div>
+    </div>
+  </div>
+
+  <div class="side-panel" id="side-panel">
+    <div class="panel-header">Activity Log <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">&#x25b6;</button></div>
     <div class="activity-log" id="activity-log"></div>
   </div>
 
@@ -1011,6 +1147,7 @@ function getWebDashboardHtml(port) {
 
   // ── State ──────────────────────────────────────────────────────
   var state = null;
+  var prevBranches = null; // for notification diffing
   var selectedIndex = 0;
   var searchMode = false;
   var searchQuery = '';
@@ -1029,6 +1166,146 @@ function getWebDashboardHtml(port) {
   var stashMode = false;
   var pendingStashBranch = null;
   var updateNotificationShown = false;
+  var inlinePreviewBranch = null;
+
+  // ── Persistent Preferences (localStorage) ─────────────────────
+  var PREFS_KEY = 'git-watchtower-prefs';
+  function loadPrefs() {
+    try {
+      return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+    } catch (e) { return {}; }
+  }
+  function savePrefs(updates) {
+    var prefs = loadPrefs();
+    for (var k in updates) { if (updates.hasOwnProperty(k)) prefs[k] = updates[k]; }
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+    return prefs;
+  }
+  var prefs = loadPrefs();
+  var sidebarCollapsed = prefs.sidebarCollapsed || false;
+  var sortOrder = prefs.sortOrder || 'default';
+  var pinnedBranches = prefs.pinnedBranches || [];
+
+  // Apply initial sidebar state
+  (function() {
+    var layout = document.querySelector('.layout');
+    if (sidebarCollapsed) layout.classList.add('sidebar-collapsed');
+    // Apply split-view on wide screens
+    if (window.innerWidth >= 1200) layout.classList.add('split-view');
+  })();
+
+  // ── Browser Notifications ─────────────────────────────────────
+  var notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+
+  function updateNotifButton() {
+    var btn = document.getElementById('notif-btn');
+    if (notifPermission === 'granted') {
+      btn.className = 'notif-btn granted';
+      btn.textContent = 'notifs on';
+    } else if (notifPermission === 'denied') {
+      btn.className = 'notif-btn denied';
+      btn.textContent = 'notifs blocked';
+    } else {
+      btn.className = 'notif-btn';
+      btn.textContent = 'notifications';
+    }
+  }
+  updateNotifButton();
+
+  document.getElementById('notif-btn').addEventListener('click', function() {
+    if (notifPermission === 'granted' || notifPermission === 'denied') return;
+    if (typeof Notification === 'undefined') {
+      showToast('Notifications not supported in this browser', 'warning');
+      return;
+    }
+    Notification.requestPermission().then(function(perm) {
+      notifPermission = perm;
+      updateNotifButton();
+      if (perm === 'granted') {
+        showToast('Desktop notifications enabled', 'success');
+      }
+    });
+  });
+
+  function sendNotification(title, body, tag) {
+    if (notifPermission !== 'granted') return;
+    try {
+      var n = new Notification(title, { body: body, tag: tag || 'git-watchtower', icon: '', silent: false });
+      setTimeout(function() { n.close(); }, 8000);
+    } catch (e) { /* ignore */ }
+  }
+
+  function diffBranchesForNotifications(oldBranches, newBranches) {
+    if (!oldBranches || !newBranches) return;
+    var oldMap = {};
+    for (var i = 0; i < oldBranches.length; i++) {
+      oldMap[oldBranches[i].name] = oldBranches[i];
+    }
+    for (var j = 0; j < newBranches.length; j++) {
+      var nb = newBranches[j];
+      var ob = oldMap[nb.name];
+      if (!ob && nb.isNew) {
+        sendNotification('New Branch', nb.name + ' was created', 'new-' + nb.name);
+      } else if (ob && !ob.justUpdated && nb.justUpdated) {
+        sendNotification('Branch Updated', nb.name + ' has new commits', 'update-' + nb.name);
+      }
+    }
+    // Check PR state changes
+    if (state && state.branchPrStatusMap) {
+      for (var bn in state.branchPrStatusMap) {
+        if (!state.branchPrStatusMap.hasOwnProperty(bn)) continue;
+        var pr = state.branchPrStatusMap[bn];
+        if (pr && pr.state === 'MERGED') {
+          // Only notify once - check if it was not merged before
+          var oldBranch = oldMap[bn];
+          if (oldBranch) {
+            sendNotification('PR Merged', 'PR #' + pr.number + ' for ' + bn + ' was merged', 'merged-' + bn);
+          }
+        }
+      }
+    }
+  }
+
+  // ── Clipboard Helper ──────────────────────────────────────────
+  function copyToClipboard(text, btnEl) {
+    navigator.clipboard.writeText(text).then(function() {
+      if (btnEl) {
+        btnEl.classList.add('copied');
+        btnEl.innerHTML = '&#x2713;';
+        setTimeout(function() {
+          btnEl.classList.remove('copied');
+          btnEl.innerHTML = '&#x1f4cb;';
+        }, 1500);
+      }
+      showToast('Copied: ' + text, 'success');
+    }).catch(function() {
+      showToast('Failed to copy', 'error');
+    });
+  }
+
+  // ── URL Building Helpers ──────────────────────────────────────
+  function getRepoUrl() {
+    return (state && state.repoWebUrl) ? state.repoWebUrl.replace(/\\/tree\\/.*$/, '') : null;
+  }
+  function getBranchUrl(branchName) {
+    var base = getRepoUrl();
+    if (!base) return null;
+    return base + '/tree/' + encodeURIComponent(branchName);
+  }
+  function getCommitUrl(hash) {
+    var base = getRepoUrl();
+    if (!base || !hash) return null;
+    return base + '/commit/' + hash;
+  }
+  function getPrUrl(prNumber) {
+    var base = getRepoUrl();
+    if (!base || !prNumber) return null;
+    // Detect GitLab by URL pattern
+    if (base.indexOf('gitlab') !== -1) {
+      return base + '/-/merge_requests/' + prNumber;
+    }
+    return base + '/pull/' + prNumber;
+  }
 
   // ── SSE Connection ─────────────────────────────────────────────
   var evtSource = null;
@@ -1044,7 +1321,13 @@ function getWebDashboardHtml(port) {
 
     evtSource.addEventListener('state', function(e) {
       try {
-        state = JSON.parse(e.data);
+        var newState = JSON.parse(e.data);
+        // Diff branches for desktop notifications
+        if (state && state.branches) {
+          diffBranchesForNotifications(state.branches, newState.branches || []);
+        }
+        prevBranches = state ? state.branches : null;
+        state = newState;
         if (!activeTabId && state.activeProjectId) {
           activeTabId = state.activeProjectId;
         }
@@ -1265,11 +1548,44 @@ function getWebDashboardHtml(port) {
   // ── Get Display Branches ───────────────────────────────────────
   function getDisplayBranches() {
     if (!state || !state.branches) return [];
-    var branches = state.branches;
+    var branches = state.branches.slice();
     if (searchQuery) {
       var q = searchQuery.toLowerCase();
       branches = branches.filter(function(b) {
         return b.name.toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    // Pin branches to top
+    if (pinnedBranches.length > 0) {
+      var pinSet = {};
+      for (var i = 0; i < pinnedBranches.length; i++) pinSet[pinnedBranches[i]] = true;
+      branches.sort(function(a, b) {
+        var aPin = pinSet[a.name] ? 1 : 0;
+        var bPin = pinSet[b.name] ? 1 : 0;
+        return bPin - aPin; // pinned first
+      });
+    }
+    // Sort
+    if (sortOrder === 'alpha') {
+      var pinSet2 = {};
+      for (var j = 0; j < pinnedBranches.length; j++) pinSet2[pinnedBranches[j]] = true;
+      branches.sort(function(a, b) {
+        // Pinned branches always first
+        var aPin = pinSet2[a.name] ? 1 : 0;
+        var bPin = pinSet2[b.name] ? 1 : 0;
+        if (aPin !== bPin) return bPin - aPin;
+        return a.name.localeCompare(b.name);
+      });
+    } else if (sortOrder === 'recent') {
+      var pinSet3 = {};
+      for (var k = 0; k < pinnedBranches.length; k++) pinSet3[pinnedBranches[k]] = true;
+      branches.sort(function(a, b) {
+        var aPin = pinSet3[a.name] ? 1 : 0;
+        var bPin = pinSet3[b.name] ? 1 : 0;
+        if (aPin !== bPin) return bPin - aPin;
+        var aDate = a.date ? new Date(a.date).getTime() : 0;
+        var bDate = b.date ? new Date(b.date).getTime() : 0;
+        return bDate - aDate;
       });
     }
     return branches;
@@ -1309,6 +1625,7 @@ function getWebDashboardHtml(port) {
     renderBranches();
     renderActivityLog();
     renderSessionStats();
+    renderPrefsBar();
 
     // Auto-show update notification (once per session)
     if (state.updateAvailable && !updateNotificationShown && !anyModalOpen()) {
@@ -1366,21 +1683,54 @@ function getWebDashboardHtml(port) {
       html += '<span class="branch-cursor">&#x25b6;</span>';
       html += '<div class="branch-info">';
       html += '<div class="branch-name-row">';
-      html += '<span class="branch-name">' + escHtml(b.name) + '</span>';
+      // Branch name - clickable link to GitHub/GitLab
+      var branchUrl = getBranchUrl(b.name);
+      var isPinned = pinnedBranches.indexOf(b.name) !== -1;
+      html += '<span class="branch-name">';
+      if (branchUrl) {
+        html += '<a href="' + escHtml(branchUrl) + '" target="_blank" rel="noopener" title="Open on web" onclick="event.stopPropagation()">' + escHtml(b.name) + '</a>';
+      } else {
+        html += escHtml(b.name);
+      }
+      html += '</span>';
+      // Copy branch name button
+      html += '<button class="copy-btn" data-copy="' + escHtml(b.name) + '" title="Copy branch name" onclick="event.stopPropagation()">&#x1f4cb;</button>';
       if (isCurrent) html += '<span class="branch-current-badge">HEAD</span>';
+      if (isPinned) html += '<span class="branch-new-badge" style="color:var(--orange);background:rgba(219,109,40,0.15)">pinned</span>';
       if (b.isNew) html += '<span class="branch-new-badge">new</span>';
       if (b.isDeleted) html += '<span class="branch-deleted-badge">deleted</span>';
       if (b.justUpdated) html += '<span class="branch-updated-badge">updated</span>';
       if (prStatus) {
         var prClass = prStatus.state === 'OPEN' ? 'pr-open' : prStatus.state === 'MERGED' ? 'pr-merged' : 'pr-closed';
+        var prUrl = getPrUrl(prStatus.number);
         html += '<span class="pr-badge ' + prClass + '">';
+        if (prUrl) {
+          html += '<a href="' + escHtml(prUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">';
+        }
         html += (prStatus.state === 'MERGED' ? 'merged' : 'PR #' + prStatus.number);
+        if (prUrl) html += '</a>';
         html += '</span>';
+        // Copy PR URL
+        if (prUrl) {
+          html += '<button class="copy-btn" data-copy="' + escHtml(prUrl) + '" title="Copy PR URL" onclick="event.stopPropagation()">&#x1f4cb;</button>';
+        }
       }
       html += '</div>'; // branch-name-row
 
       html += '<div class="branch-meta">';
-      html += '<span class="branch-commit">' + escHtml(b.commit || '') + '</span>';
+      // Commit hash - clickable link
+      var commitUrl = getCommitUrl(b.commit);
+      html += '<span class="branch-commit">';
+      if (commitUrl) {
+        html += '<a href="' + escHtml(commitUrl) + '" target="_blank" rel="noopener" title="View commit" onclick="event.stopPropagation()">' + escHtml(b.commit || '') + '</a>';
+      } else {
+        html += escHtml(b.commit || '');
+      }
+      html += '</span>';
+      // Copy commit hash
+      if (b.commit) {
+        html += '<button class="copy-btn" data-copy="' + escHtml(b.commit) + '" title="Copy commit hash" onclick="event.stopPropagation()">&#x1f4cb;</button>';
+      }
       html += '<span class="branch-subject">' + escHtml(b.subject || '') + '</span>';
       html += '</div>'; // branch-meta
       html += '</div>'; // branch-info
@@ -1438,12 +1788,23 @@ function getWebDashboardHtml(port) {
   }
 
   // ── Preview ────────────────────────────────────────────────────
+  function isInSplitView() {
+    return document.querySelector('.layout').classList.contains('split-view');
+  }
+
   function showPreview(branchName) {
-    previewMode = true;
     sendAction('preview', { branch: branchName });
-    document.getElementById('preview-overlay').className = 'preview-overlay active';
-    document.getElementById('preview-box').innerHTML =
-      '<div class="empty-state"><div class="empty-state-icon">&#x23f3;</div>Loading preview...</div>';
+    inlinePreviewBranch = branchName;
+    if (isInSplitView()) {
+      // Use inline panel instead of overlay
+      document.getElementById('inline-preview-content').innerHTML =
+        '<div class="inline-preview-empty"><div class="inline-preview-empty-icon">&#x23f3;</div>Loading preview for ' + escHtml(branchName) + '...</div>';
+    } else {
+      previewMode = true;
+      document.getElementById('preview-overlay').className = 'preview-overlay active';
+      document.getElementById('preview-box').innerHTML =
+        '<div class="empty-state"><div class="empty-state-icon">&#x23f3;</div>Loading preview...</div>';
+    }
   }
 
   function hidePreview() {
@@ -1451,18 +1812,36 @@ function getWebDashboardHtml(port) {
     document.getElementById('preview-overlay').className = 'preview-overlay';
   }
 
-  function renderPreview(data) {
-    if (!data) return;
+  function buildPreviewHtml(data) {
+    if (!data) return '';
     var html = '<div class="preview-title">';
-    html += '&#x1f50d; ' + escHtml(data.branch || '');
+    var brUrl = getBranchUrl(data.branch);
+    html += '&#x1f50d; ';
+    if (brUrl) {
+      html += '<a href="' + escHtml(brUrl) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">' + escHtml(data.branch || '') + '</a>';
+    } else {
+      html += escHtml(data.branch || '');
+    }
+    // Copy branch name
+    html += ' <button class="copy-btn" style="opacity:0.6" data-copy="' + escHtml(data.branch || '') + '" title="Copy branch name">&#x1f4cb;</button>';
     html += '</div>';
 
     if (data.commits && data.commits.length) {
       html += '<div class="preview-section-title">Recent Commits</div>';
       for (var i = 0; i < data.commits.length; i++) {
         var c = data.commits[i];
+        var cUrl = getCommitUrl(c.hash);
         html += '<div class="preview-commit">';
-        html += '<span class="preview-commit-hash">' + escHtml(c.hash || '') + '</span>';
+        html += '<span class="preview-commit-hash">';
+        if (cUrl) {
+          html += '<a href="' + escHtml(cUrl) + '" target="_blank" rel="noopener" style="color:inherit">' + escHtml(c.hash || '') + '</a>';
+        } else {
+          html += escHtml(c.hash || '');
+        }
+        html += '</span>';
+        if (c.hash) {
+          html += '<button class="copy-btn" style="opacity:0.6" data-copy="' + escHtml(c.hash) + '" title="Copy hash">&#x1f4cb;</button> ';
+        }
         html += escHtml(c.subject || '');
         html += '</div>';
       }
@@ -1474,8 +1853,17 @@ function getWebDashboardHtml(port) {
         html += '<div class="preview-file">' + escHtml(data.files[j]) + '</div>';
       }
     }
+    return html;
+  }
 
+  function renderPreview(data) {
+    if (!data) return;
+    var html = buildPreviewHtml(data);
     document.getElementById('preview-box').innerHTML = html;
+    // Also update inline preview if in split view
+    if (isInSplitView()) {
+      document.getElementById('inline-preview-content').innerHTML = html;
+    }
   }
 
   // ── Log Viewer ─────────────────────────────────────────────────
@@ -1558,13 +1946,34 @@ function getWebDashboardHtml(port) {
 
     var actions = [];
 
-    // Open on web (GitHub/GitLab)
-    actions.push({ icon: '\\u{1f310}', label: 'Open branch on web', key: 'openBranchWeb', data: { branch: branch.name } });
+    // Open on web (GitHub/GitLab) — direct link if we have repo URL
+    var brUrl = getBranchUrl(branch.name);
+    if (brUrl) {
+      actions.push({ icon: '\\u{1f310}', label: 'Open branch on web', key: 'openLink', data: { url: brUrl } });
+    } else {
+      actions.push({ icon: '\\u{1f310}', label: 'Open branch on web', key: 'openBranchWeb', data: { branch: branch.name } });
+    }
 
     // PR actions
-    if (prStatus && prStatus.url) {
+    var prUrl = prStatus ? getPrUrl(prStatus.number) : null;
+    if (prStatus && prUrl) {
+      actions.push({ icon: '\\u{1f517}', label: 'View PR #' + prStatus.number, key: 'openLink', data: { url: prUrl } });
+    } else if (prStatus && prStatus.url) {
       actions.push({ icon: '\\u{1f517}', label: 'View PR #' + prStatus.number, key: 'openPrUrl', data: { url: prStatus.url } });
     }
+
+    // Copy actions
+    actions.push({ icon: '\\u{1f4cb}', label: 'Copy branch name', key: 'copy', data: { text: branch.name } });
+    if (branch.commit) {
+      actions.push({ icon: '\\u{1f4cb}', label: 'Copy commit hash (' + branch.commit + ')', key: 'copy', data: { text: branch.commit } });
+    }
+    if (prUrl) {
+      actions.push({ icon: '\\u{1f4cb}', label: 'Copy PR URL', key: 'copy', data: { text: prUrl } });
+    }
+
+    // Pin/Unpin
+    var isPinnedBranch = pinnedBranches.indexOf(branch.name) !== -1;
+    actions.push({ icon: isPinnedBranch ? '\\u{1f4cc}' : '\\u{1f4cc}', label: isPinnedBranch ? 'Unpin branch' : 'Pin branch to top', key: 'pin', data: { branch: branch.name } });
 
     // View diff
     actions.push({ icon: '\\u{1f4c4}', label: 'View diff / preview', key: 'preview', data: { branch: branch.name } });
@@ -1613,8 +2022,25 @@ function getWebDashboardHtml(port) {
 
     hideBranchActions();
 
-    if (key === 'openBranchWeb' || key === 'openPrUrl') {
-      // These are handled by the server sending back a URL
+    if (key === 'openLink') {
+      // Direct client-side link opening
+      window.open(data.url, '_blank', 'noopener');
+      showToast('Opening in browser...', 'info');
+    } else if (key === 'copy') {
+      copyToClipboard(data.text, null);
+    } else if (key === 'pin') {
+      var pIdx = pinnedBranches.indexOf(data.branch);
+      if (pIdx === -1) {
+        pinnedBranches.push(data.branch);
+        showToast('Pinned: ' + data.branch, 'success');
+      } else {
+        pinnedBranches.splice(pIdx, 1);
+        showToast('Unpinned: ' + data.branch, 'info');
+      }
+      savePrefs({ pinnedBranches: pinnedBranches });
+      renderBranches();
+    } else if (key === 'openBranchWeb' || key === 'openPrUrl') {
+      // Fallback: handled by the server sending back a URL
       sendAction('openBrowser', data);
       showToast('Opening in browser...', 'info');
     } else if (key === 'preview') {
@@ -2180,6 +2606,109 @@ function getWebDashboardHtml(port) {
       });
     }
   }
+
+  // ── Preferences Bar ─────────────────────────────────────────────
+  function renderPrefsBar() {
+    // Insert prefs controls into footer if not already there
+    var footer = document.getElementById('footer');
+    var existing = document.getElementById('prefs-bar');
+    if (!existing) {
+      var div = document.createElement('span');
+      div.id = 'prefs-bar';
+      div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-left:auto;';
+      div.innerHTML =
+        '<button class="pref-btn' + (sortOrder === 'default' ? ' active' : '') + '" data-sort="default" title="Default sort">Default</button>' +
+        '<button class="pref-btn' + (sortOrder === 'alpha' ? ' active' : '') + '" data-sort="alpha" title="Sort alphabetically">A-Z</button>' +
+        '<button class="pref-btn' + (sortOrder === 'recent' ? ' active' : '') + '" data-sort="recent" title="Sort by most recent">Recent</button>' +
+        '<button class="pref-btn" id="pin-selected-btn" title="Pin/unpin selected branch">Pin</button>' +
+        '<button class="pref-btn' + (sidebarCollapsed ? ' active' : '') + '" id="toggle-sidebar-btn" title="Toggle sidebar">Sidebar</button>';
+      footer.appendChild(div);
+    }
+  }
+
+  // Prefs bar click handler
+  document.getElementById('footer').addEventListener('click', function(e) {
+    var sortBtn = e.target.closest('[data-sort]');
+    if (sortBtn) {
+      sortOrder = sortBtn.getAttribute('data-sort');
+      savePrefs({ sortOrder: sortOrder });
+      var sortBtns = document.querySelectorAll('[data-sort]');
+      for (var i = 0; i < sortBtns.length; i++) {
+        sortBtns[i].className = 'pref-btn' + (sortBtns[i].getAttribute('data-sort') === sortOrder ? ' active' : '');
+      }
+      renderBranches();
+      return;
+    }
+    if (e.target.id === 'pin-selected-btn') {
+      var branches = getDisplayBranches();
+      if (branches.length > 0 && selectedIndex < branches.length) {
+        var bn = branches[selectedIndex].name;
+        var idx = pinnedBranches.indexOf(bn);
+        if (idx === -1) {
+          pinnedBranches.push(bn);
+          showToast('Pinned: ' + bn, 'success');
+        } else {
+          pinnedBranches.splice(idx, 1);
+          showToast('Unpinned: ' + bn, 'info');
+        }
+        savePrefs({ pinnedBranches: pinnedBranches });
+        renderBranches();
+      }
+      return;
+    }
+    if (e.target.id === 'toggle-sidebar-btn') {
+      sidebarCollapsed = !sidebarCollapsed;
+      savePrefs({ sidebarCollapsed: sidebarCollapsed });
+      var layout = document.querySelector('.layout');
+      if (sidebarCollapsed) {
+        layout.classList.add('sidebar-collapsed');
+      } else {
+        layout.classList.remove('sidebar-collapsed');
+      }
+      e.target.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
+      return;
+    }
+  });
+
+  // ── Sidebar Toggle (header) ───────────────────────────────────
+  document.getElementById('sidebar-toggle').addEventListener('click', function() {
+    sidebarCollapsed = !sidebarCollapsed;
+    savePrefs({ sidebarCollapsed: sidebarCollapsed });
+    var layout = document.querySelector('.layout');
+    layout.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+    var btn = document.getElementById('toggle-sidebar-btn');
+    if (btn) btn.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
+  });
+
+  // Close inline preview
+  document.getElementById('close-inline-preview').addEventListener('click', function() {
+    var layout = document.querySelector('.layout');
+    layout.classList.remove('split-view');
+    document.getElementById('inline-preview-content').innerHTML =
+      '<div class="inline-preview-empty"><div class="inline-preview-empty-icon">&#x1f50d;</div>Select a branch and press <kbd>v</kbd> to preview</div>';
+  });
+
+  // ── Copy button delegation ────────────────────────────────────
+  document.addEventListener('click', function(e) {
+    var copyBtn = e.target.closest('.copy-btn');
+    if (!copyBtn) return;
+    var text = copyBtn.getAttribute('data-copy');
+    if (text) {
+      e.preventDefault();
+      e.stopPropagation();
+      copyToClipboard(text, copyBtn);
+    }
+  });
+
+  // ── Responsive layout on resize ──────────────────────────────
+  window.addEventListener('resize', function() {
+    var layout = document.querySelector('.layout');
+    if (window.innerWidth >= 1200) {
+      layout.classList.add('split-view');
+    } else {
+      layout.classList.remove('split-view');
+    }
+  });
 
   // ── Utility ────────────────────────────────────────────────────
   function escHtml(s) {

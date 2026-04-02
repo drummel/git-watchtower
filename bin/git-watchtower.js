@@ -2987,6 +2987,11 @@ async function startWebDashboard(openBrowser) {
   });
   webDashboard.setLocalProjectId(projectId);
 
+  // Resolve and cache the repo web URL for link building in the web UI
+  getRemoteWebUrl(null).then((url) => {
+    if (url) webDashboard.setRepoWebUrl(url);
+  }).catch(() => {});
+
   // Check if a coordinator is already running
   const existing = getActiveCoordinator();
 
