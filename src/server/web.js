@@ -239,7 +239,7 @@ class WebDashboardServer {
         this._handleRequest(req, res);
       });
 
-      this.server.on('error', (err) => {
+      this.server.on('error', (/** @type {Error & {code?: string}} */ err) => {
         if (err.code === 'EADDRINUSE' && retries < MAX_PORT_RETRIES) {
           retries++;
           this.port++;
