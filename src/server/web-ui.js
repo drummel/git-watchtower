@@ -283,6 +283,12 @@ function getWebDashboardHtml(port) {
     flex-shrink: 0;
     min-width: 60px;
   }
+  .branch-badges {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
   .branch-time {
     font-size: 12px;
     font-family: var(--font-mono);
@@ -1586,26 +1592,6 @@ function getWebDashboardHtml(port) {
       html += '</span>';
       // Copy branch name button
       html += '<button class="copy-btn" data-copy="' + escHtml(b.name) + '" title="Copy branch name" onclick="event.stopPropagation()">&#x1f4cb;</button>';
-      if (isCurrent) html += '<span class="branch-current-badge">HEAD</span>';
-      if (isPinned) html += '<span class="branch-new-badge" style="color:var(--orange);background:rgba(219,109,40,0.15)">pinned</span>';
-      if (b.isNew) html += '<span class="branch-new-badge">new</span>';
-      if (b.isDeleted) html += '<span class="branch-deleted-badge">deleted</span>';
-      if (b.justUpdated) html += '<span class="branch-updated-badge">updated</span>';
-      if (prStatus) {
-        var prClass = prStatus.state === 'OPEN' ? 'pr-open' : prStatus.state === 'MERGED' ? 'pr-merged' : 'pr-closed';
-        var prUrl = getPrUrl(prStatus.number);
-        html += '<span class="pr-badge ' + prClass + '">';
-        if (prUrl) {
-          html += '<a href="' + escHtml(prUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">';
-        }
-        html += (prStatus.state === 'MERGED' ? 'merged' : 'PR #' + prStatus.number);
-        if (prUrl) html += '</a>';
-        html += '</span>';
-        // Copy PR URL
-        if (prUrl) {
-          html += '<button class="copy-btn" data-copy="' + escHtml(prUrl) + '" title="Copy PR URL" onclick="event.stopPropagation()">&#x1f4cb;</button>';
-        }
-      }
       html += '</div>'; // branch-name-row
 
       html += '<div class="branch-meta">';
@@ -1628,6 +1614,24 @@ function getWebDashboardHtml(port) {
 
       html += '<div class="branch-right">';
       html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
+      // Badges
+      var badges = '';
+      if (isCurrent) badges += '<span class="branch-current-badge">HEAD</span>';
+      if (isPinned) badges += '<span class="branch-new-badge" style="color:var(--orange);background:rgba(219,109,40,0.15)">pinned</span>';
+      if (b.isNew) badges += '<span class="branch-new-badge">new</span>';
+      if (b.isDeleted) badges += '<span class="branch-deleted-badge">deleted</span>';
+      if (b.justUpdated) badges += '<span class="branch-updated-badge">updated</span>';
+      if (prStatus) {
+        var prClass = prStatus.state === 'OPEN' ? 'pr-open' : prStatus.state === 'MERGED' ? 'pr-merged' : 'pr-closed';
+        var prUrl = getPrUrl(prStatus.number);
+        badges += '<span class="pr-badge ' + prClass + '">';
+        if (prUrl) badges += '<a href="' + escHtml(prUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">';
+        badges += (prStatus.state === 'MERGED' ? 'merged' : 'PR #' + prStatus.number);
+        if (prUrl) badges += '</a>';
+        badges += '</span>';
+        if (prUrl) badges += '<button class="copy-btn" data-copy="' + escHtml(prUrl) + '" title="Copy PR URL" onclick="event.stopPropagation()">&#x1f4cb;</button>';
+      }
+      if (badges) html += '<div class="branch-badges">' + badges + '</div>';
       if (ab && (ab.ahead || ab.behind)) {
         html += '<div class="branch-diff">';
         html += '<span class="diff-added">+' + fmtCompact(ab.ahead || 0) + '</span>';
