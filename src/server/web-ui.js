@@ -450,60 +450,6 @@ function getWebDashboardHtml(port) {
   .flash.error { background: var(--red-dim); color: #fff; }
   .flash.update { background: var(--cyan); color: #000; }
 
-  /* ── Preview Panel ─────────────────────────────────────────────── */
-  .preview-overlay {
-    display: none;
-    position: fixed;
-    inset: 49px 0 0 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 50;
-  }
-  .preview-overlay.active { display: flex; justify-content: center; align-items: flex-start; padding-top: 40px; }
-  .preview-box {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    width: 90%;
-    max-width: 700px;
-    max-height: 70vh;
-    overflow-y: auto;
-    padding: 24px;
-    box-shadow: var(--shadow-lg);
-  }
-  .preview-title {
-    font-family: var(--font-mono);
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--accent);
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .preview-section-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-muted);
-    margin: 16px 0 8px;
-  }
-  .preview-commit {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-dim);
-    padding: 4px 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .preview-commit-hash {
-    color: var(--yellow);
-    margin-right: 8px;
-  }
-  .preview-file {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-dim);
-    padding: 2px 0;
-  }
 
   /* ── Connection indicator ──────────────────────────────────────── */
   .connection-dot {
@@ -926,41 +872,6 @@ function getWebDashboardHtml(port) {
   .notif-btn.granted { background: var(--green-dim); color: #fff; border-color: var(--green-dim); cursor: default; }
   .notif-btn.denied { background: var(--red-dim); color: #fff; border-color: var(--red-dim); cursor: default; opacity: 0.6; }
 
-  /* ── Responsive Multi-Column Layout ─────────────────────────── */
-  .layout.split-view {
-    grid-template-columns: 1fr 1fr 320px;
-  }
-  .layout.split-view.sidebar-collapsed {
-    grid-template-columns: 1fr 1fr 0px;
-  }
-  .inline-preview-panel {
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--bg-surface);
-    border-left: 1px solid var(--border);
-  }
-  .layout.split-view .inline-preview-panel { display: flex; }
-  .inline-preview-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-  .inline-preview-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--text-muted);
-    font-size: 13px;
-    text-align: center;
-    gap: 8px;
-  }
-  .inline-preview-empty-icon { font-size: 28px; opacity: 0.4; }
-
   /* ── Sidebar Toggle ─────────────────────────────────────────── */
   .sidebar-toggle {
     background: none;
@@ -977,7 +888,7 @@ function getWebDashboardHtml(port) {
   /* ── Collapsed sidebar ──────────────────────────────────────── */
   .layout.sidebar-collapsed { grid-template-columns: 1fr 0px; }
   .layout.sidebar-collapsed .side-panel { display: none; }
-  .layout.split-view.sidebar-collapsed .side-panel { display: none; }
+
 
   /* ── Preferences bar in footer ──────────────────────────────── */
   .pref-btn {
@@ -995,8 +906,6 @@ function getWebDashboardHtml(port) {
   .pref-btn.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
 
   @media (max-width: 900px) {
-    .layout.split-view { grid-template-columns: 1fr 280px; }
-    .layout.split-view .inline-preview-panel { display: none; }
   }
 </style>
 </head>
@@ -1029,16 +938,6 @@ function getWebDashboardHtml(port) {
     <div class="branch-list" id="branch-list"></div>
   </div>
 
-  <div class="inline-preview-panel" id="inline-preview-panel">
-    <div class="panel-header">Preview <button class="sidebar-toggle" id="close-inline-preview" title="Close preview">&times;</button></div>
-    <div class="inline-preview-content" id="inline-preview-content">
-      <div class="inline-preview-empty">
-        <div class="inline-preview-empty-icon">&#x1f50d;</div>
-        Select a branch and press <kbd>v</kbd> to preview
-      </div>
-    </div>
-  </div>
-
   <div class="side-panel" id="side-panel">
     <div class="panel-header">Activity Log <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">&#x25b6;</button></div>
     <div class="activity-log" id="activity-log"></div>
@@ -1048,7 +947,6 @@ function getWebDashboardHtml(port) {
     <span><kbd>j</kbd><kbd>k</kbd> navigate</span>
     <span><kbd>Enter</kbd> switch</span>
     <span><kbd>/</kbd> search</span>
-    <span><kbd>v</kbd> preview</span>
     <span><kbd>b</kbd> actions</span>
     <span><kbd>i</kbd> info</span>
     <span><kbd>l</kbd> logs</span>
@@ -1063,9 +961,6 @@ function getWebDashboardHtml(port) {
 </div>
 
 <div class="flash" id="flash"></div>
-<div class="preview-overlay" id="preview-overlay">
-  <div class="preview-box" id="preview-box"></div>
-</div>
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box" id="confirm-box"></div>
 </div>
@@ -1151,7 +1046,6 @@ function getWebDashboardHtml(port) {
   var selectedIndex = 0;
   var searchMode = false;
   var searchQuery = '';
-  var previewMode = false;
   var confirmMode = false;
   var confirmCallback = null;
   var connected = false;
@@ -1166,7 +1060,6 @@ function getWebDashboardHtml(port) {
   var stashMode = false;
   var pendingStashBranch = null;
   var updateNotificationShown = false;
-  var inlinePreviewBranch = null;
 
   // ── Persistent Preferences (localStorage) ─────────────────────
   var PREFS_KEY = 'git-watchtower-prefs';
@@ -1190,8 +1083,6 @@ function getWebDashboardHtml(port) {
   (function() {
     var layout = document.querySelector('.layout');
     if (sidebarCollapsed) layout.classList.add('sidebar-collapsed');
-    // Apply split-view on wide screens
-    if (window.innerWidth >= 1200) layout.classList.add('split-view');
   })();
 
   // ── Browser Notifications ─────────────────────────────────────
@@ -1787,85 +1678,6 @@ function getWebDashboardHtml(port) {
     container.innerHTML = html;
   }
 
-  // ── Preview ────────────────────────────────────────────────────
-  function isInSplitView() {
-    return document.querySelector('.layout').classList.contains('split-view');
-  }
-
-  function showPreview(branchName) {
-    sendAction('preview', { branch: branchName });
-    inlinePreviewBranch = branchName;
-    if (isInSplitView()) {
-      // Use inline panel instead of overlay
-      document.getElementById('inline-preview-content').innerHTML =
-        '<div class="inline-preview-empty"><div class="inline-preview-empty-icon">&#x23f3;</div>Loading preview for ' + escHtml(branchName) + '...</div>';
-    } else {
-      previewMode = true;
-      document.getElementById('preview-overlay').className = 'preview-overlay active';
-      document.getElementById('preview-box').innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#x23f3;</div>Loading preview...</div>';
-    }
-  }
-
-  function hidePreview() {
-    previewMode = false;
-    document.getElementById('preview-overlay').className = 'preview-overlay';
-  }
-
-  function buildPreviewHtml(data) {
-    if (!data) return '';
-    var html = '<div class="preview-title">';
-    var brUrl = getBranchUrl(data.branch);
-    html += '&#x1f50d; ';
-    if (brUrl) {
-      html += '<a href="' + escHtml(brUrl) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">' + escHtml(data.branch || '') + '</a>';
-    } else {
-      html += escHtml(data.branch || '');
-    }
-    // Copy branch name
-    html += ' <button class="copy-btn" style="opacity:0.6" data-copy="' + escHtml(data.branch || '') + '" title="Copy branch name">&#x1f4cb;</button>';
-    html += '</div>';
-
-    if (data.commits && data.commits.length) {
-      html += '<div class="preview-section-title">Recent Commits</div>';
-      for (var i = 0; i < data.commits.length; i++) {
-        var c = data.commits[i];
-        var cUrl = getCommitUrl(c.hash);
-        html += '<div class="preview-commit">';
-        html += '<span class="preview-commit-hash">';
-        if (cUrl) {
-          html += '<a href="' + escHtml(cUrl) + '" target="_blank" rel="noopener" style="color:inherit">' + escHtml(c.hash || '') + '</a>';
-        } else {
-          html += escHtml(c.hash || '');
-        }
-        html += '</span>';
-        if (c.hash) {
-          html += '<button class="copy-btn" style="opacity:0.6" data-copy="' + escHtml(c.hash) + '" title="Copy hash">&#x1f4cb;</button> ';
-        }
-        html += escHtml(c.subject || '');
-        html += '</div>';
-      }
-    }
-
-    if (data.files && data.files.length) {
-      html += '<div class="preview-section-title">Changed Files</div>';
-      for (var j = 0; j < data.files.length; j++) {
-        html += '<div class="preview-file">' + escHtml(data.files[j]) + '</div>';
-      }
-    }
-    return html;
-  }
-
-  function renderPreview(data) {
-    if (!data) return;
-    var html = buildPreviewHtml(data);
-    document.getElementById('preview-box').innerHTML = html;
-    // Also update inline preview if in split view
-    if (isInSplitView()) {
-      document.getElementById('inline-preview-content').innerHTML = html;
-    }
-  }
-
   // ── Log Viewer ─────────────────────────────────────────────────
   function showLogViewer() {
     logViewerMode = true;
@@ -1975,9 +1787,6 @@ function getWebDashboardHtml(port) {
     var isPinnedBranch = pinnedBranches.indexOf(branch.name) !== -1;
     actions.push({ icon: isPinnedBranch ? '\\u{1f4cc}' : '\\u{1f4cc}', label: isPinnedBranch ? 'Unpin branch' : 'Pin branch to top', key: 'pin', data: { branch: branch.name } });
 
-    // View diff
-    actions.push({ icon: '\\u{1f4c4}', label: 'View diff / preview', key: 'preview', data: { branch: branch.name } });
-
     // Switch to branch
     if (!isCurrent) {
       actions.push({ icon: '\\u{27a1}', label: 'Switch to this branch', key: 'switchBranch', data: { branch: branch.name } });
@@ -2043,8 +1852,6 @@ function getWebDashboardHtml(port) {
       // Fallback: handled by the server sending back a URL
       sendAction('openBrowser', data);
       showToast('Opening in browser...', 'info');
-    } else if (key === 'preview') {
-      showPreview(data.branch);
     } else if (key === 'switchBranch') {
       sendAction('switchBranch', data);
       showToast('Switching to ' + data.branch + '...', 'info');
@@ -2298,7 +2105,7 @@ function getWebDashboardHtml(port) {
 
   // ── Any modal open check ───────────────────────────────────────
   function anyModalOpen() {
-    return logViewerMode || branchActionMode || infoMode || cleanupMode || updateMode || stashMode || previewMode || confirmMode;
+    return logViewerMode || branchActionMode || infoMode || cleanupMode || updateMode || stashMode || confirmMode;
   }
 
   // ── Keyboard ───────────────────────────────────────────────────
@@ -2336,15 +2143,6 @@ function getWebDashboardHtml(port) {
         var cb = confirmCallback;
         hideConfirm();
         if (cb) cb();
-      }
-      return;
-    }
-
-    // Preview mode
-    if (previewMode) {
-      if (e.key === 'Escape' || e.key === 'v') {
-        e.preventDefault();
-        hidePreview();
       }
       return;
     }
@@ -2439,13 +2237,6 @@ function getWebDashboardHtml(port) {
         input.value = '';
         input.focus();
         break;
-      case 'v':
-        e.preventDefault();
-        var vBranches = getDisplayBranches();
-        if (vBranches.length > 0 && selectedIndex < vBranches.length) {
-          showPreview(vBranches[selectedIndex].name);
-        }
-        break;
       case 'p':
         e.preventDefault();
         sendAction('pull');
@@ -2489,18 +2280,10 @@ function getWebDashboardHtml(port) {
       case 'h':
         e.preventDefault();
         if (state && state.switchHistory && state.switchHistory.length > 0) {
-          previewMode = true;
-          document.getElementById('preview-overlay').className = 'preview-overlay active';
-          var hHtml = '<div class="preview-title">&#x1f4dc; Switch History</div>';
-          for (var hi = 0; hi < state.switchHistory.length; hi++) {
-            var sh = state.switchHistory[hi];
-            var hTime = sh.timestamp ? new Date(sh.timestamp).toLocaleTimeString() : '';
-            hHtml += '<div class="preview-commit">';
-            hHtml += '<span class="preview-commit-hash">' + hTime + '</span>';
-            hHtml += escHtml(sh.from) + ' &#x2192; ' + escHtml(sh.to);
-            hHtml += '</div>';
-          }
-          document.getElementById('preview-box').innerHTML = hHtml;
+          var last = state.switchHistory[0];
+          var histMsg = 'Last: ' + last.from + ' \\u2192 ' + last.to;
+          if (state.switchHistory.length > 1) histMsg += ' (+' + (state.switchHistory.length - 1) + ' more)';
+          showToast(histMsg, 'info');
         } else {
           showToast('No switch history yet', 'info');
         }
@@ -2537,7 +2320,6 @@ function getWebDashboardHtml(port) {
         break;
       case 'Escape':
         e.preventDefault();
-        if (previewMode) hidePreview();
         break;
     }
   });
@@ -2578,10 +2360,6 @@ function getWebDashboardHtml(port) {
     }
   });
 
-  document.getElementById('preview-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hidePreview();
-  });
-
   document.getElementById('confirm-overlay').addEventListener('click', function(e) {
     if (e.target === this) hideConfirm();
   });
@@ -2593,19 +2371,6 @@ function getWebDashboardHtml(port) {
     var projectId = tab.getAttribute('data-project-id');
     if (projectId) switchTab(projectId);
   });
-
-  // ── SSE event for preview data ─────────────────────────────────
-  // Listen for preview response from server
-  function setupPreviewListener() {
-    if (evtSource) {
-      evtSource.addEventListener('preview', function(e) {
-        try {
-          var data = JSON.parse(e.data);
-          renderPreview(data);
-        } catch (err) { /* ignore */ }
-      });
-    }
-  }
 
   // ── Preferences Bar ─────────────────────────────────────────────
   function renderPrefsBar() {
@@ -2680,14 +2445,6 @@ function getWebDashboardHtml(port) {
     if (btn) btn.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
   });
 
-  // Close inline preview
-  document.getElementById('close-inline-preview').addEventListener('click', function() {
-    var layout = document.querySelector('.layout');
-    layout.classList.remove('split-view');
-    document.getElementById('inline-preview-content').innerHTML =
-      '<div class="inline-preview-empty"><div class="inline-preview-empty-icon">&#x1f50d;</div>Select a branch and press <kbd>v</kbd> to preview</div>';
-  });
-
   // ── Copy button delegation ────────────────────────────────────
   document.addEventListener('click', function(e) {
     var copyBtn = e.target.closest('.copy-btn');
@@ -2700,16 +2457,6 @@ function getWebDashboardHtml(port) {
     }
   });
 
-  // ── Responsive layout on resize ──────────────────────────────
-  window.addEventListener('resize', function() {
-    var layout = document.querySelector('.layout');
-    if (window.innerWidth >= 1200) {
-      layout.classList.add('split-view');
-    } else {
-      layout.classList.remove('split-view');
-    }
-  });
-
   // ── Utility ────────────────────────────────────────────────────
   function escHtml(s) {
     if (!s) return '';
@@ -2718,7 +2465,6 @@ function getWebDashboardHtml(port) {
 
   // ── Init ───────────────────────────────────────────────────────
   connect();
-  setTimeout(setupPreviewListener, 100);
 })();
 </script>
 </body>

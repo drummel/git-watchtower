@@ -3302,7 +3302,7 @@ async function start() {
 
   // Start web dashboard if enabled
   if (WEB_ENABLED) {
-    await startWebDashboard(false);
+    await startWebDashboard(true);
   }
 
   // Setup keyboard input

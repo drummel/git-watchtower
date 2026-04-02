@@ -1009,11 +1009,6 @@ describe('getWebDashboardHtml', () => {
       assert.ok(html.includes('openBranchWeb'));
     });
 
-    it('should include view diff/preview action', () => {
-      const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('View diff / preview'));
-    });
-
     it('should include switch to branch action', () => {
       const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('Switch to this branch'));
