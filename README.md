@@ -4,13 +4,15 @@
 [![npm downloads](https://img.shields.io/npm/dm/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Monitor and switch between git branches in real-time. Built for working with web based AI coding agents, like Claude Code Web & Codex.
+Monitor and switch between git branches in real-time. Built for working with web-based AI coding agents, like Claude Code Web & Codex.
 
-- **Live branch monitoring** - Watches your remote for new commits, branches, and deletions
-- **Instant notifications** - Visual and audio alerts when any branch is updated
-- **Quick switching** - Preview changes and jump to any branch with a keypress
-- **Auto-pull** - Automatically pulls when your current branch has remote changes
-- **Optional dev server** - Built-in static server with live reload, or run your own command (Next.js. Nuxt.js, Vite, etc)
+- **Live branch monitoring** with activity sparklines and ahead/behind counters
+- **Web dashboard** for browser-based branch management and PR workflows
+- **Instant notifications** with visual and audio alerts when branches update
+- **Quick switching** with preview pane, undo, and stash integration
+- **Auto-pull** when your current branch has remote changes
+- **Optional dev server** with live reload, or run your own command (Next.js, Vite, etc.)
+- **Zero dependencies** — uses only Node.js built-in modules
 
 ![Git Watchtower Screenshot](assets/git-watchtower-screenshot.png)
 
@@ -22,27 +24,21 @@ Git Watchtower watches your remote and notifies you when branches are updated. P
 
 Also works for human collaborators, but the primary use case is keeping tabs on AI agents coding on different branches.
 
-Git Watchtower supports **three server modes** to fit your workflow:
-- **Static Site Mode** - Built-in server with live reload for HTML/CSS/JS
-- **Custom Server Command Mode** - Run your own dev server (Next.js, Vite, Nuxt, etc.)
-- **No Server Mode** - Branch monitoring only (ideal for watching multiple AI agents)
+## Web Dashboard
 
-## Features
+Launch a browser-based dashboard alongside the terminal UI with `--web`:
 
-- **Full Terminal UI** - Clean interface with box drawing and colors
-- **Activity Sparklines** - 7-day commit history visualization for each branch
-- **Branch Search** - Quickly filter branches by name with `/`
-- **Preview Pane** - See recent commits and changed files before switching
-- **Session History** - Undo branch switches with `u`
-- **Visual Alerts** - Flash notifications when updates arrive
-- **Audio Notifications** - Optional sound alerts (works on macOS, Linux, Windows)
-- **Auto-Pull** - Automatically pulls when your current branch has updates (configurable)
-- **Merge Conflict Detection** - Warns you when auto-pull fails
-- **Flexible Server Modes** - Static site, custom server command, or no server
-- **Server Log View** - Press `l` to view your dev server output (custom server command mode)
-- **Server Restart** - Press `R` to restart your dev server (custom server command mode)
-- **Configurable Remote** - Works with any git remote name (not just `origin`)
-- **Zero Dependencies** - Uses only Node.js built-in modules
+```bash
+git-watchtower --web
+```
+
+![Web Dashboard](assets/web-dashboard-screenshot.png)
+
+The web dashboard provides real-time branch monitoring, PR workflows, CI status, session statistics, and more — all in a rich browser interface. When running multiple instances across different projects, they coordinate automatically into a single multi-project dashboard.
+
+Press `W` in the TUI to toggle the web dashboard on or off at any time.
+
+[Full web dashboard documentation &rarr;](docs/web-dashboard.md)
 
 ## Installation
 
@@ -75,186 +71,64 @@ git-watchtower
 # Run without dev server (branch monitoring only)
 git-watchtower --no-server
 
-# Specify a custom port for the dev server
-git-watchtower --port 8080
+# Launch with web dashboard
+git-watchtower --web
+
+# Specify custom ports
+git-watchtower --port 8080 --web --web-port 9000
 
 # Re-run the configuration wizard
 git-watchtower --init
-
-# Show version
-git-watchtower --version
 
 # Show help
 git-watchtower --help
 ```
 
+[Full CLI reference &rarr;](docs/configuration.md#cli-flags)
+
 ## Server Modes
 
-### Static Site Mode (Default)
-Serves static files with automatic live reload. Good for static HTML/CSS/JS sites, projects without a build step, quick prototyping.
+Git Watchtower supports three server modes:
 
-#### Live Reload
+| Mode | Flag | Description |
+|------|------|-------------|
+| **Static Site** | `--mode static` | Built-in server with live reload for HTML/CSS/JS (default) |
+| **Custom Command** | `--mode command -c "npm run dev"` | Run your own dev server (Next.js, Vite, Nuxt, etc.) |
+| **No Server** | `--no-server` | Branch monitoring only |
 
-The static server includes automatic live reload powered by Server-Sent Events (SSE). When you save a file, all connected browsers refresh instantly.
-
-**How it works:**
-1. A small script is automatically injected into HTML pages
-2. The script opens an SSE connection to `/livereload`
-3. When files change in your static directory, the server notifies all browsers
-4. Browsers automatically reload to show your changes
-
-**File watching behavior:**
-- Uses Node.js native `fs.watch()` with recursive watching
-- Changes are debounced (100ms) to prevent rapid reloads during saves
-- Press `r` to manually trigger a reload for all connected browsers
-
-**Ignored files:**
-
-The file watcher automatically ignores certain files to prevent unnecessary reloads:
-
-| Ignored | Reason |
-|---------|--------|
-| `.git/` directory | Git internals change frequently during commits, fetches, etc. |
-| `.gitignore` patterns | Respects your project's ignore rules |
-
-If a `.gitignore` file exists in your static directory (or project root), those patterns are used to filter file change events. This means changes to `node_modules/`, build artifacts, log files, and other ignored paths won't trigger reloads.
-
-**Supported `.gitignore` patterns:**
-- Simple filenames: `foo.txt`
-- Wildcards: `*.log`, `file?.txt`
-- Globstar: `**/logs`, `logs/**/*.log`
-- Directory patterns: `node_modules/`, `dist/`
-- Anchored patterns: `/build` (root only)
-- Comments and blank lines are ignored
-
-### Custom Server Command Mode
-Runs your own dev server command (`next dev`, `npm run dev`, `vite`, etc.). Press `l` to view server logs, `R` to restart the server.
-
-### No Server Mode
-Branch monitoring only. Use this when watching AI agents push to multiple branches, or when you have your own dev server running separately.
+[Full server modes documentation &rarr;](docs/server-modes.md)
 
 ## Configuration
 
-On first run, Git Watchtower prompts you to configure:
+Settings are saved to `.watchtowerrc.json` in your project directory. Key settings:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
 | Server mode | static, command, or none | static |
 | Port | Server port number | 3000 |
-| Static directory | Directory to serve (static site mode) | public |
-| Command | Dev server command (custom server command mode) | npm run dev |
-| Restart on switch | Restart server on branch switch | true |
+| Web dashboard | Enable browser dashboard | false (use `--web`) |
 | Auto-pull | Auto-pull when current branch has updates | true |
 | Polling interval | How often to check for git updates | 5 seconds |
 | Sound notifications | Audio alerts for updates | true |
 | Visible branches | Number of branches shown in list | 7 |
 
-Settings are saved to `.watchtowerrc.json` in your project directory.
-
-### Example Configuration
-
-```json
-{
-  "server": {
-    "mode": "command",
-    "command": "npm run dev",
-    "port": 3000,
-    "restartOnSwitch": true,
-    "staticDir": "public"
-  },
-  "remoteName": "origin",
-  "autoPull": true,
-  "gitPollInterval": 5000,
-  "soundEnabled": true,
-  "visibleBranches": 7
-}
-```
-
-### Environment Variables
-
-You can also use environment variables:
-
-```bash
-PORT=8080 git-watchtower
-GIT_POLL_INTERVAL=10000 git-watchtower
-```
+[Full configuration reference &rarr;](docs/configuration.md)
 
 ## Keyboard Controls
 
-### Navigation
 | Key | Action |
 |-----|--------|
-| `↑` / `k` | Move selection up |
-| `↓` / `j` | Move selection down |
+| `Up` / `k`, `Down` / `j` | Navigate branch list |
 | `Enter` | Switch to selected branch |
+| `v` | Preview branch (commits & files) |
 | `/` | Search/filter branches |
-| `Esc` | Clear search / Close modal / Quit |
-
-### Actions
-| Key | Action |
-|-----|--------|
-| `v` | Preview selected branch (commits & files) |
-| `h` | Show switch history |
+| `b` | Branch actions (PR, CI, merge, approve) |
 | `u` | Undo last branch switch |
-| `p` | Force pull current branch |
-| `f` | Fetch all branches + refresh sparklines |
-| `b` | Branch actions modal (see below) |
-
-### Branch Actions (`b`)
-
-Press `b` on any branch to open an interactive action modal. All actions are always visible — unavailable ones are grayed out with reasons (e.g., "Requires gh CLI", "Run: gh auth login").
-
-| Key | Action | Requires |
-|-----|--------|----------|
-| `b` | Open branch on GitHub/GitLab/Bitbucket/Azure DevOps | - |
-| `c` | Open Claude Code session in browser | Claude branch with session URL |
-| `p` | Create PR (or view existing PR) | `gh` or `glab` CLI |
-| `d` | View PR diff on GitHub/GitLab | Open PR |
-| `a` | Approve pull request | `gh` or `glab` CLI + open PR |
-| `m` | Merge pull request (squash + delete branch) | `gh` or `glab` CLI + open PR |
-| `i` | Check CI status | `gh` or `glab` CLI |
-| `Esc` | Close modal | - |
-
-The modal opens instantly and loads PR info in the background. Results are cached per branch and invalidated when the branch receives new commits. The modal auto-detects:
-- **Claude Code branches** (`claude/` prefix) and extracts session URLs from commit messages
-- **Git hosting platform** from the remote URL (GitHub, GitLab, Bitbucket, Azure DevOps)
-- **Existing PRs** and their review/CI status
-- **CLI tool availability** — shows install/auth hints when `gh` or `glab` isn't set up
-
-### Server Controls
-| Key | Mode | Action |
-|-----|------|--------|
-| `r` | Static site | Force reload all browsers |
-| `l` | Custom server command | View server logs |
-| `R` | Custom server command | Restart dev server |
-
-### Display
-| Key | Action |
-|-----|--------|
-| `s` | Toggle sound notifications |
-| `i` | Show server/status info |
-| `1-0` | Set visible branch count (1-10) |
-| `+` / `-` | Increase/decrease visible branches |
-
-### Quit
-| Key | Action |
-|-----|--------|
+| `S` | Stash changes |
+| `W` | Toggle web dashboard |
 | `q` | Quit |
-| `Ctrl+C` | Quit |
 
-## Status Indicators
-
-| Badge | Meaning |
-|-------|---------|
-| `★ CURRENT` | Currently checked-out branch |
-| `✦ NEW` | Branch created since Watchtower started |
-| `↓ UPDATES` | Remote has new commits to pull |
-| `✗ DELETED` | Branch was deleted from remote |
-| `NO-SERVER` | Running in branch-monitor-only mode |
-| `SERVER CRASHED` | Dev server process crashed (custom server command mode) |
-| `OFFLINE` | Network connectivity issues detected |
-| `DETACHED HEAD` | Not on a branch (commit checkout) |
-| `MERGE CONFLICT` | Auto-pull failed due to conflicts |
+[Full keyboard reference &rarr;](docs/keyboard-controls.md)
 
 ## Requirements
 
@@ -265,127 +139,41 @@ The modal opens instantly and loads PR info in the background. Results are cache
 
 ## How It Works
 
-1. **Polling**: Git Watchtower runs `git fetch` periodically to check for updates
-2. **Detection**: Compares commit hashes to detect new commits, branches, and deletions
-3. **Auto-pull**: When your current branch has remote updates, it pulls automatically (if enabled)
-4. **Server**: Depending on mode, either serves static files, runs your command, or does nothing
-5. **Live Reload**: In static site mode, notifies connected browsers via SSE when files change
+1. **Polling** — Runs `git fetch` periodically to check for updates
+2. **Detection** — Compares commit hashes to detect new commits, branches, and deletions
+3. **Auto-pull** — When your current branch has remote updates, pulls automatically (if enabled)
+4. **Server** — Depending on mode, serves static files, runs your command, or does nothing
+5. **Live Reload** — In static site mode, notifies connected browsers via SSE when files change
+6. **Web Dashboard** — Optional browser UI that mirrors and extends the TUI via SSE
 
 ## Troubleshooting
 
-### "Git is not installed or not in PATH"
-Git Watchtower requires Git. Install it from: https://git-scm.com/downloads
-
-### "No Git remote configured"
-Git Watchtower requires a remote to watch. Add one with:
-```bash
-git remote add origin <repository-url>
-```
-
-### Using a different remote name
-If your remote isn't called `origin`, update your config:
-```json
-{
-  "remoteName": "upstream"
-}
-```
-
-### Port already in use
-Try a different port:
-```bash
-git-watchtower -p 3001
-```
-
-### Slow fetches / High latency
-Git Watchtower will automatically reduce polling frequency on slow networks. You can also increase the interval in your config.
-
-### Sound not working
-- **macOS**: Uses system sounds via `afplay`
-- **Linux**: Requires PulseAudio (`paplay`) or ALSA (`aplay`)
-- **Windows**: Uses terminal bell
-
-Toggle sound with `s` or set `"soundEnabled": false` in config.
-
-### Server crashes immediately (custom server command mode)
-- Check that your command works when run directly
-- View logs with `l` to see error messages
-- Try restarting with `R`
+Common issues and solutions are covered in the [troubleshooting guide](docs/troubleshooting.md).
 
 ## Contributing
 
-Contributions are welcome! There are several ways to contribute to Git Watchtower:
-
-### Reporting Bugs
-
-If you find a bug, please [open an issue](https://github.com/drummel/git-watchtower/issues/new) on GitHub with:
-- A clear, descriptive title
-- Steps to reproduce the issue
-- Expected vs actual behavior
-- Your environment (OS, Node.js version, terminal)
-- Any relevant error messages or screenshots
-
-### Requesting Features
-
-Have an idea to improve Git Watchtower? [Submit a feature request](https://github.com/drummel/git-watchtower/issues/new) with:
-- A clear description of the feature
-- The problem it would solve or use case it addresses
-- Any implementation ideas (optional)
-
-### Submitting Pull Requests
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Please ensure your PR:
-- Includes a clear description of the changes
-- Maintains the zero-dependency philosophy (Node.js built-ins only)
-- Works across platforms (macOS, Linux, Windows) when applicable
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Development
-
-### Local Installation
-
-For local development and testing:
 
 ```bash
 # Clone the repository
 git clone https://github.com/drummel/git-watchtower.git
 cd git-watchtower
 
-# Option 1: npm link (recommended)
-# Creates a global symlink - changes take effect immediately
+# Create a global symlink (changes take effect immediately)
 npm link
 
-# Now you can run from any git repository:
+# Run from any git repository
 git-watchtower
 
-# Option 2: Run directly without installing
+# Run tests
+npm test
+
+# Run directly without installing
 node bin/git-watchtower.js
-```
-
-### After Making Code Changes
-
-| Install Method | Update Process |
-|----------------|----------------|
-| `npm link` | Nothing - changes apply immediately |
-| `npm install -g .` | Run `npm install -g .` again |
-| Direct `node bin/...` | Nothing - always runs current code |
-
-### Unlinking
-
-To remove the global symlink:
-
-```bash
-npm unlink -g git-watchtower
 ```
 
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-- Built with Node.js built-in modules only (no external dependencies)
