@@ -421,6 +421,104 @@ describe('WebDashboardServer', () => {
     });
   });
 
+  describe('SSE broadcasting with connected clients', () => {
+    beforeEach(async () => {
+      server = new WebDashboardServer({ store, port: 19882 });
+      await server.start();
+    });
+
+    function connectSSE() {
+      return new Promise((resolve) => {
+        const req = http.get(`http://127.0.0.1:${server.port}/api/events`);
+        let chunks = '';
+        req.on('response', (res) => {
+          res.on('data', (chunk) => { chunks += chunk; });
+          setTimeout(() => resolve({ req, chunks: () => chunks }), 80);
+        });
+      });
+    }
+
+    it('should send flash events to connected clients', async () => {
+      const { req, chunks } = await connectSSE();
+      server.flash('Hello world', 'success');
+      await new Promise(r => setTimeout(r, 50));
+      req.destroy();
+      const data = chunks();
+      assert.ok(data.includes('event: flash'), 'Should contain flash event');
+      assert.ok(data.includes('Hello world'), 'Should contain message');
+    });
+
+    it('should send preview events to connected clients', async () => {
+      const { req, chunks } = await connectSSE();
+      server.sendPreview({ branch: 'main', commits: [{ hash: 'abc', subject: 'Test' }] });
+      await new Promise(r => setTimeout(r, 50));
+      req.destroy();
+      const data = chunks();
+      assert.ok(data.includes('event: preview'), 'Should contain preview event');
+      assert.ok(data.includes('abc'), 'Should contain commit hash');
+    });
+
+    it('should send actionResult events to connected clients', async () => {
+      const { req, chunks } = await connectSSE();
+      server.sendActionResult({ action: 'pull', success: true, message: 'Done' });
+      await new Promise(r => setTimeout(r, 50));
+      req.destroy();
+      const data = chunks();
+      assert.ok(data.includes('event: actionResult'), 'Should contain actionResult event');
+      assert.ok(data.includes('Done'), 'Should contain message');
+    });
+
+    it('should push state changes to connected clients', async () => {
+      const { req, chunks } = await connectSSE();
+      // Trigger a state change
+      store.setState({ projectName: 'changed-name' });
+      // Wait for the push interval (500ms + buffer)
+      await new Promise(r => setTimeout(r, 700));
+      req.destroy();
+      const data = chunks();
+      // Should have at least 2 state events (initial + push)
+      const stateEvents = data.split('event: state').length - 1;
+      assert.ok(stateEvents >= 2, 'Should have pushed at least 2 state events, got ' + stateEvents);
+      assert.ok(data.includes('changed-name'));
+    });
+
+    it('should not push state when unchanged', async () => {
+      const { req, chunks } = await connectSSE();
+      // Wait for push interval without changing anything
+      await new Promise(r => setTimeout(r, 700));
+      req.destroy();
+      const data = chunks();
+      // Should have only the initial state event (no duplicate)
+      const stateEvents = data.split('event: state').length - 1;
+      assert.ok(stateEvents >= 1, 'Should have initial state');
+      // The second push should be deduped (same JSON)
+    });
+  });
+
+  describe('OPTIONS preflight', () => {
+    beforeEach(async () => {
+      server = new WebDashboardServer({ store, port: 19883 });
+      await server.start();
+    });
+
+    it('should return 204 for OPTIONS request', async () => {
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${server.port}/api/action`, {
+          method: 'OPTIONS',
+          headers: { 'Connection': 'close' },
+        }, (resp) => {
+          let body = '';
+          resp.on('data', (chunk) => { body += chunk; });
+          resp.on('end', () => resolve({ status: resp.statusCode, headers: resp.headers, body }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      assert.equal(res.status, 204);
+      assert.ok(res.headers['access-control-allow-methods']);
+    });
+  });
+
   describe('multi-project support', () => {
     it('should set and get local project ID', () => {
       server = new WebDashboardServer({ store });

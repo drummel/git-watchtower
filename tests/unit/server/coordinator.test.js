@@ -305,3 +305,108 @@ describe('Worker', () => {
     assert.equal(coord.getProjects().length, 0);
   });
 });
+
+describe('Coordinator.sendCommand to local project', () => {
+  let coord;
+
+  afterEach(() => {
+    if (coord) { coord.stop(); coord = null; }
+    removeSocket();
+  });
+
+  it('should dispatch to onActionRequest for local project', async () => {
+    const sockPath = SOCKET_PATH + '.local1';
+    coord = new Coordinator({ socketPath: sockPath });
+    let received = null;
+    coord.onActionRequest = (id, action, payload) => { received = { id, action, payload }; };
+    await coord.start();
+    coord.registerLocal('local1', '/tmp/p', 'p', {});
+
+    coord.sendCommand('local1', 'pull', { force: true });
+    assert.ok(received);
+    assert.equal(received.id, 'local1');
+    assert.equal(received.action, 'pull');
+    assert.deepEqual(received.payload, { force: true });
+  });
+
+  it('should send command to worker socket', async () => {
+    const sockPath = SOCKET_PATH + '.cmd1';
+    coord = new Coordinator({ socketPath: sockPath });
+    await coord.start();
+
+    const w = new Worker({ id: 'wcmd1', projectPath: '/tmp/p', projectName: 'p', socketPath: sockPath });
+    let receivedCmd = null;
+    w.onCommand = (action, payload) => { receivedCmd = { action, payload }; };
+    await w.connect();
+    await new Promise(r => setTimeout(r, 50));
+
+    coord.sendCommand('wcmd1', 'fetch', {});
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.ok(receivedCmd);
+    assert.equal(receivedCmd.action, 'fetch');
+    w.disconnect();
+  });
+});
+
+describe('Worker connection error', () => {
+  it('should reject when socket path does not exist', async () => {
+    const w = new Worker({
+      id: 'fail1',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: '/tmp/nonexistent-watchtower-socket-test.sock',
+    });
+    await assert.rejects(() => w.connect());
+    assert.equal(w.isConnected(), false);
+  });
+});
+
+describe('Coordinator worker state validation', () => {
+  let coord;
+  let w;
+
+  afterEach(async () => {
+    if (w) { w.disconnect(); w = null; }
+    if (coord) { coord.stop(); coord = null; }
+    removeSocket();
+  });
+
+  it('should reject state updates from wrong worker ID', async () => {
+    const sockPath = SOCKET_PATH + '.spoof1';
+    coord = new Coordinator({ socketPath: sockPath });
+    await coord.start();
+
+    coord.registerLocal('local', '/tmp/l', 'local', { v: 1 });
+
+    w = new Worker({ id: 'wrk_real', projectPath: '/tmp/w', projectName: 'w', socketPath: sockPath });
+    await w.connect();
+    await new Promise(r => setTimeout(r, 50));
+    assert.equal(coord.getProjects().length, 2);
+
+    // Manually send a spoofed state message for a different ID
+    w.socket.write(JSON.stringify({ type: 'state', id: 'local', state: { hacked: true } }) + '\\n');
+    await new Promise(r => setTimeout(r, 50));
+
+    // The local project state should NOT have been overwritten
+    const localProject = coord.getProject('local');
+    assert.equal(localProject.state.hacked, undefined);
+    assert.equal(localProject.state.v, 1);
+  });
+});
+
+describe('readLock edge cases', () => {
+  afterEach(() => { removeLock(); });
+
+  it('should return null for corrupt JSON', () => {
+    ensureDir();
+    fs.writeFileSync(LOCK_FILE, 'not-json!!!', 'utf8');
+    assert.equal(readLock(), null);
+  });
+
+  it('should return null for JSON missing pid', () => {
+    ensureDir();
+    fs.writeFileSync(LOCK_FILE, JSON.stringify({ port: 4000 }), 'utf8');
+    assert.equal(readLock(), null);
+  });
+});
