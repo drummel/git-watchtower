@@ -68,6 +68,9 @@ class WebDashboardServer {
     this.projects = new Map();
     this.localProjectId = null;
 
+    /** @type {string|null} Repository web URL for building links */
+    this.repoWebUrl = null;
+
     // Cache the HTML (regenerated only if port changes)
     this._cachedHtml = getWebDashboardHtml(this.port);
   }
@@ -148,6 +151,9 @@ class WebDashboardServer {
       projects: this._getProjectsList(),
       activeProjectId: this.localProjectId,
 
+      // Repository web URL for building links in the web UI
+      repoWebUrl: this.repoWebUrl || null,
+
       // Extra state from the main process
       ...extra,
     };
@@ -170,6 +176,14 @@ class WebDashboardServer {
    */
   setLocalProjectId(id) {
     this.localProjectId = id;
+  }
+
+  /**
+   * Set the repository web URL for link building in the web UI.
+   * @param {string|null} url - e.g. https://github.com/user/repo
+   */
+  setRepoWebUrl(url) {
+    this.repoWebUrl = url || null;
   }
 
   /**
