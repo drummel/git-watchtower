@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/drummel/git-watchtower/compare/v1.10.0...v1.10.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* move badges to right column next to timestamp ([7843111](https://github.com/drummel/git-watchtower/commit/7843111badfb2efb389ad0ad5c8efb852e915e6f))
+
 # [1.10.0](https://github.com/drummel/git-watchtower/compare/v1.9.20...v1.10.0) (2026-04-02)
 
 
