@@ -2,7 +2,7 @@
 
 Git Watchtower includes a browser-based dashboard that runs alongside the terminal UI. It provides real-time branch monitoring, PR workflows, and session statistics in a rich web interface.
 
-![Web Dashboard](../assets/web-dashboard-screenshot.png)
+![Web Dashboard](../assets/git-watchtower-web-ui.png)
 
 ## Getting Started
 

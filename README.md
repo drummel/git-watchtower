@@ -32,7 +32,7 @@ Launch a browser-based dashboard alongside the terminal UI with `--web`:
 git-watchtower --web
 ```
 
-![Web Dashboard](assets/web-dashboard-screenshot.png)
+![Web Dashboard](assets/git-watchtower-web-ui.png)
 
 The web dashboard provides real-time branch monitoring, PR workflows, CI status, session statistics, and more — all in a rich browser interface. When running multiple instances across different projects, they coordinate automatically into a single multi-project dashboard.
 
