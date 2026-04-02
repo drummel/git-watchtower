@@ -3018,9 +3018,9 @@ async function startWebDashboard(openBrowser) {
         }
       }, 500);
 
-      // Don't start our own server — piggyback on the coordinator's
+      // Don't start our own server — piggyback on the coordinator's.
+      // Don't open browser either — the existing tab will show this project automatically.
       WEB_PORT = existing.port;
-      if (openBrowser) openInBrowser(`http://localhost:${existing.port}`);
       render();
       return;
     } catch (err) {
