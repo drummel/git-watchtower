@@ -1,3 +1,25 @@
+# [1.10.0](https://github.com/drummel/git-watchtower/compare/v1.9.20...v1.10.0) (2026-04-02)
+
+
+### Bug Fixes
+
+* address engineering review findings ([2f7d111](https://github.com/drummel/git-watchtower/commit/2f7d111ce42e5bdbc76ce5860619caa018354086))
+* design overhaul for premium web dashboard ([5212627](https://github.com/drummel/git-watchtower/commit/521262761834ec848f27a006466ff37f8a9958b4))
+* don't open duplicate browser tab for secondary web instances ([14cb40b](https://github.com/drummel/git-watchtower/commit/14cb40b6cff211d4785e6ca5c8c532935921d405))
+* make current branch visually prominent in web dashboard ([857bdb6](https://github.com/drummel/git-watchtower/commit/857bdb606e76ba2f9e74b12676bf32679260da0d))
+* remove confirmation dialog for branch switching in web UI ([c5f5587](https://github.com/drummel/git-watchtower/commit/c5f558785faf1112490208c9c4a15722fe411808))
+* remove preview pane and auto-open browser on --web launch ([1c36caf](https://github.com/drummel/git-watchtower/commit/1c36cafe3903d292ade8e0721e8612a4b4b46795))
+* resolve typecheck error for err.code in web server ([a1d86ee](https://github.com/drummel/git-watchtower/commit/a1d86ee1476997605ca8b34f44181780d450819a))
+
+
+### Features
+
+* add browser-exclusive web UI features ([5116866](https://github.com/drummel/git-watchtower/commit/511686638098f8c944249ed1182527d82e798113))
+* add multi-instance coordination and bidirectional web actions ([084b71c](https://github.com/drummel/git-watchtower/commit/084b71c65841933b27be5b5665ee3fd912f84c69))
+* add TUI features to web dashboard ([8a9c7c6](https://github.com/drummel/git-watchtower/commit/8a9c7c60024a940f4e79918439e5fc8902748c1f))
+* add W key to toggle web dashboard from TUI ([fddb36a](https://github.com/drummel/git-watchtower/commit/fddb36a16965ca81a8d183fc0b141e1e01149db9))
+* add web dashboard mode with --web flag ([6e7775f](https://github.com/drummel/git-watchtower/commit/6e7775f2b9e13ae52e8f62ca47efd9ea33862002))
+
 ## [1.9.20](https://github.com/drummel/git-watchtower/compare/v1.9.19...v1.9.20) (2026-03-31)
 
 
