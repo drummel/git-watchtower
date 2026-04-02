@@ -675,6 +675,204 @@ function getWebDashboardHtml(port) {
   .toast.info { background: rgba(31,111,235,0.9); border-color: var(--accent); color: #fff; }
   .toast.warning { background: rgba(210,153,34,0.9); border-color: var(--yellow); color: #000; }
   .toast-icon { font-size: 14px; flex-shrink: 0; }
+  .toast-action {
+    cursor: pointer;
+    text-decoration: underline;
+    font-weight: 600;
+    margin-left: 4px;
+    opacity: 0.9;
+  }
+  .toast-action:hover { opacity: 1; }
+
+  /* ── Modal Overlay (shared) ──────────────────────────────────── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 200;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    min-width: 400px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .modal-close {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+  }
+  .modal-close:hover { color: var(--text); }
+
+  /* ── Log Viewer ──────────────────────────────────────────────── */
+  .log-viewer-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .log-viewer-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .log-viewer-tab:hover { color: var(--text-dim); }
+  .log-viewer-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .log-viewer-content {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .log-line { padding: 1px 0; white-space: pre-wrap; word-break: break-all; }
+  .log-line.error { color: var(--red); }
+  .log-line .log-ts { color: var(--text-muted); margin-right: 8px; }
+
+  /* ── Branch Action Modal ─────────────────────────────────────── */
+  .action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .action-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text);
+    font-size: 13px;
+    background: none;
+    border: 1px solid transparent;
+    text-align: left;
+    width: 100%;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .action-item:hover { background: var(--bg-surface-hover); border-color: var(--border); }
+  .action-item .action-icon { font-size: 14px; width: 20px; text-align: center; flex-shrink: 0; }
+  .action-item .action-label { flex: 1; }
+  .action-item .action-kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+  }
+  .action-item.disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Info Panel ──────────────────────────────────────────────── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    font-size: 13px;
+  }
+  .info-label { color: var(--text-muted); font-weight: 500; }
+  .info-value { color: var(--text); font-family: var(--font-mono); }
+
+  /* ── Session Stats (footer) ──────────────────────────────────── */
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex-wrap: wrap;
+  }
+  .stats-bar .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .stats-bar .stat-value { color: var(--text-dim); font-weight: 600; }
+  .stats-bar .stat-label { font-family: var(--font); }
+
+  /* ── Cleanup Modal ───────────────────────────────────────────── */
+  .cleanup-branch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 12px 0;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .cleanup-branch-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+  }
+  .cleanup-branch-icon { color: var(--red); font-size: 10px; }
+
+  /* ── Update Modal ────────────────────────────────────────────── */
+  .update-info {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .update-versions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+  .update-versions .old-version { color: var(--text-muted); }
+  .update-versions .arrow { color: var(--text-muted); }
+  .update-versions .new-version { color: var(--green); font-weight: 600; }
+  .update-progress {
+    font-size: 12px;
+    color: var(--yellow);
+    font-style: italic;
+  }
 </style>
 </head>
 <body>
@@ -715,14 +913,16 @@ function getWebDashboardHtml(port) {
     <span><kbd>Enter</kbd> switch</span>
     <span><kbd>/</kbd> search</span>
     <span><kbd>v</kbd> preview</span>
+    <span><kbd>b</kbd> actions</span>
+    <span><kbd>i</kbd> info</span>
+    <span><kbd>l</kbd> logs</span>
     <span><kbd>p</kbd> pull</span>
     <span><kbd>f</kbd> fetch</span>
-    <span><kbd>r</kbd> reload</span>
-    <span><kbd>R</kbd> restart</span>
+    <span><kbd>S</kbd> stash</span>
+    <span><kbd>d</kbd> cleanup</span>
     <span><kbd>h</kbd> history</span>
-    <span><kbd>c</kbd> casino</span>
-    <span><kbd>1</kbd>-<kbd>9</kbd> tabs</span>
     <span><kbd>Esc</kbd> close</span>
+    <span class="stats-bar" id="stats-bar"></span>
   </div>
 </div>
 
@@ -734,6 +934,76 @@ function getWebDashboardHtml(port) {
   <div class="confirm-box" id="confirm-box"></div>
 </div>
 <div class="toast-container" id="toast-container"></div>
+
+<!-- Log Viewer Modal -->
+<div class="modal-overlay" id="log-viewer-overlay">
+  <div class="modal-box" style="min-width:500px;max-width:750px;">
+    <div class="modal-title">
+      Server Logs
+      <button class="modal-close" id="log-viewer-close">&times;</button>
+    </div>
+    <div class="log-viewer-tabs" id="log-viewer-tabs">
+      <button class="log-viewer-tab active" data-tab="server">Server</button>
+      <button class="log-viewer-tab" data-tab="activity">Activity</button>
+    </div>
+    <div class="log-viewer-content" id="log-viewer-content"></div>
+  </div>
+</div>
+
+<!-- Branch Action Modal -->
+<div class="modal-overlay" id="branch-action-overlay">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span id="branch-action-title">Branch Actions</span>
+      <button class="modal-close" id="branch-action-close">&times;</button>
+    </div>
+    <div class="action-list" id="branch-action-list"></div>
+  </div>
+</div>
+
+<!-- Info Panel Modal -->
+<div class="modal-overlay" id="info-overlay">
+  <div class="modal-box" style="min-width:380px;">
+    <div class="modal-title">
+      Server Info
+      <button class="modal-close" id="info-close">&times;</button>
+    </div>
+    <div class="info-grid" id="info-grid"></div>
+  </div>
+</div>
+
+<!-- Branch Cleanup Modal -->
+<div class="modal-overlay" id="cleanup-overlay">
+  <div class="modal-box">
+    <div class="modal-title">
+      Branch Cleanup
+      <button class="modal-close" id="cleanup-close">&times;</button>
+    </div>
+    <div id="cleanup-content"></div>
+  </div>
+</div>
+
+<!-- Update Notification Modal -->
+<div class="modal-overlay" id="update-overlay">
+  <div class="modal-box" style="min-width:380px;">
+    <div class="modal-title">
+      Update Available
+      <button class="modal-close" id="update-close">&times;</button>
+    </div>
+    <div id="update-content"></div>
+  </div>
+</div>
+
+<!-- Stash Confirm Modal -->
+<div class="modal-overlay" id="stash-overlay">
+  <div class="modal-box" style="min-width:380px;">
+    <div class="modal-title">
+      Stash Changes
+      <button class="modal-close" id="stash-close">&times;</button>
+    </div>
+    <div id="stash-content"></div>
+  </div>
+</div>
 
 <script>
 (function() {
@@ -750,6 +1020,15 @@ function getWebDashboardHtml(port) {
   var connected = false;
   var flashTimer = null;
   var activeTabId = null;
+  var logViewerMode = false;
+  var logViewerTab = 'server';
+  var branchActionMode = false;
+  var infoMode = false;
+  var cleanupMode = false;
+  var updateMode = false;
+  var stashMode = false;
+  var pendingStashBranch = null;
+  var updateNotificationShown = false;
 
   // ── SSE Connection ─────────────────────────────────────────────
   var evtSource = null;
@@ -784,7 +1063,12 @@ function getWebDashboardHtml(port) {
     evtSource.addEventListener('actionResult', function(e) {
       try {
         var data = JSON.parse(e.data);
-        showToast(data.message, data.success ? 'success' : 'error');
+        if (!data.success && data.message && data.message.indexOf('uncommitted') !== -1) {
+          pendingStashBranch = data.branch || null;
+          showErrorToastWithHint(data.message, 'Press S to stash');
+        } else {
+          showToast(data.message, data.success ? 'success' : 'error');
+        }
       } catch (err) { /* ignore */ }
     });
 
@@ -1024,6 +1308,16 @@ function getWebDashboardHtml(port) {
 
     renderBranches();
     renderActivityLog();
+    renderSessionStats();
+
+    // Auto-show update notification (once per session)
+    if (state.updateAvailable && !updateNotificationShown && !anyModalOpen()) {
+      updateNotificationShown = true;
+      showUpdateModal();
+    }
+
+    // Update log viewer if open
+    if (logViewerMode) renderLogViewer();
   }
 
   function renderBranches() {
@@ -1184,11 +1478,429 @@ function getWebDashboardHtml(port) {
     document.getElementById('preview-box').innerHTML = html;
   }
 
+  // ── Log Viewer ─────────────────────────────────────────────────
+  function showLogViewer() {
+    logViewerMode = true;
+    logViewerTab = 'server';
+    renderLogViewer();
+    document.getElementById('log-viewer-overlay').className = 'modal-overlay active';
+  }
+
+  function hideLogViewer() {
+    logViewerMode = false;
+    document.getElementById('log-viewer-overlay').className = 'modal-overlay';
+  }
+
+  function renderLogViewer() {
+    if (!state) return;
+    var container = document.getElementById('log-viewer-content');
+    // Update tab active state
+    var tabs = document.querySelectorAll('.log-viewer-tab');
+    for (var t = 0; t < tabs.length; t++) {
+      tabs[t].className = 'log-viewer-tab' + (tabs[t].getAttribute('data-tab') === logViewerTab ? ' active' : '');
+    }
+
+    var html = '';
+    if (logViewerTab === 'server') {
+      var logs = state.serverLogBuffer || [];
+      if (logs.length === 0) {
+        html = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No server logs</div>';
+      } else {
+        for (var i = 0; i < logs.length; i++) {
+          var log = logs[i];
+          html += '<div class="log-line' + (log.isError ? ' error' : '') + '">';
+          html += '<span class="log-ts">' + escHtml(log.timestamp || '') + '</span>';
+          html += escHtml(log.line || '');
+          html += '</div>';
+        }
+      }
+    } else {
+      var alog = (state.activityLog || []);
+      if (alog.length === 0) {
+        html = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No activity</div>';
+      } else {
+        for (var j = 0; j < alog.length; j++) {
+          var entry = alog[j];
+          var ts = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+          html += '<div class="log-line">';
+          html += '<span class="log-ts">' + ts + '</span>';
+          html += escHtml(entry.message || '');
+          html += '</div>';
+        }
+      }
+    }
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  document.getElementById('log-viewer-tabs').addEventListener('click', function(e) {
+    var tab = e.target.closest('.log-viewer-tab');
+    if (!tab) return;
+    logViewerTab = tab.getAttribute('data-tab');
+    renderLogViewer();
+  });
+
+  document.getElementById('log-viewer-close').addEventListener('click', hideLogViewer);
+  document.getElementById('log-viewer-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideLogViewer();
+  });
+
+  // ── Branch Action Modal ────────────────────────────────────────
+  function showBranchActions() {
+    var branches = getDisplayBranches();
+    if (!branches.length || selectedIndex >= branches.length) return;
+    var branch = branches[selectedIndex];
+    branchActionMode = true;
+    document.getElementById('branch-action-title').textContent = 'Actions: ' + branch.name;
+
+    var prStatus = (state.branchPrStatusMap || {})[branch.name];
+    var isCurrent = branch.name === state.currentBranch;
+
+    var actions = [];
+
+    // Open on web (GitHub/GitLab)
+    actions.push({ icon: '\\u{1f310}', label: 'Open branch on web', key: 'openBranchWeb', data: { branch: branch.name } });
+
+    // PR actions
+    if (prStatus && prStatus.url) {
+      actions.push({ icon: '\\u{1f517}', label: 'View PR #' + prStatus.number, key: 'openPrUrl', data: { url: prStatus.url } });
+    }
+
+    // View diff
+    actions.push({ icon: '\\u{1f4c4}', label: 'View diff / preview', key: 'preview', data: { branch: branch.name } });
+
+    // Switch to branch
+    if (!isCurrent) {
+      actions.push({ icon: '\\u{27a1}', label: 'Switch to this branch', key: 'switchBranch', data: { branch: branch.name } });
+    }
+
+    // Pull
+    if (isCurrent) {
+      actions.push({ icon: '\\u{2b07}', label: 'Pull latest changes', key: 'pull', data: {} });
+    }
+
+    // Fetch
+    actions.push({ icon: '\\u{1f504}', label: 'Fetch all remotes', key: 'fetch', data: {} });
+
+    var html = '';
+    for (var i = 0; i < actions.length; i++) {
+      var a = actions[i];
+      html += '<button class="action-item" data-action-key="' + escHtml(a.key) + '" data-action-data=\\'' + escHtml(JSON.stringify(a.data)) + '\\'>';
+      html += '<span class="action-icon">' + a.icon + '</span>';
+      html += '<span class="action-label">' + escHtml(a.label) + '</span>';
+      html += '</button>';
+    }
+    document.getElementById('branch-action-list').innerHTML = html;
+    document.getElementById('branch-action-overlay').className = 'modal-overlay active';
+  }
+
+  function hideBranchActions() {
+    branchActionMode = false;
+    document.getElementById('branch-action-overlay').className = 'modal-overlay';
+  }
+
+  document.getElementById('branch-action-close').addEventListener('click', hideBranchActions);
+  document.getElementById('branch-action-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideBranchActions();
+  });
+
+  document.getElementById('branch-action-list').addEventListener('click', function(e) {
+    var btn = e.target.closest('.action-item');
+    if (!btn) return;
+    var key = btn.getAttribute('data-action-key');
+    var data = {};
+    try { data = JSON.parse(btn.getAttribute('data-action-data') || '{}'); } catch (err) { /* ignore */ }
+
+    hideBranchActions();
+
+    if (key === 'openBranchWeb' || key === 'openPrUrl') {
+      // These are handled by the server sending back a URL
+      sendAction('openBrowser', data);
+      showToast('Opening in browser...', 'info');
+    } else if (key === 'preview') {
+      showPreview(data.branch);
+    } else if (key === 'switchBranch') {
+      sendAction('switchBranch', data);
+      showToast('Switching to ' + data.branch + '...', 'info');
+    } else {
+      sendAction(key, data);
+      showToast(key + '...', 'info');
+    }
+  });
+
+  // ── Info Panel ─────────────────────────────────────────────────
+  function showInfo() {
+    if (!state) return;
+    infoMode = true;
+    var grid = document.getElementById('info-grid');
+    var rows = [
+      ['Project', state.projectName || '-'],
+      ['Version', 'v' + (state.version || '-')],
+      ['Server Mode', state.serverMode || 'none'],
+      ['Server Port', state.noServer ? 'N/A' : String(state.port || '-')],
+      ['Server Running', state.serverRunning ? 'Yes' : 'No'],
+      ['SSE Clients', String(state.clientCount || 0)],
+      ['Current Branch', state.currentBranch || '-'],
+      ['Polling Status', state.pollingStatus || 'idle'],
+      ['Network', state.isOffline ? 'Offline' : 'Online'],
+      ['Branches', String((state.branches || []).length)],
+    ];
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      html += '<span class="info-label">' + escHtml(rows[i][0]) + '</span>';
+      html += '<span class="info-value">' + escHtml(rows[i][1]) + '</span>';
+    }
+    grid.innerHTML = html;
+    document.getElementById('info-overlay').className = 'modal-overlay active';
+  }
+
+  function hideInfo() {
+    infoMode = false;
+    document.getElementById('info-overlay').className = 'modal-overlay';
+  }
+
+  document.getElementById('info-close').addEventListener('click', hideInfo);
+  document.getElementById('info-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideInfo();
+  });
+
+  // ── Stash Management ───────────────────────────────────────────
+  function showStashDialog(pendingBranch) {
+    stashMode = true;
+    pendingStashBranch = pendingBranch || null;
+    var msg = pendingBranch
+      ? 'You have uncommitted changes. Stash them before switching to <strong>' + escHtml(pendingBranch) + '</strong>?'
+      : 'Stash all uncommitted changes in the working directory?';
+    var html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">' + msg + '</div>';
+    html += '<div class="confirm-actions">';
+    html += '<button class="confirm-btn" id="stash-cancel">Cancel</button>';
+    html += '<button class="confirm-btn primary" id="stash-confirm">Stash &amp; Continue</button>';
+    html += '</div>';
+    document.getElementById('stash-content').innerHTML = html;
+    document.getElementById('stash-overlay').className = 'modal-overlay active';
+    document.getElementById('stash-cancel').onclick = hideStash;
+    document.getElementById('stash-confirm').onclick = function() {
+      sendAction('stash', { pendingBranch: pendingStashBranch });
+      showToast('Stashing changes...', 'info');
+      hideStash();
+    };
+  }
+
+  function hideStash() {
+    stashMode = false;
+    pendingStashBranch = null;
+    document.getElementById('stash-overlay').className = 'modal-overlay';
+  }
+
+  document.getElementById('stash-close').addEventListener('click', hideStash);
+  document.getElementById('stash-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideStash();
+  });
+
+  // ── Branch Cleanup ─────────────────────────────────────────────
+  function showCleanup() {
+    cleanupMode = true;
+    var html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
+    document.getElementById('cleanup-content').innerHTML = html;
+    document.getElementById('cleanup-overlay').className = 'modal-overlay active';
+
+    // Ask the server to find gone branches (we inspect state.branches for gone tracking hints)
+    // For now, look at branches that have no remote
+    var goneBranches = [];
+    if (state && state.branches) {
+      for (var i = 0; i < state.branches.length; i++) {
+        var b = state.branches[i];
+        if (b.isLocal && !b.hasRemote && b.name !== state.currentBranch) {
+          goneBranches.push(b.name);
+        }
+      }
+    }
+
+    if (goneBranches.length === 0) {
+      html = '<div style="color:var(--text-dim);font-size:13px;padding:12px 0;">No stale branches found. All branches have active remotes.</div>';
+      html += '<div class="confirm-actions"><button class="confirm-btn" id="cleanup-done">OK</button></div>';
+      document.getElementById('cleanup-content').innerHTML = html;
+      document.getElementById('cleanup-done').onclick = hideCleanup;
+      return;
+    }
+
+    html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:8px;">Found ' + goneBranches.length + ' branch(es) with no remote tracking:</div>';
+    html += '<div class="cleanup-branch-list">';
+    for (var j = 0; j < goneBranches.length; j++) {
+      html += '<div class="cleanup-branch-item"><span class="cleanup-branch-icon">&#x2716;</span>' + escHtml(goneBranches[j]) + '</div>';
+    }
+    html += '</div>';
+    html += '<div class="confirm-actions">';
+    html += '<button class="confirm-btn" id="cleanup-cancel">Cancel</button>';
+    html += '<button class="confirm-btn danger" id="cleanup-safe">Safe Delete (-d)</button>';
+    html += '<button class="confirm-btn danger" id="cleanup-force">Force Delete (-D)</button>';
+    html += '</div>';
+
+    document.getElementById('cleanup-content').innerHTML = html;
+    document.getElementById('cleanup-cancel').onclick = hideCleanup;
+    document.getElementById('cleanup-safe').onclick = function() {
+      sendAction('deleteBranches', { branches: goneBranches, force: false });
+      showToast('Deleting ' + goneBranches.length + ' branches (safe)...', 'info');
+      hideCleanup();
+    };
+    document.getElementById('cleanup-force').onclick = function() {
+      showConfirm(
+        'Force Delete',
+        'Force delete ' + goneBranches.length + ' branch(es)? This may delete unmerged work.',
+        function() {
+          sendAction('deleteBranches', { branches: goneBranches, force: true });
+          showToast('Force deleting ' + goneBranches.length + ' branches...', 'warning');
+          hideCleanup();
+        },
+        { danger: true, label: 'Force Delete' }
+      );
+    };
+  }
+
+  function hideCleanup() {
+    cleanupMode = false;
+    document.getElementById('cleanup-overlay').className = 'modal-overlay';
+  }
+
+  document.getElementById('cleanup-close').addEventListener('click', hideCleanup);
+  document.getElementById('cleanup-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideCleanup();
+  });
+
+  // ── Update Notification ────────────────────────────────────────
+  function showUpdateModal() {
+    if (!state || !state.updateAvailable) return;
+    updateMode = true;
+    var html = '<div class="update-versions">';
+    html += '<span class="old-version">v' + escHtml(state.version || '?') + '</span>';
+    html += '<span class="arrow">&#x2192;</span>';
+    html += '<span class="new-version">v' + escHtml(state.updateAvailable) + '</span>';
+    html += '</div>';
+    html += '<div class="update-info">A new version of git-watchtower is available.</div>';
+    if (state.updateInProgress) {
+      html += '<div class="update-progress">Update in progress...</div>';
+    } else {
+      html += '<div class="confirm-actions">';
+      html += '<button class="confirm-btn" id="update-dismiss">Dismiss</button>';
+      html += '<button class="confirm-btn primary" id="update-install">Update Now</button>';
+      html += '</div>';
+    }
+    document.getElementById('update-content').innerHTML = html;
+    document.getElementById('update-overlay').className = 'modal-overlay active';
+    if (!state.updateInProgress) {
+      document.getElementById('update-dismiss').onclick = hideUpdate;
+      document.getElementById('update-install').onclick = function() {
+        sendAction('checkUpdate', { install: true });
+        showToast('Installing update...', 'info');
+        hideUpdate();
+      };
+    }
+  }
+
+  function hideUpdate() {
+    updateMode = false;
+    document.getElementById('update-overlay').className = 'modal-overlay';
+  }
+
+  document.getElementById('update-close').addEventListener('click', hideUpdate);
+  document.getElementById('update-overlay').addEventListener('click', function(e) {
+    if (e.target === this) hideUpdate();
+  });
+
+  // ── Session Stats ──────────────────────────────────────────────
+  function renderSessionStats() {
+    if (!state || !state.sessionStats) return;
+    var s = state.sessionStats;
+    var bar = document.getElementById('stats-bar');
+    var activeBranches = 0;
+    var staleBranches = 0;
+    if (state.branches) {
+      for (var i = 0; i < state.branches.length; i++) {
+        var b = state.branches[i];
+        // Consider stale if no updates and not current
+        if (b.justUpdated || b.name === state.currentBranch) {
+          activeBranches++;
+        } else {
+          staleBranches++;
+        }
+      }
+    }
+    var html = '';
+    html += '<span class="stat-item"><span class="stat-label">Session:</span> <span class="stat-value">' + escHtml(s.sessionDuration || '0m') + '</span></span>';
+    html += '<span class="stat-item"><span class="stat-label">Lines:</span> <span class="stat-value">+' + (s.linesAdded || 0) + '/-' + (s.linesDeleted || 0) + '</span></span>';
+    html += '<span class="stat-item"><span class="stat-label">Polls:</span> <span class="stat-value">' + (s.totalPolls || 0) + '</span> <span class="stat-label">(' + (s.hitRate || 0) + '% hit)</span></span>';
+    if (s.lastUpdate) {
+      html += '<span class="stat-item"><span class="stat-label">Last update:</span> <span class="stat-value">' + escHtml(s.lastUpdate) + '</span></span>';
+    }
+    html += '<span class="stat-item"><span class="stat-label">Active:</span> <span class="stat-value">' + activeBranches + '</span> <span class="stat-label">Stale:</span> <span class="stat-value">' + staleBranches + '</span></span>';
+    bar.innerHTML = html;
+  }
+
+  // ── Error Toast with Stash Hint ────────────────────────────────
+  function showErrorToastWithHint(message, hint) {
+    var container = document.getElementById('toast-container');
+    var toast = document.createElement('div');
+    toast.className = 'toast error';
+    var html = '<span class="toast-icon">\\u2717</span>' + escHtml(message);
+    if (hint) {
+      html += '<span class="toast-action" data-hint="' + escHtml(hint) + '">' + escHtml(hint) + '</span>';
+    }
+    toast.innerHTML = html;
+    container.appendChild(toast);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() { toast.classList.add('visible'); });
+    });
+
+    // Handle hint click
+    var hintEl = toast.querySelector('.toast-action');
+    if (hintEl) {
+      hintEl.addEventListener('click', function() {
+        var h = this.getAttribute('data-hint');
+        if (h === 'Press S to stash') {
+          showStashDialog(pendingStashBranch);
+        }
+        toast.classList.remove('visible');
+        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      });
+    }
+
+    setTimeout(function() {
+      toast.classList.remove('visible');
+      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 6000);
+  }
+
+  // ── Any modal open check ───────────────────────────────────────
+  function anyModalOpen() {
+    return logViewerMode || branchActionMode || infoMode || cleanupMode || updateMode || stashMode || previewMode || confirmMode;
+  }
+
   // ── Keyboard ───────────────────────────────────────────────────
   document.addEventListener('keydown', function(e) {
     // Ignore when typing in input fields (other than search)
     if (e.target.tagName === 'INPUT' && e.target.id !== 'search-input') return;
     if (e.target.tagName === 'BUTTON') return;
+
+    // Any modal — Escape to close
+    if (logViewerMode && e.key === 'Escape') { e.preventDefault(); hideLogViewer(); return; }
+    if (branchActionMode && e.key === 'Escape') { e.preventDefault(); hideBranchActions(); return; }
+    if (infoMode && e.key === 'Escape') { e.preventDefault(); hideInfo(); return; }
+    if (cleanupMode && e.key === 'Escape') { e.preventDefault(); hideCleanup(); return; }
+    if (updateMode && e.key === 'Escape') { e.preventDefault(); hideUpdate(); return; }
+    if (stashMode && e.key === 'Escape') { e.preventDefault(); hideStash(); return; }
+
+    // Log viewer tab switching
+    if (logViewerMode) {
+      if (e.key === 'Tab' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        logViewerTab = logViewerTab === 'server' ? 'activity' : 'server';
+        renderLogViewer();
+      }
+      return;
+    }
+
+    // Block other keys while modals are open
+    if (branchActionMode || infoMode || cleanupMode || updateMode || stashMode) return;
 
     // Confirm dialog mode — Escape to cancel, Enter to confirm
     if (confirmMode) {
@@ -1376,6 +2088,26 @@ function getWebDashboardHtml(port) {
         e.preventDefault();
         sendAction('toggleSound');
         showToast(state && state.soundEnabled ? 'Sound off' : 'Sound on', 'info');
+        break;
+      case 'b':
+        e.preventDefault();
+        showBranchActions();
+        break;
+      case 'i':
+        e.preventDefault();
+        showInfo();
+        break;
+      case 'l':
+        e.preventDefault();
+        showLogViewer();
+        break;
+      case 'S':
+        e.preventDefault();
+        showStashDialog(null);
+        break;
+      case 'd':
+        e.preventDefault();
+        showCleanup();
         break;
       case 'Escape':
         e.preventDefault();

@@ -13,6 +13,7 @@
 const http = require('http');
 const { getWebDashboardHtml } = require('./web-ui');
 const { version: PACKAGE_VERSION } = require('../../package.json');
+const sessionStats = require('../stats/session');
 
 /**
  * Default web dashboard port
@@ -121,6 +122,9 @@ class WebDashboardServer {
       activityLog: s.activityLog,
       switchHistory: s.switchHistory,
 
+      // Server logs
+      serverLogBuffer: s.serverLogBuffer || [],
+
       // Caches (as plain objects)
       sparklineCache,
       branchPrStatusMap,
@@ -128,6 +132,17 @@ class WebDashboardServer {
 
       // Metadata
       version: PACKAGE_VERSION,
+
+      // Version update
+      updateAvailable: s.updateAvailable || null,
+      updateInProgress: s.updateInProgress || false,
+
+      // Server info
+      noServer: s.noServer || false,
+      clientCount: this.clients.size,
+
+      // Session stats
+      sessionStats: sessionStats.getStats(),
 
       // Multi-project data
       projects: this._getProjectsList(),
@@ -448,6 +463,7 @@ class WebDashboardServer {
           'toggleSound', 'preview',
           'restartServer', 'reloadBrowsers', 'toggleCasino',
           'openBrowser',
+          'stash', 'stashPop', 'deleteBranches', 'checkUpdate',
         ];
 
         if (!allowedActions.includes(action)) {
