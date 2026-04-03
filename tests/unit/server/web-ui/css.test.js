@@ -70,6 +70,8 @@ describe('getDashboardCss', () => {
   it('should not contain HTML or script tags', () => {
     const css = getDashboardCss();
     assert.ok(!css.includes('<script'), 'Should not contain script tags');
+    assert.ok(!css.includes('<style'), 'Should not contain style tags (assembly adds them)');
+    assert.ok(!css.includes('</style'), 'Should not contain closing style tags');
     assert.ok(!css.includes('<div'), 'Should not contain HTML elements');
     assert.ok(!css.includes('function '), 'Should not contain JavaScript functions');
   });
