@@ -1511,19 +1511,15 @@ describe('getWebDashboardHtml', () => {
       assert.ok(html.includes('stashMode'));
     });
 
-    it('should handle Escape key for all modals', () => {
+    it('should handle Escape key for open modals via _openModals registry', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('logViewerMode && e.key === \'Escape\''));
-      assert.ok(html.includes('branchActionMode && e.key === \'Escape\''));
-      assert.ok(html.includes('infoMode && e.key === \'Escape\''));
-      assert.ok(html.includes('cleanupMode && e.key === \'Escape\''));
-      assert.ok(html.includes('updateMode && e.key === \'Escape\''));
-      assert.ok(html.includes('stashMode && e.key === \'Escape\''));
+      assert.ok(html.includes('_openModals.length > 0 && e.key === \'Escape\''));
+      assert.ok(html.includes('.hide()'), 'Escape should call hide() on the topmost modal');
     });
 
     it('should block keys when modals are open', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('branchActionMode || infoMode || cleanupMode || updateMode || stashMode'));
+      assert.ok(html.includes('_openModals.length > 0'));
     });
 
     it('should include modal overlay CSS', () => {
@@ -1534,15 +1530,15 @@ describe('getWebDashboardHtml', () => {
       assert.ok(html.includes('.modal-close'));
     });
 
-    it('should include overlay click-to-close for all modals', () => {
+    it('should include overlay click-to-close via Modal constructor', () => {
       const html = getWebDashboardHtml(4000);
-      // Each overlay has click handler to close on backdrop click
-      assert.ok(html.includes("'log-viewer-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'branch-action-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'info-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'cleanup-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'update-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'stash-overlay').addEventListener('click'"));
+      // The Modal constructor registers click handlers for all overlay IDs
+      assert.ok(html.includes("new Modal('log-viewer-overlay'"), 'Should create logViewerModal');
+      assert.ok(html.includes("new Modal('branch-action-overlay'"), 'Should create branchActionModal');
+      assert.ok(html.includes("new Modal('info-overlay'"), 'Should create infoModal');
+      assert.ok(html.includes("new Modal('cleanup-overlay'"), 'Should create cleanupModal');
+      assert.ok(html.includes("new Modal('update-overlay'"), 'Should create updateModal');
+      assert.ok(html.includes("new Modal('stash-overlay'"), 'Should create stashModal');
     });
   });
 

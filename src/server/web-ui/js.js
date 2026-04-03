@@ -316,6 +316,61 @@ function getDashboardJs() {
     }, 4000);
   }
 
+  // ── Modal Helper ───────────────────────────────────────────────
+  // Reusable helper that manages show/hide, overlay-click-to-close,
+  // close-button click, and Escape key for standard modal overlays.
+  var _openModals = [];
+
+  function Modal(overlayId, closeId) {
+    this.overlay = document.getElementById(overlayId);
+    this.isOpen = false;
+    this.onHide = null;
+    var self = this;
+    // Close button
+    if (closeId) {
+      var closeBtn = document.getElementById(closeId);
+      if (closeBtn) closeBtn.addEventListener('click', function() { self.hide(); });
+    }
+    // Overlay background click
+    this.overlay.addEventListener('click', function(e) {
+      if (e.target === self.overlay) self.hide();
+    });
+  }
+
+  Modal.prototype.show = function() {
+    this.isOpen = true;
+    this.overlay.className = 'modal-overlay active';
+    if (_openModals.indexOf(this) === -1) _openModals.push(this);
+  };
+
+  Modal.prototype.hide = function() {
+    this.isOpen = false;
+    this.overlay.className = 'modal-overlay';
+    var idx = _openModals.indexOf(this);
+    if (idx !== -1) _openModals.splice(idx, 1);
+    if (this.onHide) this.onHide();
+  };
+
+  function anyModalOpen() {
+    return _openModals.length > 0 || confirmMode;
+  }
+
+  // Create modal instances
+  var logViewerModal   = new Modal('log-viewer-overlay', 'log-viewer-close');
+  var branchActionModal = new Modal('branch-action-overlay', 'branch-action-close');
+  var infoModal        = new Modal('info-overlay', 'info-close');
+  var stashModal       = new Modal('stash-overlay', 'stash-close');
+  var cleanupModal     = new Modal('cleanup-overlay', 'cleanup-close');
+  var updateModal      = new Modal('update-overlay', 'update-close');
+
+  // Per-modal hide callbacks for state cleanup
+  logViewerModal.onHide = function() { logViewerMode = false; };
+  branchActionModal.onHide = function() { branchActionMode = false; };
+  infoModal.onHide = function() { infoMode = false; };
+  stashModal.onHide = function() { stashMode = false; pendingStashBranch = null; };
+  cleanupModal.onHide = function() { cleanupMode = false; };
+  updateModal.onHide = function() { updateMode = false; };
+
   // ── Confirm Dialog ─────────────────────────────────────────────
   function showConfirm(title, message, onConfirm, opts) {
     opts = opts || {};
@@ -638,13 +693,10 @@ ${pureFnBlock}
     logViewerMode = true;
     logViewerTab = 'server';
     renderLogViewer();
-    document.getElementById('log-viewer-overlay').className = 'modal-overlay active';
+    logViewerModal.show();
   }
 
-  function hideLogViewer() {
-    logViewerMode = false;
-    document.getElementById('log-viewer-overlay').className = 'modal-overlay';
-  }
+  function hideLogViewer() { logViewerModal.hide(); }
 
   function renderLogViewer() {
     if (!state) return;
@@ -695,17 +747,13 @@ ${pureFnBlock}
     renderLogViewer();
   });
 
-  document.getElementById('log-viewer-close').addEventListener('click', hideLogViewer);
-  document.getElementById('log-viewer-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideLogViewer();
-  });
-
   // ── Branch Action Modal ────────────────────────────────────────
   function showBranchActions() {
     var branches = getDisplayBranches();
     if (!branches.length || selectedIndex >= branches.length) return;
     var branch = branches[selectedIndex];
     branchActionMode = true;
+    branchActionModal.show();
     document.getElementById('branch-action-title').textContent = 'Actions: ' + branch.name;
 
     var prStatus = (state.branchPrStatusMap || {})[branch.name];
@@ -764,18 +812,9 @@ ${pureFnBlock}
       html += '</button>';
     }
     document.getElementById('branch-action-list').innerHTML = html;
-    document.getElementById('branch-action-overlay').className = 'modal-overlay active';
   }
 
-  function hideBranchActions() {
-    branchActionMode = false;
-    document.getElementById('branch-action-overlay').className = 'modal-overlay';
-  }
-
-  document.getElementById('branch-action-close').addEventListener('click', hideBranchActions);
-  document.getElementById('branch-action-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideBranchActions();
-  });
+  function hideBranchActions() { branchActionModal.hide(); }
 
   document.getElementById('branch-action-list').addEventListener('click', function(e) {
     var btn = e.target.closest('.action-item');
@@ -839,18 +878,10 @@ ${pureFnBlock}
       html += '<span class="info-value">' + escHtml(rows[i][1]) + '</span>';
     }
     grid.innerHTML = html;
-    document.getElementById('info-overlay').className = 'modal-overlay active';
+    infoModal.show();
   }
 
-  function hideInfo() {
-    infoMode = false;
-    document.getElementById('info-overlay').className = 'modal-overlay';
-  }
-
-  document.getElementById('info-close').addEventListener('click', hideInfo);
-  document.getElementById('info-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideInfo();
-  });
+  function hideInfo() { infoModal.hide(); }
 
   // ── Stash Management ───────────────────────────────────────────
   function showStashDialog(pendingBranch) {
@@ -865,7 +896,7 @@ ${pureFnBlock}
     html += '<button class="confirm-btn primary" id="stash-confirm">Stash &amp; Continue</button>';
     html += '</div>';
     document.getElementById('stash-content').innerHTML = html;
-    document.getElementById('stash-overlay').className = 'modal-overlay active';
+    stashModal.show();
     document.getElementById('stash-cancel').onclick = hideStash;
     document.getElementById('stash-confirm').onclick = function() {
       sendAction('stash', { pendingBranch: pendingStashBranch });
@@ -874,23 +905,14 @@ ${pureFnBlock}
     };
   }
 
-  function hideStash() {
-    stashMode = false;
-    pendingStashBranch = null;
-    document.getElementById('stash-overlay').className = 'modal-overlay';
-  }
-
-  document.getElementById('stash-close').addEventListener('click', hideStash);
-  document.getElementById('stash-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideStash();
-  });
+  function hideStash() { stashModal.hide(); }
 
   // ── Branch Cleanup ─────────────────────────────────────────────
   function showCleanup() {
     cleanupMode = true;
     var html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
     document.getElementById('cleanup-content').innerHTML = html;
-    document.getElementById('cleanup-overlay').className = 'modal-overlay active';
+    cleanupModal.show();
 
     // Ask the server to find gone branches (we inspect state.branches for gone tracking hints)
     // For now, look at branches that have no remote
@@ -945,15 +967,7 @@ ${pureFnBlock}
     };
   }
 
-  function hideCleanup() {
-    cleanupMode = false;
-    document.getElementById('cleanup-overlay').className = 'modal-overlay';
-  }
-
-  document.getElementById('cleanup-close').addEventListener('click', hideCleanup);
-  document.getElementById('cleanup-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideCleanup();
-  });
+  function hideCleanup() { cleanupModal.hide(); }
 
   // ── Update Notification ────────────────────────────────────────
   function showUpdateModal() {
@@ -974,7 +988,7 @@ ${pureFnBlock}
       html += '</div>';
     }
     document.getElementById('update-content').innerHTML = html;
-    document.getElementById('update-overlay').className = 'modal-overlay active';
+    updateModal.show();
     if (!state.updateInProgress) {
       document.getElementById('update-dismiss').onclick = hideUpdate;
       document.getElementById('update-install').onclick = function() {
@@ -985,15 +999,7 @@ ${pureFnBlock}
     }
   }
 
-  function hideUpdate() {
-    updateMode = false;
-    document.getElementById('update-overlay').className = 'modal-overlay';
-  }
-
-  document.getElementById('update-close').addEventListener('click', hideUpdate);
-  document.getElementById('update-overlay').addEventListener('click', function(e) {
-    if (e.target === this) hideUpdate();
-  });
+  function hideUpdate() { updateModal.hide(); }
 
   // ── Session Stats ──────────────────────────────────────────────
   function renderSessionStats() {
@@ -1058,24 +1064,18 @@ ${pureFnBlock}
     }, 6000);
   }
 
-  // ── Any modal open check ───────────────────────────────────────
-  function anyModalOpen() {
-    return logViewerMode || branchActionMode || infoMode || cleanupMode || updateMode || stashMode || confirmMode;
-  }
-
   // ── Keyboard ───────────────────────────────────────────────────
   document.addEventListener('keydown', function(e) {
     // Ignore when typing in input fields (other than search)
     if (e.target.tagName === 'INPUT' && e.target.id !== 'search-input') return;
     if (e.target.tagName === 'BUTTON') return;
 
-    // Any modal — Escape to close
-    if (logViewerMode && e.key === 'Escape') { e.preventDefault(); hideLogViewer(); return; }
-    if (branchActionMode && e.key === 'Escape') { e.preventDefault(); hideBranchActions(); return; }
-    if (infoMode && e.key === 'Escape') { e.preventDefault(); hideInfo(); return; }
-    if (cleanupMode && e.key === 'Escape') { e.preventDefault(); hideCleanup(); return; }
-    if (updateMode && e.key === 'Escape') { e.preventDefault(); hideUpdate(); return; }
-    if (stashMode && e.key === 'Escape') { e.preventDefault(); hideStash(); return; }
+    // Any modal — Escape to close the topmost one
+    if (_openModals.length > 0 && e.key === 'Escape') {
+      e.preventDefault();
+      _openModals[_openModals.length - 1].hide();
+      return;
+    }
 
     // Log viewer tab switching
     if (logViewerMode) {
@@ -1088,7 +1088,7 @@ ${pureFnBlock}
     }
 
     // Block other keys while modals are open
-    if (branchActionMode || infoMode || cleanupMode || updateMode || stashMode) return;
+    if (_openModals.length > 0) return;
 
     // Confirm dialog mode — Escape to cancel, Enter to confirm
     if (confirmMode) {
