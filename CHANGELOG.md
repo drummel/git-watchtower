@@ -1,3 +1,10 @@
+## [1.10.5](https://github.com/drummel/git-watchtower/compare/v1.10.4...v1.10.5) (2026-04-03)
+
+
+### Bug Fixes
+
+* modernize web UI client JS to const/let and arrow functions ([799e9dc](https://github.com/drummel/git-watchtower/commit/799e9dc754795f266373394a2e7ff63072a5f9a3))
+
 ## [1.10.4](https://github.com/drummel/git-watchtower/compare/v1.10.3...v1.10.4) (2026-04-03)
 
 
