@@ -52,6 +52,7 @@ function getDashboardJs() {
   var stashMode = false;
   var pendingStashBranch = null;
   var updateNotificationShown = false;
+  var remoteTabPollTimer = null;
 
   // ── Persistent Preferences (localStorage) ─────────────────────
   var PREFS_KEY = 'git-watchtower-prefs';
@@ -205,14 +206,33 @@ function getDashboardJs() {
     evtSource.addEventListener('state', function(e) {
       try {
         var newState = JSON.parse(e.data);
-        // Diff branches for desktop notifications
-        if (state && state.branches) {
-          diffBranchesForNotifications(state.branches, newState.branches || []);
+        if (!activeTabId && newState.activeProjectId) {
+          activeTabId = newState.activeProjectId;
         }
-        prevBranches = state ? state.branches : null;
-        state = newState;
-        if (!activeTabId && state.activeProjectId) {
-          activeTabId = state.activeProjectId;
+        // SSE always pushes the local project's state.  When the user
+        // is viewing a different tab we must NOT overwrite the per-project
+        // data (branches, PRs, activity, etc.) — only update global
+        // metadata so the tab bar, connection status, and version info
+        // stay current.
+        var viewingLocalProject = !activeTabId || activeTabId === newState.activeProjectId;
+        if (viewingLocalProject) {
+          // Diff branches for desktop notifications
+          if (state && state.branches) {
+            diffBranchesForNotifications(state.branches, newState.branches || []);
+          }
+          prevBranches = state ? state.branches : null;
+          state = newState;
+        } else {
+          // Viewing a remote tab — preserve per-project fields, update globals only
+          if (state) {
+            state.projects = newState.projects;
+            state.version = newState.version;
+            state.updateAvailable = newState.updateAvailable;
+            state.updateInProgress = newState.updateInProgress;
+            state.clientCount = newState.clientCount;
+          } else {
+            state = newState;
+          }
         }
         renderTabs();
         render();
@@ -349,23 +369,17 @@ function getDashboardJs() {
     tabBar.innerHTML = html;
   }
 
-  function switchTab(projectId) {
-    if (projectId === activeTabId) return;
-    activeTabId = projectId;
-    selectedIndex = 0;
-    searchQuery = '';
-    searchMode = false;
-    document.getElementById('search-bar').className = 'search-bar';
-    document.getElementById('search-input').value = '';
-    renderTabs();
-    // Fetch the project's state
+  /**
+   * Fetch a project's state from the server and merge it into the
+   * current client-side state for rendering.
+   */
+  function fetchAndApplyProjectState(projectId) {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', '/api/projects/' + projectId + '/state');
     xhr.onload = function() {
-      if (xhr.status === 200) {
+      if (xhr.status === 200 && activeTabId === projectId) {
         try {
           var pState = JSON.parse(xhr.responseText);
-          // Merge into current state for rendering
           state.branches = pState.branches || [];
           state.currentBranch = pState.currentBranch;
           state.activityLog = pState.activityLog || [];
@@ -377,6 +391,7 @@ function getDashboardJs() {
           state.pollingStatus = pState.pollingStatus || 'idle';
           state.isOffline = pState.isOffline || false;
           state.serverMode = pState.serverMode || 'none';
+          state.repoWebUrl = pState.repoWebUrl || null;
           render();
         } catch (err) { /* ignore */ }
       }
@@ -384,20 +399,43 @@ function getDashboardJs() {
     xhr.send();
   }
 
+  function switchTab(projectId) {
+    if (projectId === activeTabId) return;
+    activeTabId = projectId;
+    selectedIndex = 0;
+    searchQuery = '';
+    searchMode = false;
+    document.getElementById('search-bar').className = 'search-bar';
+    document.getElementById('search-input').value = '';
+    renderTabs();
+    fetchAndApplyProjectState(projectId);
+
+    // For non-local tabs the SSE stream won't push per-project updates,
+    // so poll the server periodically to keep the view fresh.
+    clearInterval(remoteTabPollTimer);
+    remoteTabPollTimer = null;
+    if (state && projectId !== state.activeProjectId) {
+      remoteTabPollTimer = setInterval(function() {
+        fetchAndApplyProjectState(projectId);
+      }, 2000);
+    }
+  }
+
   // ── Pure Utility Functions (inlined from pure.js) ──────────────
 ${pureFnBlock}
 
   // ── Get Display Branches (wrapper) ─────────────────────────────
-  // Wraps the pure getDisplayBranches to pass closure state as args.
-  var _getDisplayBranches = getDisplayBranches;
-  function getDisplayBranches() {
+  // The pure getDisplayBranches is inlined above as a var assignment.
+  // Wrap it to pass closure state as args, keeping the same call-site API.
+  var _pureGetDisplayBranches = getDisplayBranches;
+  getDisplayBranches = function() {
     if (!state || !state.branches) return [];
-    return _getDisplayBranches(state.branches, {
+    return _pureGetDisplayBranches(state.branches, {
       searchQuery: searchQuery,
       pinnedBranches: pinnedBranches,
       sortOrder: sortOrder,
     });
-  }
+  };
 
   // ── Render ─────────────────────────────────────────────────────
   function render() {
@@ -524,7 +562,6 @@ ${pureFnBlock}
       html += '</div>'; // branch-info
 
       html += '<div class="branch-right">';
-      html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
       // Badges
       var badges = '';
       if (isCurrent) badges += '<span class="branch-current-badge">HEAD</span>';
@@ -542,7 +579,10 @@ ${pureFnBlock}
         badges += '</span>';
         if (prUrl) badges += '<button class="copy-btn" data-copy="' + escHtml(prUrl) + '" title="Copy PR URL" onclick="event.stopPropagation()">&#x1f4cb;</button>';
       }
+      html += '<div class="branch-time-row">';
+      html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
       if (badges) html += '<div class="branch-badges">' + badges + '</div>';
+      html += '</div>';
       if (ab && (ab.ahead || ab.behind)) {
         html += '<div class="branch-diff">';
         html += '<span class="diff-added">+' + fmtCompact(ab.ahead || 0) + '</span>';

@@ -1,3 +1,19 @@
+## [1.10.3](https://github.com/drummel/git-watchtower/compare/v1.10.2...v1.10.3) (2026-04-03)
+
+
+### Bug Fixes
+
+* filter SSE state updates to active project tab ([4f940ac](https://github.com/drummel/git-watchtower/commit/4f940ac34211330fd711260861e1ae5851d3c0ed))
+* pin jsdom to v24 for Node 18 compatibility ([4c3e315](https://github.com/drummel/git-watchtower/commit/4c3e315e0d6d1e3dcb56fd11ebda0c57ee954664))
+
+## [1.10.2](https://github.com/drummel/git-watchtower/compare/v1.10.1...v1.10.2) (2026-04-03)
+
+
+### Bug Fixes
+
+* align badge pills in same row as timestamp in web UI ([2a92ac9](https://github.com/drummel/git-watchtower/commit/2a92ac9dde6954bf4857accdc3e063317c7626a0))
+* remove duplicate <style> tag from extracted CSS module ([ecb597a](https://github.com/drummel/git-watchtower/commit/ecb597a43d48d794e2735673981e0359e5181785))
+
 ## [1.10.1](https://github.com/drummel/git-watchtower/compare/v1.10.0...v1.10.1) (2026-04-02)
 
 

@@ -108,7 +108,7 @@ describe('getDashboardJs', () => {
 
   it('should contain branch display logic', () => {
     const js = getDashboardJs();
-    assert.ok(js.includes('function getDisplayBranches()'), 'Should have getDisplayBranches');
+    assert.ok(js.includes('getDisplayBranches'), 'Should have getDisplayBranches');
     assert.ok(js.includes('function renderSparklineBars('), 'Should have renderSparklineBars');
   });
 
