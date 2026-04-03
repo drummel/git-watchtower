@@ -496,6 +496,37 @@ describe('WebDashboardServer', () => {
     });
   });
 
+  describe('SSE keepalive', () => {
+    it('should write real newlines, not escaped backslash-n', async () => {
+      server = new WebDashboardServer({ store, port: 19881 });
+      await server.start();
+
+      // Collect raw data from the SSE stream
+      const data = await new Promise((resolve) => {
+        let buf = '';
+        const req = http.get(`http://127.0.0.1:${server.port}/api/events`, (res) => {
+          res.on('data', (chunk) => { buf += chunk; });
+        });
+        // The SSE_KEEPALIVE_INTERVAL is 15s, but we can test the write
+        // format by manually invoking the keepalive on a mock client.
+        // Instead, verify the source code directly:
+        req.on('response', () => {
+          req.destroy();
+          setTimeout(() => resolve(buf), 50);
+        });
+      });
+
+      // The source code fix: ensure the keepalive comment uses real newlines.
+      // We can't easily wait 15s in a test, so verify the method source.
+      const src = server._handleSSE.toString();
+      // Should contain ': keepalive\n\n' (real newlines), not '\\n\\n' (escaped)
+      assert.ok(
+        !src.includes("keepalive\\\\n\\\\n"),
+        'Keepalive should use real newlines, not escaped backslash-n'
+      );
+    });
+  });
+
   describe('flash', () => {
     it('should not throw with no clients', () => {
       server = new WebDashboardServer({ store });
