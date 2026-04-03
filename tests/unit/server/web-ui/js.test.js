@@ -33,9 +33,10 @@ describe('getDashboardJs', () => {
 
   it('should contain state management', () => {
     const js = getDashboardJs();
-    assert.ok(js.includes('let state = null'), 'Should initialize state');
-    assert.ok(js.includes('let selectedIndex = 0'), 'Should track selected branch index');
-    assert.ok(js.includes('let connected = false'), 'Should track connection state');
+    assert.ok(js.includes('let state = null'), 'Should initialize server state');
+    assert.ok(js.includes('const ui = {'), 'Should have consolidated UI state object');
+    assert.ok(js.includes('ui.selectedIndex'), 'Should access selectedIndex via ui');
+    assert.ok(js.includes('ui.connected'), 'Should access connected via ui');
   });
 
   it('should contain render functions', () => {

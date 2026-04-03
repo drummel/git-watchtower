@@ -33,26 +33,32 @@ function getDashboardJs() {
   'use strict';
 
   // ── State ──────────────────────────────────────────────────────
-  let state = null;
-  let prevBranches = null; // for notification diffing
-  let selectedIndex = 0;
-  let searchMode = false;
-  let searchQuery = '';
-  let confirmMode = false;
-  let confirmCallback = null;
-  let connected = false;
-  let flashTimer = null;
-  let activeTabId = null;
-  let logViewerMode = false;
-  let logViewerTab = 'server';
-  let branchActionMode = false;
-  let infoMode = false;
-  let cleanupMode = false;
-  let updateMode = false;
-  let stashMode = false;
-  let pendingStashBranch = null;
-  let updateNotificationShown = false;
-  let remoteTabPollTimer = null;
+  let state = null;  // server-pushed state (branches, config, etc.)
+
+  // Client-side UI state — consolidated into a single object for
+  // easier debugging (inspect ui in console) and clearer separation
+  // from the server-pushed 'state' above.
+  const ui = {
+    prevBranches: null,
+    selectedIndex: 0,
+    searchMode: false,
+    searchQuery: '',
+    confirmMode: false,
+    confirmCallback: null,
+    connected: false,
+    flashTimer: null,
+    activeTabId: null,
+    logViewerMode: false,
+    logViewerTab: 'server',
+    branchActionMode: false,
+    infoMode: false,
+    cleanupMode: false,
+    updateMode: false,
+    stashMode: false,
+    pendingStashBranch: null,
+    updateNotificationShown: false,
+    remoteTabPollTimer: null,
+  };
 
   // ── Persistent Preferences (localStorage) ─────────────────────
   const PREFS_KEY = 'git-watchtower-prefs';
@@ -191,27 +197,27 @@ function getDashboardJs() {
     evtSource = new EventSource('/api/events');
 
     evtSource.onopen = () => {
-      connected = true;
+      ui.connected = true;
       updateConnectionStatus();
     };
 
     evtSource.addEventListener('state', (e) => {
       try {
         const newState = JSON.parse(e.data);
-        if (!activeTabId && newState.activeProjectId) {
-          activeTabId = newState.activeProjectId;
+        if (!ui.activeTabId && newState.activeProjectId) {
+          ui.activeTabId = newState.activeProjectId;
         }
         // SSE always pushes the local project's state.  When the user
         // is viewing a different tab we must NOT overwrite the per-project
         // data (branches, PRs, activity, etc.) — only update global
         // metadata so the tab bar, connection status, and version info
         // stay current.
-        const viewingLocalProject = !activeTabId || activeTabId === newState.activeProjectId;
+        const viewingLocalProject = !ui.activeTabId || ui.activeTabId === newState.activeProjectId;
         if (viewingLocalProject) {
           if (state && state.branches) {
             diffBranchesForNotifications(state.branches, newState.branches || []);
           }
-          prevBranches = state ? state.branches : null;
+          ui.prevBranches = state ? state.branches : null;
           state = newState;
         } else {
           if (state) {
@@ -240,7 +246,7 @@ function getDashboardJs() {
       try {
         const data = JSON.parse(e.data);
         if (!data.success && data.message && data.message.indexOf('uncommitted') !== -1) {
-          pendingStashBranch = data.branch || null;
+          ui.pendingStashBranch = data.branch || null;
           showErrorToastWithHint(data.message, 'Press S to stash');
         } else {
           showToast(data.message, data.success ? 'success' : 'error');
@@ -249,7 +255,7 @@ function getDashboardJs() {
     });
 
     evtSource.onerror = () => {
-      connected = false;
+      ui.connected = false;
       updateConnectionStatus();
     };
   }
@@ -257,8 +263,8 @@ function getDashboardJs() {
   function updateConnectionStatus() {
     const dot = document.getElementById('connection-dot');
     const badge = document.getElementById('status-badge');
-    if (connected) {
-      dot.className = 'connection-dot connected';
+    if (ui.connected) {
+      dot.className = 'connection-dot ui.connected';
       badge.className = 'badge badge-online';
       badge.textContent = 'live';
     } else {
@@ -274,7 +280,7 @@ function getDashboardJs() {
     xhr.open('POST', '/api/action');
     xhr.setRequestHeader('Content-Type', 'application/json');
     const data = { action, payload: payload || {} };
-    if (activeTabId) data.projectId = activeTabId;
+    if (ui.activeTabId) data.projectId = ui.activeTabId;
     xhr.send(JSON.stringify(data));
   }
 
@@ -283,8 +289,8 @@ function getDashboardJs() {
     const el = document.getElementById('flash');
     el.textContent = text;
     el.className = 'flash visible ' + (type || 'info');
-    clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => { el.className = 'flash'; }, 3000);
+    clearTimeout(ui.flashTimer);
+    ui.flashTimer = setTimeout(() => { el.className = 'flash'; }, 3000);
   }
 
   // ── Toast Notifications ────────────────────────────────────────
@@ -337,7 +343,7 @@ function getDashboardJs() {
   };
 
   function anyModalOpen() {
-    return _openModals.length > 0 || confirmMode;
+    return _openModals.length > 0 || ui.confirmMode;
   }
 
   // Create modal instances
@@ -349,18 +355,18 @@ function getDashboardJs() {
   const updateModal      = new Modal('update-overlay', 'update-close');
 
   // Per-modal hide callbacks for state cleanup
-  logViewerModal.onHide = () => { logViewerMode = false; };
-  branchActionModal.onHide = () => { branchActionMode = false; };
-  infoModal.onHide = () => { infoMode = false; };
-  stashModal.onHide = () => { stashMode = false; pendingStashBranch = null; };
-  cleanupModal.onHide = () => { cleanupMode = false; };
-  updateModal.onHide = () => { updateMode = false; };
+  logViewerModal.onHide = () => { ui.logViewerMode = false; };
+  branchActionModal.onHide = () => { ui.branchActionMode = false; };
+  infoModal.onHide = () => { ui.infoMode = false; };
+  stashModal.onHide = () => { ui.stashMode = false; ui.pendingStashBranch = null; };
+  cleanupModal.onHide = () => { ui.cleanupMode = false; };
+  updateModal.onHide = () => { ui.updateMode = false; };
 
   // ── Confirm Dialog ─────────────────────────────────────────────
   function showConfirm(title, message, onConfirm, opts) {
     opts = opts || {};
-    confirmMode = true;
-    confirmCallback = onConfirm;
+    ui.confirmMode = true;
+    ui.confirmCallback = onConfirm;
     const box = document.getElementById('confirm-box');
     box.innerHTML =
       '<div class="confirm-title">' + escHtml(title) + '</div>' +
@@ -375,13 +381,13 @@ function getDashboardJs() {
     document.getElementById('confirm-cancel').onclick = hideConfirm;
     document.getElementById('confirm-ok').onclick = () => {
       hideConfirm();
-      if (confirmCallback) confirmCallback();
+      if (ui.confirmCallback) ui.confirmCallback();
     };
   }
 
   function hideConfirm() {
-    confirmMode = false;
-    confirmCallback = null;
+    ui.confirmMode = false;
+    ui.confirmCallback = null;
     document.getElementById('confirm-overlay').className = 'confirm-overlay';
   }
 
@@ -398,7 +404,7 @@ function getDashboardJs() {
     let html = '';
     for (let i = 0; i < projects.length; i++) {
       const p = projects[i];
-      const isActive = p.id === activeTabId;
+      const isActive = p.id === ui.activeTabId;
       html += '<div class="tab' + (isActive ? ' active' : '') + '" data-project-id="' + escHtml(p.id) + '">';
       html += '<span class="tab-dot"></span>';
       html += escHtml(p.name);
@@ -412,7 +418,7 @@ function getDashboardJs() {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', '/api/projects/' + projectId + '/state');
     xhr.onload = () => {
-      if (xhr.status === 200 && activeTabId === projectId) {
+      if (xhr.status === 200 && ui.activeTabId === projectId) {
         try {
           const pState = JSON.parse(xhr.responseText);
           state.branches = pState.branches || [];
@@ -435,20 +441,20 @@ function getDashboardJs() {
   }
 
   function switchTab(projectId) {
-    if (projectId === activeTabId) return;
-    activeTabId = projectId;
-    selectedIndex = 0;
-    searchQuery = '';
-    searchMode = false;
+    if (projectId === ui.activeTabId) return;
+    ui.activeTabId = projectId;
+    ui.selectedIndex = 0;
+    ui.searchQuery = '';
+    ui.searchMode = false;
     document.getElementById('search-bar').className = 'search-bar';
     document.getElementById('search-input').value = '';
     renderTabs();
     fetchAndApplyProjectState(projectId);
 
-    clearInterval(remoteTabPollTimer);
-    remoteTabPollTimer = null;
+    clearInterval(ui.remoteTabPollTimer);
+    ui.remoteTabPollTimer = null;
     if (state && projectId !== state.activeProjectId) {
-      remoteTabPollTimer = setInterval(() => {
+      ui.remoteTabPollTimer = setInterval(() => {
         fetchAndApplyProjectState(projectId);
       }, 2000);
     }
@@ -464,7 +470,7 @@ ${pureFnBlock}
   getDisplayBranches = function() {
     if (!state || !state.branches) return [];
     return _pureGetDisplayBranches(state.branches, {
-      searchQuery: searchQuery,
+      searchQuery: ui.searchQuery,
       pinnedBranches: pinnedBranches,
       sortOrder: sortOrder,
     });
@@ -487,7 +493,7 @@ ${pureFnBlock}
     if (state.version) versionEl.textContent = 'v' + state.version;
 
     // Status badge
-    if (connected) {
+    if (ui.connected) {
       const badge = document.getElementById('status-badge');
       if (state.isOffline) {
         badge.className = 'badge badge-offline';
@@ -507,13 +513,13 @@ ${pureFnBlock}
     renderPrefsBar();
 
     // Auto-show update notification (once per session)
-    if (state.updateAvailable && !updateNotificationShown && !anyModalOpen()) {
-      updateNotificationShown = true;
+    if (state.updateAvailable && !ui.updateNotificationShown && !anyModalOpen()) {
+      ui.updateNotificationShown = true;
       showUpdateModal();
     }
 
     // Update log viewer if open
-    if (logViewerMode) renderLogViewer();
+    if (ui.logViewerMode) renderLogViewer();
   }
 
   function renderBranches() {
@@ -522,14 +528,14 @@ ${pureFnBlock}
     const countEl = document.getElementById('branch-count');
     countEl.textContent = branches.length;
 
-    if (selectedIndex >= branches.length) {
-      selectedIndex = Math.max(0, branches.length - 1);
+    if (ui.selectedIndex >= branches.length) {
+      ui.selectedIndex = Math.max(0, branches.length - 1);
     }
 
     if (branches.length === 0) {
       container.innerHTML = '<div class="empty-state">' +
         '<div class="empty-state-icon">&#x1f33f;</div>' +
-        (searchQuery ? 'No branches matching "' + escHtml(searchQuery) + '"' : 'No branches found') +
+        (ui.searchQuery ? 'No branches matching "' + escHtml(ui.searchQuery) + '"' : 'No branches found') +
         '</div>';
       return;
     }
@@ -537,7 +543,7 @@ ${pureFnBlock}
     let html = '';
     for (let i = 0; i < branches.length; i++) {
       const b = branches[i];
-      const isSelected = i === selectedIndex;
+      const isSelected = i === ui.selectedIndex;
       const isCurrent = b.name === state.currentBranch;
 
       // Sparkline
@@ -668,8 +674,8 @@ ${pureFnBlock}
 
   // ── Log Viewer ─────────────────────────────────────────────────
   function showLogViewer() {
-    logViewerMode = true;
-    logViewerTab = 'server';
+    ui.logViewerMode = true;
+    ui.logViewerTab = 'server';
     renderLogViewer();
     logViewerModal.show();
   }
@@ -682,11 +688,11 @@ ${pureFnBlock}
     // Update tab active state
     const tabs = document.querySelectorAll('.log-viewer-tab');
     for (let t = 0; t < tabs.length; t++) {
-      tabs[t].className = 'log-viewer-tab' + (tabs[t].getAttribute('data-tab') === logViewerTab ? ' active' : '');
+      tabs[t].className = 'log-viewer-tab' + (tabs[t].getAttribute('data-tab') === ui.logViewerTab ? ' active' : '');
     }
 
     let html = '';
-    if (logViewerTab === 'server') {
+    if (ui.logViewerTab === 'server') {
       const logs = state.serverLogBuffer || [];
       if (logs.length === 0) {
         html = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No server logs</div>';
@@ -721,16 +727,16 @@ ${pureFnBlock}
   document.getElementById('log-viewer-tabs').addEventListener('click', (e) => {
     const tab = e.target.closest('.log-viewer-tab');
     if (!tab) return;
-    logViewerTab = tab.getAttribute('data-tab');
+    ui.logViewerTab = tab.getAttribute('data-tab');
     renderLogViewer();
   });
 
   // ── Branch Action Modal ────────────────────────────────────────
   function showBranchActions() {
     const branches = getDisplayBranches();
-    if (!branches.length || selectedIndex >= branches.length) return;
-    const branch = branches[selectedIndex];
-    branchActionMode = true;
+    if (!branches.length || ui.selectedIndex >= branches.length) return;
+    const branch = branches[ui.selectedIndex];
+    ui.branchActionMode = true;
     branchActionModal.show();
     document.getElementById('branch-action-title').textContent = 'Actions: ' + branch.name;
 
@@ -836,7 +842,7 @@ ${pureFnBlock}
   // ── Info Panel ─────────────────────────────────────────────────
   function showInfo() {
     if (!state) return;
-    infoMode = true;
+    ui.infoMode = true;
     const grid = document.getElementById('info-grid');
     const rows = [
       ['Project', state.projectName || '-'],
@@ -863,8 +869,8 @@ ${pureFnBlock}
 
   // ── Stash Management ───────────────────────────────────────────
   function showStashDialog(pendingBranch) {
-    stashMode = true;
-    pendingStashBranch = pendingBranch || null;
+    ui.stashMode = true;
+    ui.pendingStashBranch = pendingBranch || null;
     const msg = pendingBranch
       ? 'You have uncommitted changes. Stash them before switching to <strong>' + escHtml(pendingBranch) + '</strong>?'
       : 'Stash all uncommitted changes in the working directory?';
@@ -877,7 +883,7 @@ ${pureFnBlock}
     stashModal.show();
     document.getElementById('stash-cancel').onclick = hideStash;
     document.getElementById('stash-confirm').onclick = () => {
-      sendAction('stash', { pendingBranch: pendingStashBranch });
+      sendAction('stash', { pendingBranch: ui.pendingStashBranch });
       showToast('Stashing changes...', 'info');
       hideStash();
     };
@@ -887,7 +893,7 @@ ${pureFnBlock}
 
   // ── Branch Cleanup ─────────────────────────────────────────────
   function showCleanup() {
-    cleanupMode = true;
+    ui.cleanupMode = true;
     const html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
     document.getElementById('cleanup-content').innerHTML = html;
     cleanupModal.show();
@@ -950,7 +956,7 @@ ${pureFnBlock}
   // ── Update Notification ────────────────────────────────────────
   function showUpdateModal() {
     if (!state || !state.updateAvailable) return;
-    updateMode = true;
+    ui.updateMode = true;
     const html = '<div class="update-versions">';
     html += '<span class="old-version">v' + escHtml(state.version || '?') + '</span>';
     html += '<span class="arrow">&#x2192;</span>';
@@ -1029,7 +1035,7 @@ ${pureFnBlock}
       hintEl.addEventListener('click', (e) => {
         const h = e.currentTarget.getAttribute('data-hint');
         if (h === 'Press S to stash') {
-          showStashDialog(pendingStashBranch);
+          showStashDialog(ui.pendingStashBranch);
         }
         toast.classList.remove('visible');
         setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
@@ -1056,10 +1062,10 @@ ${pureFnBlock}
     }
 
     // Log viewer tab switching
-    if (logViewerMode) {
+    if (ui.logViewerMode) {
       if (e.key === 'Tab' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault();
-        logViewerTab = logViewerTab === 'server' ? 'activity' : 'server';
+        ui.logViewerTab = ui.logViewerTab === 'server' ? 'activity' : 'server';
         renderLogViewer();
       }
       return;
@@ -1069,11 +1075,11 @@ ${pureFnBlock}
     if (_openModals.length > 0) return;
 
     // Confirm dialog mode — Escape to cancel, Enter to confirm
-    if (confirmMode) {
+    if (ui.confirmMode) {
       if (e.key === 'Escape') { e.preventDefault(); hideConfirm(); }
       if (e.key === 'Enter') {
         e.preventDefault();
-        const cb = confirmCallback;
+        const cb = ui.confirmCallback;
         hideConfirm();
         if (cb) cb();
       }
@@ -1081,20 +1087,20 @@ ${pureFnBlock}
     }
 
     // Search mode
-    if (searchMode) {
+    if (ui.searchMode) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        searchMode = false;
-        searchQuery = '';
+        ui.searchMode = false;
+        ui.searchQuery = '';
         document.getElementById('search-bar').className = 'search-bar';
         document.getElementById('search-input').value = '';
-        selectedIndex = 0;
+        ui.selectedIndex = 0;
         renderBranches();
         return;
       }
       if (e.key === 'Enter') {
         e.preventDefault();
-        searchMode = false;
+        ui.searchMode = false;
         document.getElementById('search-bar').className = 'search-bar';
         return;
       }
@@ -1125,7 +1131,7 @@ ${pureFnBlock}
     // Tab cycling with Tab key
     if (e.key === 'Tab' && projects.length > 1) {
       e.preventDefault();
-      const curIdx = projects.findIndex((p) => p.id === activeTabId);
+      const curIdx = projects.findIndex((p) => p.id === ui.activeTabId);
       const nextIdx = e.shiftKey
         ? (curIdx - 1 + projects.length) % projects.length
         : (curIdx + 1) % projects.length;
@@ -1148,8 +1154,8 @@ ${pureFnBlock}
       case 'Enter':
         e.preventDefault();
         const branches = getDisplayBranches();
-        if (branches.length > 0 && selectedIndex < branches.length) {
-          const b = branches[selectedIndex];
+        if (branches.length > 0 && ui.selectedIndex < branches.length) {
+          const b = branches[ui.selectedIndex];
           if (b.isDeleted) {
             showToast('Cannot switch to a deleted branch', 'error');
           } else if (b.name === state.currentBranch) {
@@ -1162,9 +1168,9 @@ ${pureFnBlock}
         break;
       case '/':
         e.preventDefault();
-        searchMode = true;
-        searchQuery = '';
-        selectedIndex = 0;
+        ui.searchMode = true;
+        ui.searchQuery = '';
+        ui.selectedIndex = 0;
         document.getElementById('search-bar').className = 'search-bar active';
         const input = document.getElementById('search-input');
         input.value = '';
@@ -1259,16 +1265,16 @@ ${pureFnBlock}
 
   // Search input handler
   document.getElementById('search-input').addEventListener('input', (e) => {
-    searchQuery = e.target.value;
-    selectedIndex = 0;
+    ui.searchQuery = e.target.value;
+    ui.selectedIndex = 0;
     renderBranches();
   });
 
   function moveSelection(delta) {
     const branches = getDisplayBranches();
-    const newIndex = selectedIndex + delta;
+    const newIndex = ui.selectedIndex + delta;
     if (newIndex >= 0 && newIndex < branches.length) {
-      selectedIndex = newIndex;
+      ui.selectedIndex = newIndex;
       renderBranches();
     }
   }
@@ -1279,7 +1285,7 @@ ${pureFnBlock}
     if (!item) return;
     const idx = parseInt(item.getAttribute('data-index'), 10);
     if (isNaN(idx)) return;
-    selectedIndex = idx;
+    ui.selectedIndex = idx;
     renderBranches();
 
     // Double-click to switch with confirmation
@@ -1339,8 +1345,8 @@ ${pureFnBlock}
     }
     if (e.target.id === 'pin-selected-btn') {
       const branches = getDisplayBranches();
-      if (branches.length > 0 && selectedIndex < branches.length) {
-        const bn = branches[selectedIndex].name;
+      if (branches.length > 0 && ui.selectedIndex < branches.length) {
+        const bn = branches[ui.selectedIndex].name;
         const idx = pinnedBranches.indexOf(bn);
         if (idx === -1) {
           pinnedBranches.push(bn);
