@@ -1,0 +1,16 @@
+{
+  "name": "git-watchtower-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "5.7.13",
+    "@astrojs/starlight": "0.32.2",
+    "@astrojs/sitemap": "3.2.1",
+    "sharp": "^0.33.0"
+  }
+}

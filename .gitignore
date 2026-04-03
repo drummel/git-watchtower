@@ -38,3 +38,8 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Website build artifacts
+website/dist/
+website/node_modules/
+website/.astro/

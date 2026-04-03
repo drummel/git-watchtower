@@ -1,0 +1,91 @@
+/* Git Watchtower - Custom Starlight Styles */
+
+:root {
+  --sl-color-accent-low: #1a2744;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #bfdbfe;
+  --sl-font-system-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #dbeafe;
+  --sl-color-accent: #2563eb;
+  --sl-color-accent-high: #1e3a5f;
+}
+
+/* Hero section enhancements */
+.hero {
+  padding-block: 2rem;
+}
+
+/* Terminal-style code blocks */
+starlight-tabs code {
+  font-family: var(--sl-font-system-mono);
+}
+
+/* Feature card grid on homepage */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-block: 2rem;
+}
+
+.feature-card {
+  padding: 1.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.75rem;
+  background: var(--sl-color-gray-7, var(--sl-color-gray-6));
+}
+
+.feature-card h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.feature-card p {
+  margin-bottom: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 0.95rem;
+}
+
+/* Screenshot styling */
+.screenshot {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  margin-block: 2rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+.screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Install command block */
+.install-command {
+  margin-block: 2rem;
+  text-align: center;
+}
+
+.install-command code {
+  font-size: 1.15rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--sl-color-gray-6);
+  border-radius: 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+/* Casino easter egg link */
+.casino-link {
+  opacity: 0.15;
+  font-size: 0.7rem;
+  transition: opacity 0.3s ease;
+  text-decoration: none;
+}
+
+.casino-link:hover {
+  opacity: 1;
+}

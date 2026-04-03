@@ -1,0 +1,44 @@
+import { defineConfig } from 'astro/config';
+import starlight from '@astrojs/starlight';
+
+export default defineConfig({
+  integrations: [
+    starlight({
+      title: 'Git Watchtower',
+      description: 'Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.',
+      logo: {
+        light: './src/assets/logo-light.svg',
+        dark: './src/assets/logo-dark.svg',
+        replacesTitle: false,
+      },
+      social: {
+        github: 'https://github.com/drummel/git-watchtower',
+        'x.com': 'https://x.com/AdrianDrummond',
+      },
+      customCss: ['./src/styles/custom.css'],
+      sidebar: [
+        {
+          label: 'Getting Started',
+          items: [
+            { label: 'Quick Start', link: '/guides/quick-start/' },
+            { label: 'Configuration', link: '/guides/configuration/' },
+          ],
+        },
+        {
+          label: 'Features',
+          items: [
+            { label: 'Server Modes', link: '/guides/server-modes/' },
+            { label: 'Web Dashboard', link: '/guides/web-dashboard/' },
+            { label: 'Keyboard Controls', link: '/guides/keyboard-controls/' },
+          ],
+        },
+        {
+          label: 'Help',
+          items: [
+            { label: 'Troubleshooting', link: '/guides/troubleshooting/' },
+          ],
+        },
+      ],
+    }),
+  ],
+});
