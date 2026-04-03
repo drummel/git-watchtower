@@ -581,7 +581,6 @@ function getDashboardJs() {
       html += '</div>'; // branch-info
 
       html += '<div class="branch-right">';
-      html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
       // Badges
       var badges = '';
       if (isCurrent) badges += '<span class="branch-current-badge">HEAD</span>';
@@ -599,7 +598,10 @@ function getDashboardJs() {
         badges += '</span>';
         if (prUrl) badges += '<button class="copy-btn" data-copy="' + escHtml(prUrl) + '" title="Copy PR URL" onclick="event.stopPropagation()">&#x1f4cb;</button>';
       }
+      html += '<div class="branch-time-row">';
+      html += '<span class="branch-time">' + timeAgo(b.date) + '</span>';
       if (badges) html += '<div class="branch-badges">' + badges + '</div>';
+      html += '</div>';
       if (ab && (ab.ahead || ab.behind)) {
         html += '<div class="branch-diff">';
         html += '<span class="diff-added">+' + fmtCompact(ab.ahead || 0) + '</span>';

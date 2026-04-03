@@ -276,6 +276,12 @@ function getDashboardCss() {
     flex-shrink: 0;
     min-width: 60px;
   }
+  .branch-time-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+  }
   .branch-badges {
     display: flex;
     gap: 4px;
