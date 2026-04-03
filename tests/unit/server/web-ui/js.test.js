@@ -33,9 +33,9 @@ describe('getDashboardJs', () => {
 
   it('should contain state management', () => {
     const js = getDashboardJs();
-    assert.ok(js.includes('var state = null'), 'Should initialize state');
-    assert.ok(js.includes('var selectedIndex = 0'), 'Should track selected branch index');
-    assert.ok(js.includes('var connected = false'), 'Should track connection state');
+    assert.ok(js.includes('let state = null'), 'Should initialize state');
+    assert.ok(js.includes('let selectedIndex = 0'), 'Should track selected branch index');
+    assert.ok(js.includes('let connected = false'), 'Should track connection state');
   });
 
   it('should contain render functions', () => {
@@ -66,6 +66,20 @@ describe('getDashboardJs', () => {
     assert.ok(js.includes('function hideCleanup()'), 'Should have hideCleanup');
     assert.ok(js.includes('function showConfirm('), 'Should have showConfirm');
     assert.ok(js.includes('function hideConfirm()'), 'Should have hideConfirm');
+  });
+
+  it('should contain Modal helper with registry', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('function Modal('), 'Should have Modal constructor');
+    assert.ok(js.includes('Modal.prototype.show'), 'Should have Modal.show method');
+    assert.ok(js.includes('Modal.prototype.hide'), 'Should have Modal.hide method');
+    assert.ok(js.includes('_openModals'), 'Should have _openModals registry');
+    assert.ok(js.includes('logViewerModal'), 'Should create logViewerModal instance');
+    assert.ok(js.includes('branchActionModal'), 'Should create branchActionModal instance');
+    assert.ok(js.includes('infoModal'), 'Should create infoModal instance');
+    assert.ok(js.includes('stashModal'), 'Should create stashModal instance');
+    assert.ok(js.includes('cleanupModal'), 'Should create cleanupModal instance');
+    assert.ok(js.includes('updateModal'), 'Should create updateModal instance');
   });
 
   it('should contain keyboard event handling', () => {
