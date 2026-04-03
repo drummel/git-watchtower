@@ -429,7 +429,7 @@ class WebDashboardServer {
 
     // Keepalive heartbeat to prevent proxy/LB timeouts
     const keepalive = setInterval(() => {
-      try { res.write(': keepalive\\n\\n'); } catch (e) { clearInterval(keepalive); }
+      try { res.write(': keepalive\n\n'); } catch (e) { clearInterval(keepalive); }
     }, SSE_KEEPALIVE_INTERVAL);
 
     req.on('close', () => {

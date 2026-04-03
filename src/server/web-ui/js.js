@@ -2,14 +2,32 @@
  * Client-side JavaScript for the Git Watchtower web dashboard.
  * Contains all interactive behavior: SSE connection, rendering, keyboard
  * navigation, modals, notifications, and preferences.
+ *
+ * Pure utility functions (escHtml, timeAgo, etc.) live in pure.js and are
+ * inlined here at assembly time so they can be unit-tested in Node.
  * @module server/web-ui/js
  */
+
+const pureFns = require('./pure');
+
+/**
+ * Serialize pure functions into a block of JS source that can be embedded
+ * in a browser <script>.  Each function is emitted verbatim using
+ * Function.prototype.toString().
+ * @returns {string}
+ */
+function inlinePureFunctions() {
+  return Object.entries(pureFns)
+    .map(([name, fn]) => `  var ${name} = ${fn.toString()};`)
+    .join('\n\n');
+}
 
 /**
  * Get the dashboard client-side JavaScript.
  * @returns {string} JavaScript content (without script tags)
  */
 function getDashboardJs() {
+  const pureFnBlock = inlinePureFunctions();
   return `
 (function() {
   'use strict';
@@ -403,95 +421,21 @@ function getDashboardJs() {
     }
   }
 
-  // ── Time Formatting ────────────────────────────────────────────
-  function timeAgo(dateStr) {
-    if (!dateStr) return '';
-    var ts = new Date(dateStr).getTime();
-    if (isNaN(ts)) return '';
-    var diff = Date.now() - ts;
-    if (diff < 0) return 'now';
-    var s = Math.floor(diff / 1000);
-    if (s < 60) return s + 's ago';
-    var m = Math.floor(s / 60);
-    if (m < 60) return m + 'm ago';
-    var h = Math.floor(m / 60);
-    if (h < 24) return h + 'h ago';
-    var d = Math.floor(h / 24);
-    return d + 'd ago';
-  }
+  // ── Pure Utility Functions (inlined from pure.js) ──────────────
+${pureFnBlock}
 
-  // ── Sparkline Rendering ────────────────────────────────────────
-  function renderSparklineBars(sparkStr) {
-    if (!sparkStr) return '';
-    var chars = '\\u2581\\u2582\\u2583\\u2584\\u2585\\u2586\\u2587\\u2588';
-    var html = '<div class="sparkline-bar">';
-    for (var i = 0; i < sparkStr.length; i++) {
-      var ch = sparkStr[i];
-      var idx = chars.indexOf(ch);
-      if (idx < 0) {
-        html += '<div class="spark-bar" style="height:1px"></div>';
-      } else {
-        var pct = Math.round(((idx + 1) / 8) * 100);
-        html += '<div class="spark-bar" style="height:' + pct + '%"></div>';
-      }
-    }
-    html += '</div>';
-    return html;
-  }
-
-  // ── Compact number ─────────────────────────────────────────────
-  function fmtCompact(n) {
-    if (n < 1000) return String(n);
-    if (n < 10000) return (n / 1000).toFixed(1) + 'k';
-    if (n < 1000000) return Math.round(n / 1000) + 'k';
-    return (n / 1000000).toFixed(1) + 'm';
-  }
-
-  // ── Get Display Branches ───────────────────────────────────────
-  function getDisplayBranches() {
+  // ── Get Display Branches (wrapper) ─────────────────────────────
+  // The pure getDisplayBranches is inlined above as a var assignment.
+  // Wrap it to pass closure state as args, keeping the same call-site API.
+  var _pureGetDisplayBranches = getDisplayBranches;
+  getDisplayBranches = function() {
     if (!state || !state.branches) return [];
-    var branches = state.branches.slice();
-    if (searchQuery) {
-      var q = searchQuery.toLowerCase();
-      branches = branches.filter(function(b) {
-        return b.name.toLowerCase().indexOf(q) !== -1;
-      });
-    }
-    // Pin branches to top
-    if (pinnedBranches.length > 0) {
-      var pinSet = {};
-      for (var i = 0; i < pinnedBranches.length; i++) pinSet[pinnedBranches[i]] = true;
-      branches.sort(function(a, b) {
-        var aPin = pinSet[a.name] ? 1 : 0;
-        var bPin = pinSet[b.name] ? 1 : 0;
-        return bPin - aPin; // pinned first
-      });
-    }
-    // Sort
-    if (sortOrder === 'alpha') {
-      var pinSet2 = {};
-      for (var j = 0; j < pinnedBranches.length; j++) pinSet2[pinnedBranches[j]] = true;
-      branches.sort(function(a, b) {
-        // Pinned branches always first
-        var aPin = pinSet2[a.name] ? 1 : 0;
-        var bPin = pinSet2[b.name] ? 1 : 0;
-        if (aPin !== bPin) return bPin - aPin;
-        return a.name.localeCompare(b.name);
-      });
-    } else if (sortOrder === 'recent') {
-      var pinSet3 = {};
-      for (var k = 0; k < pinnedBranches.length; k++) pinSet3[pinnedBranches[k]] = true;
-      branches.sort(function(a, b) {
-        var aPin = pinSet3[a.name] ? 1 : 0;
-        var bPin = pinSet3[b.name] ? 1 : 0;
-        if (aPin !== bPin) return bPin - aPin;
-        var aDate = a.date ? new Date(a.date).getTime() : 0;
-        var bDate = b.date ? new Date(b.date).getTime() : 0;
-        return bDate - aDate;
-      });
-    }
-    return branches;
-  }
+    return _pureGetDisplayBranches(state.branches, {
+      searchQuery: searchQuery,
+      pinnedBranches: pinnedBranches,
+      sortOrder: sortOrder,
+    });
+  };
 
   // ── Render ─────────────────────────────────────────────────────
   function render() {
@@ -1467,12 +1411,6 @@ function getDashboardJs() {
       copyToClipboard(text, copyBtn);
     }
   });
-
-  // ── Utility ────────────────────────────────────────────────────
-  function escHtml(s) {
-    if (!s) return '';
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
 
   // ── Init ───────────────────────────────────────────────────────
   connect();
