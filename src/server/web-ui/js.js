@@ -33,56 +33,56 @@ function getDashboardJs() {
   'use strict';
 
   // ── State ──────────────────────────────────────────────────────
-  var state = null;
-  var prevBranches = null; // for notification diffing
-  var selectedIndex = 0;
-  var searchMode = false;
-  var searchQuery = '';
-  var confirmMode = false;
-  var confirmCallback = null;
-  var connected = false;
-  var flashTimer = null;
-  var activeTabId = null;
-  var logViewerMode = false;
-  var logViewerTab = 'server';
-  var branchActionMode = false;
-  var infoMode = false;
-  var cleanupMode = false;
-  var updateMode = false;
-  var stashMode = false;
-  var pendingStashBranch = null;
-  var updateNotificationShown = false;
-  var remoteTabPollTimer = null;
+  let state = null;
+  let prevBranches = null; // for notification diffing
+  let selectedIndex = 0;
+  let searchMode = false;
+  let searchQuery = '';
+  let confirmMode = false;
+  let confirmCallback = null;
+  let connected = false;
+  let flashTimer = null;
+  let activeTabId = null;
+  let logViewerMode = false;
+  let logViewerTab = 'server';
+  let branchActionMode = false;
+  let infoMode = false;
+  let cleanupMode = false;
+  let updateMode = false;
+  let stashMode = false;
+  let pendingStashBranch = null;
+  let updateNotificationShown = false;
+  let remoteTabPollTimer = null;
 
   // ── Persistent Preferences (localStorage) ─────────────────────
-  var PREFS_KEY = 'git-watchtower-prefs';
+  const PREFS_KEY = 'git-watchtower-prefs';
   function loadPrefs() {
     try {
       return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
     } catch (e) { return {}; }
   }
   function savePrefs(updates) {
-    var prefs = loadPrefs();
-    for (var k in updates) { if (updates.hasOwnProperty(k)) prefs[k] = updates[k]; }
+    const prefs = loadPrefs();
+    Object.keys(updates).forEach((k) => { prefs[k] = updates[k]; });
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
     return prefs;
   }
-  var prefs = loadPrefs();
-  var sidebarCollapsed = prefs.sidebarCollapsed || false;
-  var sortOrder = prefs.sortOrder || 'default';
-  var pinnedBranches = prefs.pinnedBranches || [];
+  const prefs = loadPrefs();
+  let sidebarCollapsed = prefs.sidebarCollapsed || false;
+  let sortOrder = prefs.sortOrder || 'default';
+  let pinnedBranches = prefs.pinnedBranches || [];
 
   // Apply initial sidebar state
-  (function() {
-    var layout = document.querySelector('.layout');
+  {
+    const layout = document.querySelector('.layout');
     if (sidebarCollapsed) layout.classList.add('sidebar-collapsed');
-  })();
+  }
 
   // ── Browser Notifications ─────────────────────────────────────
-  var notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+  let notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
 
   function updateNotifButton() {
-    var btn = document.getElementById('notif-btn');
+    const btn = document.getElementById('notif-btn');
     if (notifPermission === 'granted') {
       btn.className = 'notif-btn granted';
       btn.textContent = 'notifs on';
@@ -96,13 +96,13 @@ function getDashboardJs() {
   }
   updateNotifButton();
 
-  document.getElementById('notif-btn').addEventListener('click', function() {
+  document.getElementById('notif-btn').addEventListener('click', () => {
     if (notifPermission === 'granted' || notifPermission === 'denied') return;
     if (typeof Notification === 'undefined') {
       showToast('Notifications not supported in this browser', 'warning');
       return;
     }
-    Notification.requestPermission().then(function(perm) {
+    Notification.requestPermission().then((perm) => {
       notifPermission = perm;
       updateNotifButton();
       if (perm === 'granted') {
@@ -114,20 +114,19 @@ function getDashboardJs() {
   function sendNotification(title, body, tag) {
     if (notifPermission !== 'granted') return;
     try {
-      var n = new Notification(title, { body: body, tag: tag || 'git-watchtower', icon: '', silent: false });
-      setTimeout(function() { n.close(); }, 8000);
+      const n = new Notification(title, { body, tag: tag || 'git-watchtower', icon: '', silent: false });
+      setTimeout(() => n.close(), 8000);
     } catch (e) { /* ignore */ }
   }
 
   function diffBranchesForNotifications(oldBranches, newBranches) {
     if (!oldBranches || !newBranches) return;
-    var oldMap = {};
-    for (var i = 0; i < oldBranches.length; i++) {
-      oldMap[oldBranches[i].name] = oldBranches[i];
+    const oldMap = {};
+    for (const ob of oldBranches) {
+      oldMap[ob.name] = ob;
     }
-    for (var j = 0; j < newBranches.length; j++) {
-      var nb = newBranches[j];
-      var ob = oldMap[nb.name];
+    for (const nb of newBranches) {
+      const ob = oldMap[nb.name];
       if (!ob && nb.isNew) {
         sendNotification('New Branch', nb.name + ' was created', 'new-' + nb.name);
       } else if (ob && !ob.justUpdated && nb.justUpdated) {
@@ -136,15 +135,9 @@ function getDashboardJs() {
     }
     // Check PR state changes
     if (state && state.branchPrStatusMap) {
-      for (var bn in state.branchPrStatusMap) {
-        if (!state.branchPrStatusMap.hasOwnProperty(bn)) continue;
-        var pr = state.branchPrStatusMap[bn];
-        if (pr && pr.state === 'MERGED') {
-          // Only notify once - check if it was not merged before
-          var oldBranch = oldMap[bn];
-          if (oldBranch) {
-            sendNotification('PR Merged', 'PR #' + pr.number + ' for ' + bn + ' was merged', 'merged-' + bn);
-          }
+      for (const [bn, pr] of Object.entries(state.branchPrStatusMap)) {
+        if (pr && pr.state === 'MERGED' && oldMap[bn]) {
+          sendNotification('PR Merged', 'PR #' + pr.number + ' for ' + bn + ' was merged', 'merged-' + bn);
         }
       }
     }
@@ -152,17 +145,17 @@ function getDashboardJs() {
 
   // ── Clipboard Helper ──────────────────────────────────────────
   function copyToClipboard(text, btnEl) {
-    navigator.clipboard.writeText(text).then(function() {
+    navigator.clipboard.writeText(text).then(() => {
       if (btnEl) {
         btnEl.classList.add('copied');
         btnEl.innerHTML = '&#x2713;';
-        setTimeout(function() {
+        setTimeout(() => {
           btnEl.classList.remove('copied');
           btnEl.innerHTML = '&#x1f4cb;';
         }, 1500);
       }
       showToast('Copied: ' + text, 'success');
-    }).catch(function() {
+    }).catch(() => {
       showToast('Failed to copy', 'error');
     });
   }
@@ -172,19 +165,18 @@ function getDashboardJs() {
     return (state && state.repoWebUrl) ? state.repoWebUrl.replace(/\\/tree\\/.*$/, '') : null;
   }
   function getBranchUrl(branchName) {
-    var base = getRepoUrl();
+    const base = getRepoUrl();
     if (!base) return null;
     return base + '/tree/' + encodeURIComponent(branchName);
   }
   function getCommitUrl(hash) {
-    var base = getRepoUrl();
+    const base = getRepoUrl();
     if (!base || !hash) return null;
     return base + '/commit/' + hash;
   }
   function getPrUrl(prNumber) {
-    var base = getRepoUrl();
+    const base = getRepoUrl();
     if (!base || !prNumber) return null;
-    // Detect GitLab by URL pattern
     if (base.indexOf('gitlab') !== -1) {
       return base + '/-/merge_requests/' + prNumber;
     }
@@ -192,20 +184,20 @@ function getDashboardJs() {
   }
 
   // ── SSE Connection ─────────────────────────────────────────────
-  var evtSource = null;
+  let evtSource = null;
 
   function connect() {
     if (evtSource) { evtSource.close(); }
     evtSource = new EventSource('/api/events');
 
-    evtSource.onopen = function() {
+    evtSource.onopen = () => {
       connected = true;
       updateConnectionStatus();
     };
 
-    evtSource.addEventListener('state', function(e) {
+    evtSource.addEventListener('state', (e) => {
       try {
-        var newState = JSON.parse(e.data);
+        const newState = JSON.parse(e.data);
         if (!activeTabId && newState.activeProjectId) {
           activeTabId = newState.activeProjectId;
         }
@@ -214,16 +206,14 @@ function getDashboardJs() {
         // data (branches, PRs, activity, etc.) — only update global
         // metadata so the tab bar, connection status, and version info
         // stay current.
-        var viewingLocalProject = !activeTabId || activeTabId === newState.activeProjectId;
+        const viewingLocalProject = !activeTabId || activeTabId === newState.activeProjectId;
         if (viewingLocalProject) {
-          // Diff branches for desktop notifications
           if (state && state.branches) {
             diffBranchesForNotifications(state.branches, newState.branches || []);
           }
           prevBranches = state ? state.branches : null;
           state = newState;
         } else {
-          // Viewing a remote tab — preserve per-project fields, update globals only
           if (state) {
             state.projects = newState.projects;
             state.version = newState.version;
@@ -239,16 +229,16 @@ function getDashboardJs() {
       } catch (err) { /* ignore parse errors */ }
     });
 
-    evtSource.addEventListener('flash', function(e) {
+    evtSource.addEventListener('flash', (e) => {
       try {
-        var data = JSON.parse(e.data);
+        const data = JSON.parse(e.data);
         showFlash(data.text, data.type);
       } catch (err) { /* ignore */ }
     });
 
-    evtSource.addEventListener('actionResult', function(e) {
+    evtSource.addEventListener('actionResult', (e) => {
       try {
-        var data = JSON.parse(e.data);
+        const data = JSON.parse(e.data);
         if (!data.success && data.message && data.message.indexOf('uncommitted') !== -1) {
           pendingStashBranch = data.branch || null;
           showErrorToastWithHint(data.message, 'Press S to stash');
@@ -258,15 +248,15 @@ function getDashboardJs() {
       } catch (err) { /* ignore */ }
     });
 
-    evtSource.onerror = function() {
+    evtSource.onerror = () => {
       connected = false;
       updateConnectionStatus();
     };
   }
 
   function updateConnectionStatus() {
-    var dot = document.getElementById('connection-dot');
-    var badge = document.getElementById('status-badge');
+    const dot = document.getElementById('connection-dot');
+    const badge = document.getElementById('status-badge');
     if (connected) {
       dot.className = 'connection-dot connected';
       badge.className = 'badge badge-online';
@@ -280,60 +270,55 @@ function getDashboardJs() {
 
   // ── Actions ────────────────────────────────────────────────────
   function sendAction(action, payload) {
-    var xhr = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/action');
     xhr.setRequestHeader('Content-Type', 'application/json');
-    var data = { action: action, payload: payload || {} };
+    const data = { action, payload: payload || {} };
     if (activeTabId) data.projectId = activeTabId;
     xhr.send(JSON.stringify(data));
   }
 
   // ── Flash Messages ─────────────────────────────────────────────
   function showFlash(text, type) {
-    var el = document.getElementById('flash');
+    const el = document.getElementById('flash');
     el.textContent = text;
     el.className = 'flash visible ' + (type || 'info');
     clearTimeout(flashTimer);
-    flashTimer = setTimeout(function() {
-      el.className = 'flash';
-    }, 3000);
+    flashTimer = setTimeout(() => { el.className = 'flash'; }, 3000);
   }
 
   // ── Toast Notifications ────────────────────────────────────────
   function showToast(text, type) {
-    var container = document.getElementById('toast-container');
-    var toast = document.createElement('div');
-    var icons = { success: '\\u2713', error: '\\u2717', info: '\\u2139', warning: '\\u26a0' };
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    const icons = { success: '\\u2713', error: '\\u2717', info: '\\u2139', warning: '\\u26a0' };
     toast.className = 'toast ' + (type || 'info');
     toast.innerHTML = '<span class="toast-icon">' + (icons[type] || icons.info) + '</span>' + escHtml(text);
     container.appendChild(toast);
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { toast.classList.add('visible'); });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => toast.classList.add('visible'));
     });
-    setTimeout(function() {
+    setTimeout(() => {
       toast.classList.remove('visible');
-      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
     }, 4000);
   }
 
   // ── Modal Helper ───────────────────────────────────────────────
   // Reusable helper that manages show/hide, overlay-click-to-close,
   // close-button click, and Escape key for standard modal overlays.
-  var _openModals = [];
+  const _openModals = [];
 
   function Modal(overlayId, closeId) {
     this.overlay = document.getElementById(overlayId);
     this.isOpen = false;
     this.onHide = null;
-    var self = this;
-    // Close button
     if (closeId) {
-      var closeBtn = document.getElementById(closeId);
-      if (closeBtn) closeBtn.addEventListener('click', function() { self.hide(); });
+      const closeBtn = document.getElementById(closeId);
+      if (closeBtn) closeBtn.addEventListener('click', () => this.hide());
     }
-    // Overlay background click
-    this.overlay.addEventListener('click', function(e) {
-      if (e.target === self.overlay) self.hide();
+    this.overlay.addEventListener('click', (e) => {
+      if (e.target === this.overlay) this.hide();
     });
   }
 
@@ -346,7 +331,7 @@ function getDashboardJs() {
   Modal.prototype.hide = function() {
     this.isOpen = false;
     this.overlay.className = 'modal-overlay';
-    var idx = _openModals.indexOf(this);
+    const idx = _openModals.indexOf(this);
     if (idx !== -1) _openModals.splice(idx, 1);
     if (this.onHide) this.onHide();
   };
@@ -356,27 +341,27 @@ function getDashboardJs() {
   }
 
   // Create modal instances
-  var logViewerModal   = new Modal('log-viewer-overlay', 'log-viewer-close');
-  var branchActionModal = new Modal('branch-action-overlay', 'branch-action-close');
-  var infoModal        = new Modal('info-overlay', 'info-close');
-  var stashModal       = new Modal('stash-overlay', 'stash-close');
-  var cleanupModal     = new Modal('cleanup-overlay', 'cleanup-close');
-  var updateModal      = new Modal('update-overlay', 'update-close');
+  const logViewerModal   = new Modal('log-viewer-overlay', 'log-viewer-close');
+  const branchActionModal = new Modal('branch-action-overlay', 'branch-action-close');
+  const infoModal        = new Modal('info-overlay', 'info-close');
+  const stashModal       = new Modal('stash-overlay', 'stash-close');
+  const cleanupModal     = new Modal('cleanup-overlay', 'cleanup-close');
+  const updateModal      = new Modal('update-overlay', 'update-close');
 
   // Per-modal hide callbacks for state cleanup
-  logViewerModal.onHide = function() { logViewerMode = false; };
-  branchActionModal.onHide = function() { branchActionMode = false; };
-  infoModal.onHide = function() { infoMode = false; };
-  stashModal.onHide = function() { stashMode = false; pendingStashBranch = null; };
-  cleanupModal.onHide = function() { cleanupMode = false; };
-  updateModal.onHide = function() { updateMode = false; };
+  logViewerModal.onHide = () => { logViewerMode = false; };
+  branchActionModal.onHide = () => { branchActionMode = false; };
+  infoModal.onHide = () => { infoMode = false; };
+  stashModal.onHide = () => { stashMode = false; pendingStashBranch = null; };
+  cleanupModal.onHide = () => { cleanupMode = false; };
+  updateModal.onHide = () => { updateMode = false; };
 
   // ── Confirm Dialog ─────────────────────────────────────────────
   function showConfirm(title, message, onConfirm, opts) {
     opts = opts || {};
     confirmMode = true;
     confirmCallback = onConfirm;
-    var box = document.getElementById('confirm-box');
+    const box = document.getElementById('confirm-box');
     box.innerHTML =
       '<div class="confirm-title">' + escHtml(title) + '</div>' +
       '<div class="confirm-message">' + escHtml(message) + '</div>' +
@@ -388,7 +373,7 @@ function getDashboardJs() {
       '</div>';
     document.getElementById('confirm-overlay').className = 'confirm-overlay active';
     document.getElementById('confirm-cancel').onclick = hideConfirm;
-    document.getElementById('confirm-ok').onclick = function() {
+    document.getElementById('confirm-ok').onclick = () => {
       hideConfirm();
       if (confirmCallback) confirmCallback();
     };
@@ -402,19 +387,18 @@ function getDashboardJs() {
 
   // ── Tabs ───────────────────────────────────────────────────────
   function renderTabs() {
-    var tabBar = document.getElementById('tab-bar');
-    var projects = (state && state.projects) || [];
+    const tabBar = document.getElementById('tab-bar');
+    const projects = (state && state.projects) || [];
     if (projects.length <= 1) {
       tabBar.className = 'tab-bar';
       return;
     }
     tabBar.className = 'tab-bar visible';
-    // Adjust layout height for tab bar
     document.querySelector('.layout').style.height = 'calc(100vh - 49px - 40px)';
-    var html = '';
-    for (var i = 0; i < projects.length; i++) {
-      var p = projects[i];
-      var isActive = p.id === activeTabId;
+    let html = '';
+    for (let i = 0; i < projects.length; i++) {
+      const p = projects[i];
+      const isActive = p.id === activeTabId;
       html += '<div class="tab' + (isActive ? ' active' : '') + '" data-project-id="' + escHtml(p.id) + '">';
       html += '<span class="tab-dot"></span>';
       html += escHtml(p.name);
@@ -424,17 +408,13 @@ function getDashboardJs() {
     tabBar.innerHTML = html;
   }
 
-  /**
-   * Fetch a project's state from the server and merge it into the
-   * current client-side state for rendering.
-   */
   function fetchAndApplyProjectState(projectId) {
-    var xhr = new XMLHttpRequest();
+    const xhr = new XMLHttpRequest();
     xhr.open('GET', '/api/projects/' + projectId + '/state');
-    xhr.onload = function() {
+    xhr.onload = () => {
       if (xhr.status === 200 && activeTabId === projectId) {
         try {
-          var pState = JSON.parse(xhr.responseText);
+          const pState = JSON.parse(xhr.responseText);
           state.branches = pState.branches || [];
           state.currentBranch = pState.currentBranch;
           state.activityLog = pState.activityLog || [];
@@ -465,12 +445,10 @@ function getDashboardJs() {
     renderTabs();
     fetchAndApplyProjectState(projectId);
 
-    // For non-local tabs the SSE stream won't push per-project updates,
-    // so poll the server periodically to keep the view fresh.
     clearInterval(remoteTabPollTimer);
     remoteTabPollTimer = null;
     if (state && projectId !== state.activeProjectId) {
-      remoteTabPollTimer = setInterval(function() {
+      remoteTabPollTimer = setInterval(() => {
         fetchAndApplyProjectState(projectId);
       }, 2000);
     }
@@ -482,7 +460,7 @@ ${pureFnBlock}
   // ── Get Display Branches (wrapper) ─────────────────────────────
   // The pure getDisplayBranches is inlined above as a var assignment.
   // Wrap it to pass closure state as args, keeping the same call-site API.
-  var _pureGetDisplayBranches = getDisplayBranches;
+  const _pureGetDisplayBranches = getDisplayBranches;
   getDisplayBranches = function() {
     if (!state || !state.branches) return [];
     return _pureGetDisplayBranches(state.branches, {
@@ -497,20 +475,20 @@ ${pureFnBlock}
     if (!state) return;
 
     // Header — hide project name pill when tabs are showing it
-    var projectEl = document.getElementById('project-name');
-    var hasTabs = state.projects && state.projects.length > 1;
+    const projectEl = document.getElementById('project-name');
+    const hasTabs = state.projects && state.projects.length > 1;
     if (hasTabs) {
       projectEl.style.display = 'none';
     } else {
       projectEl.style.display = '';
       projectEl.textContent = state.projectName || '-';
     }
-    var versionEl = document.getElementById('version');
+    const versionEl = document.getElementById('version');
     if (state.version) versionEl.textContent = 'v' + state.version;
 
     // Status badge
     if (connected) {
-      var badge = document.getElementById('status-badge');
+      const badge = document.getElementById('status-badge');
       if (state.isOffline) {
         badge.className = 'badge badge-offline';
         badge.textContent = 'offline';
@@ -539,9 +517,9 @@ ${pureFnBlock}
   }
 
   function renderBranches() {
-    var container = document.getElementById('branch-list');
-    var branches = getDisplayBranches();
-    var countEl = document.getElementById('branch-count');
+    const container = document.getElementById('branch-list');
+    const branches = getDisplayBranches();
+    const countEl = document.getElementById('branch-count');
     countEl.textContent = branches.length;
 
     if (selectedIndex >= branches.length) {
@@ -556,23 +534,23 @@ ${pureFnBlock}
       return;
     }
 
-    var html = '';
-    for (var i = 0; i < branches.length; i++) {
-      var b = branches[i];
-      var isSelected = i === selectedIndex;
-      var isCurrent = b.name === state.currentBranch;
+    let html = '';
+    for (let i = 0; i < branches.length; i++) {
+      const b = branches[i];
+      const isSelected = i === selectedIndex;
+      const isCurrent = b.name === state.currentBranch;
 
       // Sparkline
-      var sparkStr = state.sparklineCache ? state.sparklineCache[b.name] : null;
+      const sparkStr = state.sparklineCache ? state.sparklineCache[b.name] : null;
 
       // PR status
-      var prStatus = state.branchPrStatusMap ? state.branchPrStatusMap[b.name] : null;
-      var isMerged = prStatus && prStatus.state === 'MERGED';
+      const prStatus = state.branchPrStatusMap ? state.branchPrStatusMap[b.name] : null;
+      const isMerged = prStatus && prStatus.state === 'MERGED';
 
       // Ahead/behind
-      var ab = state.aheadBehindCache ? state.aheadBehindCache[b.name] : null;
+      const ab = state.aheadBehindCache ? state.aheadBehindCache[b.name] : null;
 
-      var itemClasses = 'branch-item';
+      let itemClasses = 'branch-item';
       if (isSelected) itemClasses += ' selected';
       if (isCurrent) itemClasses += ' current';
       if (isMerged) itemClasses += ' merged';
@@ -585,8 +563,8 @@ ${pureFnBlock}
       html += '<div class="branch-info">';
       html += '<div class="branch-name-row">';
       // Branch name - clickable link to GitHub/GitLab
-      var branchUrl = getBranchUrl(b.name);
-      var isPinned = pinnedBranches.indexOf(b.name) !== -1;
+      const branchUrl = getBranchUrl(b.name);
+      const isPinned = pinnedBranches.indexOf(b.name) !== -1;
       html += '<span class="branch-name">';
       if (branchUrl) {
         html += '<a href="' + escHtml(branchUrl) + '" target="_blank" rel="noopener" title="Open on web" onclick="event.stopPropagation()">' + escHtml(b.name) + '</a>';
@@ -600,7 +578,7 @@ ${pureFnBlock}
 
       html += '<div class="branch-meta">';
       // Commit hash - clickable link
-      var commitUrl = getCommitUrl(b.commit);
+      const commitUrl = getCommitUrl(b.commit);
       html += '<span class="branch-commit">';
       if (commitUrl) {
         html += '<a href="' + escHtml(commitUrl) + '" target="_blank" rel="noopener" title="View commit" onclick="event.stopPropagation()">' + escHtml(b.commit || '') + '</a>';
@@ -618,15 +596,15 @@ ${pureFnBlock}
 
       html += '<div class="branch-right">';
       // Badges
-      var badges = '';
+      let badges = '';
       if (isCurrent) badges += '<span class="branch-current-badge">HEAD</span>';
       if (isPinned) badges += '<span class="branch-new-badge" style="color:var(--orange);background:rgba(219,109,40,0.15)">pinned</span>';
       if (b.isNew) badges += '<span class="branch-new-badge">new</span>';
       if (b.isDeleted) badges += '<span class="branch-deleted-badge">deleted</span>';
       if (b.justUpdated) badges += '<span class="branch-updated-badge">updated</span>';
       if (prStatus) {
-        var prClass = prStatus.state === 'OPEN' ? 'pr-open' : prStatus.state === 'MERGED' ? 'pr-merged' : 'pr-closed';
-        var prUrl = getPrUrl(prStatus.number);
+        const prClass = prStatus.state === 'OPEN' ? 'pr-open' : prStatus.state === 'MERGED' ? 'pr-merged' : 'pr-closed';
+        const prUrl = getPrUrl(prStatus.number);
         badges += '<span class="pr-badge ' + prClass + '">';
         if (prUrl) badges += '<a href="' + escHtml(prUrl) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">';
         badges += (prStatus.state === 'MERGED' ? 'merged' : 'PR #' + prStatus.number);
@@ -658,25 +636,25 @@ ${pureFnBlock}
     container.innerHTML = html;
 
     // Scroll selected into view
-    var selected = container.querySelector('.branch-item.selected');
+    const selected = container.querySelector('.branch-item.selected');
     if (selected) {
       selected.scrollIntoView({ block: 'nearest' });
     }
   }
 
   function renderActivityLog() {
-    var container = document.getElementById('activity-log');
-    var log = (state && state.activityLog) || [];
+    const container = document.getElementById('activity-log');
+    const log = (state && state.activityLog) || [];
     if (log.length === 0) {
       container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#x1f4cb;</div>No activity yet</div>';
       return;
     }
-    var html = '';
-    for (var i = 0; i < log.length; i++) {
-      var entry = log[i];
-      var t = '';
+    let html = '';
+    for (let i = 0; i < log.length; i++) {
+      const entry = log[i];
+      const t = '';
       if (entry.timestamp) {
-        var d = new Date(entry.timestamp);
+        const d = new Date(entry.timestamp);
         t = isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
       }
       html += '<div class="log-entry">';
@@ -700,21 +678,21 @@ ${pureFnBlock}
 
   function renderLogViewer() {
     if (!state) return;
-    var container = document.getElementById('log-viewer-content');
+    const container = document.getElementById('log-viewer-content');
     // Update tab active state
-    var tabs = document.querySelectorAll('.log-viewer-tab');
-    for (var t = 0; t < tabs.length; t++) {
+    const tabs = document.querySelectorAll('.log-viewer-tab');
+    for (let t = 0; t < tabs.length; t++) {
       tabs[t].className = 'log-viewer-tab' + (tabs[t].getAttribute('data-tab') === logViewerTab ? ' active' : '');
     }
 
-    var html = '';
+    let html = '';
     if (logViewerTab === 'server') {
-      var logs = state.serverLogBuffer || [];
+      const logs = state.serverLogBuffer || [];
       if (logs.length === 0) {
         html = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No server logs</div>';
       } else {
-        for (var i = 0; i < logs.length; i++) {
-          var log = logs[i];
+        for (let i = 0; i < logs.length; i++) {
+          const log = logs[i];
           html += '<div class="log-line' + (log.isError ? ' error' : '') + '">';
           html += '<span class="log-ts">' + escHtml(log.timestamp || '') + '</span>';
           html += escHtml(log.line || '');
@@ -722,13 +700,13 @@ ${pureFnBlock}
         }
       }
     } else {
-      var alog = (state.activityLog || []);
+      const alog = (state.activityLog || []);
       if (alog.length === 0) {
         html = '<div style="color:var(--text-muted);padding:20px;text-align:center;">No activity</div>';
       } else {
-        for (var j = 0; j < alog.length; j++) {
-          var entry = alog[j];
-          var ts = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
+        for (let j = 0; j < alog.length; j++) {
+          const entry = alog[j];
+          const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString() : '';
           html += '<div class="log-line">';
           html += '<span class="log-ts">' + ts + '</span>';
           html += escHtml(entry.message || '');
@@ -740,8 +718,8 @@ ${pureFnBlock}
     container.scrollTop = container.scrollHeight;
   }
 
-  document.getElementById('log-viewer-tabs').addEventListener('click', function(e) {
-    var tab = e.target.closest('.log-viewer-tab');
+  document.getElementById('log-viewer-tabs').addEventListener('click', (e) => {
+    const tab = e.target.closest('.log-viewer-tab');
     if (!tab) return;
     logViewerTab = tab.getAttribute('data-tab');
     renderLogViewer();
@@ -749,20 +727,20 @@ ${pureFnBlock}
 
   // ── Branch Action Modal ────────────────────────────────────────
   function showBranchActions() {
-    var branches = getDisplayBranches();
+    const branches = getDisplayBranches();
     if (!branches.length || selectedIndex >= branches.length) return;
-    var branch = branches[selectedIndex];
+    const branch = branches[selectedIndex];
     branchActionMode = true;
     branchActionModal.show();
     document.getElementById('branch-action-title').textContent = 'Actions: ' + branch.name;
 
-    var prStatus = (state.branchPrStatusMap || {})[branch.name];
-    var isCurrent = branch.name === state.currentBranch;
+    const prStatus = (state.branchPrStatusMap || {})[branch.name];
+    const isCurrent = branch.name === state.currentBranch;
 
-    var actions = [];
+    const actions = [];
 
     // Open on web (GitHub/GitLab) — direct link if we have repo URL
-    var brUrl = getBranchUrl(branch.name);
+    const brUrl = getBranchUrl(branch.name);
     if (brUrl) {
       actions.push({ icon: '\\u{1f310}', label: 'Open branch on web', key: 'openLink', data: { url: brUrl } });
     } else {
@@ -770,7 +748,7 @@ ${pureFnBlock}
     }
 
     // PR actions
-    var prUrl = prStatus ? getPrUrl(prStatus.number) : null;
+    const prUrl = prStatus ? getPrUrl(prStatus.number) : null;
     if (prStatus && prUrl) {
       actions.push({ icon: '\\u{1f517}', label: 'View PR #' + prStatus.number, key: 'openLink', data: { url: prUrl } });
     } else if (prStatus && prStatus.url) {
@@ -787,7 +765,7 @@ ${pureFnBlock}
     }
 
     // Pin/Unpin
-    var isPinnedBranch = pinnedBranches.indexOf(branch.name) !== -1;
+    const isPinnedBranch = pinnedBranches.indexOf(branch.name) !== -1;
     actions.push({ icon: isPinnedBranch ? '\\u{1f4cc}' : '\\u{1f4cc}', label: isPinnedBranch ? 'Unpin branch' : 'Pin branch to top', key: 'pin', data: { branch: branch.name } });
 
     // Switch to branch
@@ -803,9 +781,9 @@ ${pureFnBlock}
     // Fetch
     actions.push({ icon: '\\u{1f504}', label: 'Fetch all remotes', key: 'fetch', data: {} });
 
-    var html = '';
-    for (var i = 0; i < actions.length; i++) {
-      var a = actions[i];
+    let html = '';
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
       html += '<button class="action-item" data-action-key="' + escHtml(a.key) + '" data-action-data=\\'' + escHtml(JSON.stringify(a.data)) + '\\'>';
       html += '<span class="action-icon">' + a.icon + '</span>';
       html += '<span class="action-label">' + escHtml(a.label) + '</span>';
@@ -816,11 +794,11 @@ ${pureFnBlock}
 
   function hideBranchActions() { branchActionModal.hide(); }
 
-  document.getElementById('branch-action-list').addEventListener('click', function(e) {
-    var btn = e.target.closest('.action-item');
+  document.getElementById('branch-action-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('.action-item');
     if (!btn) return;
-    var key = btn.getAttribute('data-action-key');
-    var data = {};
+    const key = btn.getAttribute('data-action-key');
+    const data = {};
     try { data = JSON.parse(btn.getAttribute('data-action-data') || '{}'); } catch (err) { /* ignore */ }
 
     hideBranchActions();
@@ -832,7 +810,7 @@ ${pureFnBlock}
     } else if (key === 'copy') {
       copyToClipboard(data.text, null);
     } else if (key === 'pin') {
-      var pIdx = pinnedBranches.indexOf(data.branch);
+      const pIdx = pinnedBranches.indexOf(data.branch);
       if (pIdx === -1) {
         pinnedBranches.push(data.branch);
         showToast('Pinned: ' + data.branch, 'success');
@@ -859,8 +837,8 @@ ${pureFnBlock}
   function showInfo() {
     if (!state) return;
     infoMode = true;
-    var grid = document.getElementById('info-grid');
-    var rows = [
+    const grid = document.getElementById('info-grid');
+    const rows = [
       ['Project', state.projectName || '-'],
       ['Version', 'v' + (state.version || '-')],
       ['Server Mode', state.serverMode || 'none'],
@@ -872,8 +850,8 @@ ${pureFnBlock}
       ['Network', state.isOffline ? 'Offline' : 'Online'],
       ['Branches', String((state.branches || []).length)],
     ];
-    var html = '';
-    for (var i = 0; i < rows.length; i++) {
+    let html = '';
+    for (let i = 0; i < rows.length; i++) {
       html += '<span class="info-label">' + escHtml(rows[i][0]) + '</span>';
       html += '<span class="info-value">' + escHtml(rows[i][1]) + '</span>';
     }
@@ -887,10 +865,10 @@ ${pureFnBlock}
   function showStashDialog(pendingBranch) {
     stashMode = true;
     pendingStashBranch = pendingBranch || null;
-    var msg = pendingBranch
+    const msg = pendingBranch
       ? 'You have uncommitted changes. Stash them before switching to <strong>' + escHtml(pendingBranch) + '</strong>?'
       : 'Stash all uncommitted changes in the working directory?';
-    var html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">' + msg + '</div>';
+    const html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">' + msg + '</div>';
     html += '<div class="confirm-actions">';
     html += '<button class="confirm-btn" id="stash-cancel">Cancel</button>';
     html += '<button class="confirm-btn primary" id="stash-confirm">Stash &amp; Continue</button>';
@@ -898,7 +876,7 @@ ${pureFnBlock}
     document.getElementById('stash-content').innerHTML = html;
     stashModal.show();
     document.getElementById('stash-cancel').onclick = hideStash;
-    document.getElementById('stash-confirm').onclick = function() {
+    document.getElementById('stash-confirm').onclick = () => {
       sendAction('stash', { pendingBranch: pendingStashBranch });
       showToast('Stashing changes...', 'info');
       hideStash();
@@ -910,16 +888,16 @@ ${pureFnBlock}
   // ── Branch Cleanup ─────────────────────────────────────────────
   function showCleanup() {
     cleanupMode = true;
-    var html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
+    const html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
     document.getElementById('cleanup-content').innerHTML = html;
     cleanupModal.show();
 
     // Ask the server to find gone branches (we inspect state.branches for gone tracking hints)
     // For now, look at branches that have no remote
-    var goneBranches = [];
+    const goneBranches = [];
     if (state && state.branches) {
-      for (var i = 0; i < state.branches.length; i++) {
-        var b = state.branches[i];
+      for (let i = 0; i < state.branches.length; i++) {
+        const b = state.branches[i];
         if (b.isLocal && !b.hasRemote && b.name !== state.currentBranch) {
           goneBranches.push(b.name);
         }
@@ -936,7 +914,7 @@ ${pureFnBlock}
 
     html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:8px;">Found ' + goneBranches.length + ' branch(es) with no remote tracking:</div>';
     html += '<div class="cleanup-branch-list">';
-    for (var j = 0; j < goneBranches.length; j++) {
+    for (let j = 0; j < goneBranches.length; j++) {
       html += '<div class="cleanup-branch-item"><span class="cleanup-branch-icon">&#x2716;</span>' + escHtml(goneBranches[j]) + '</div>';
     }
     html += '</div>';
@@ -948,16 +926,16 @@ ${pureFnBlock}
 
     document.getElementById('cleanup-content').innerHTML = html;
     document.getElementById('cleanup-cancel').onclick = hideCleanup;
-    document.getElementById('cleanup-safe').onclick = function() {
+    document.getElementById('cleanup-safe').onclick = () => {
       sendAction('deleteBranches', { branches: goneBranches, force: false });
       showToast('Deleting ' + goneBranches.length + ' branches (safe)...', 'info');
       hideCleanup();
     };
-    document.getElementById('cleanup-force').onclick = function() {
+    document.getElementById('cleanup-force').onclick = () => {
       showConfirm(
         'Force Delete',
         'Force delete ' + goneBranches.length + ' branch(es)? This may delete unmerged work.',
-        function() {
+        () => {
           sendAction('deleteBranches', { branches: goneBranches, force: true });
           showToast('Force deleting ' + goneBranches.length + ' branches...', 'warning');
           hideCleanup();
@@ -973,7 +951,7 @@ ${pureFnBlock}
   function showUpdateModal() {
     if (!state || !state.updateAvailable) return;
     updateMode = true;
-    var html = '<div class="update-versions">';
+    const html = '<div class="update-versions">';
     html += '<span class="old-version">v' + escHtml(state.version || '?') + '</span>';
     html += '<span class="arrow">&#x2192;</span>';
     html += '<span class="new-version">v' + escHtml(state.updateAvailable) + '</span>';
@@ -991,7 +969,7 @@ ${pureFnBlock}
     updateModal.show();
     if (!state.updateInProgress) {
       document.getElementById('update-dismiss').onclick = hideUpdate;
-      document.getElementById('update-install').onclick = function() {
+      document.getElementById('update-install').onclick = () => {
         sendAction('checkUpdate', { install: true });
         showToast('Installing update...', 'info');
         hideUpdate();
@@ -1004,13 +982,13 @@ ${pureFnBlock}
   // ── Session Stats ──────────────────────────────────────────────
   function renderSessionStats() {
     if (!state || !state.sessionStats) return;
-    var s = state.sessionStats;
-    var bar = document.getElementById('stats-bar');
-    var activeBranches = 0;
-    var staleBranches = 0;
+    const s = state.sessionStats;
+    const bar = document.getElementById('stats-bar');
+    const activeBranches = 0;
+    const staleBranches = 0;
     if (state.branches) {
-      for (var i = 0; i < state.branches.length; i++) {
-        var b = state.branches[i];
+      for (let i = 0; i < state.branches.length; i++) {
+        const b = state.branches[i];
         // Consider stale if no updates and not current
         if (b.justUpdated || b.name === state.currentBranch) {
           activeBranches++;
@@ -1019,7 +997,7 @@ ${pureFnBlock}
         }
       }
     }
-    var html = '';
+    let html = '';
     html += '<span class="stat-item"><span class="stat-label">Session:</span> <span class="stat-value">' + escHtml(s.sessionDuration || '0m') + '</span></span>';
     html += '<span class="stat-item"><span class="stat-label">Lines:</span> <span class="stat-value">+' + (s.linesAdded || 0) + '/-' + (s.linesDeleted || 0) + '</span></span>';
     html += '<span class="stat-item"><span class="stat-label">Polls:</span> <span class="stat-value">' + (s.totalPolls || 0) + '</span> <span class="stat-label">(' + (s.hitRate || 0) + '% hit)</span></span>';
@@ -1032,40 +1010,40 @@ ${pureFnBlock}
 
   // ── Error Toast with Stash Hint ────────────────────────────────
   function showErrorToastWithHint(message, hint) {
-    var container = document.getElementById('toast-container');
-    var toast = document.createElement('div');
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
     toast.className = 'toast error';
-    var html = '<span class="toast-icon">\\u2717</span>' + escHtml(message);
+    const html = '<span class="toast-icon">\\u2717</span>' + escHtml(message);
     if (hint) {
       html += '<span class="toast-action" data-hint="' + escHtml(hint) + '">' + escHtml(hint) + '</span>';
     }
     toast.innerHTML = html;
     container.appendChild(toast);
-    requestAnimationFrame(function() {
-      requestAnimationFrame(function() { toast.classList.add('visible'); });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => toast.classList.add('visible'));
     });
 
     // Handle hint click
-    var hintEl = toast.querySelector('.toast-action');
+    const hintEl = toast.querySelector('.toast-action');
     if (hintEl) {
-      hintEl.addEventListener('click', function() {
-        var h = this.getAttribute('data-hint');
+      hintEl.addEventListener('click', (e) => {
+        const h = e.currentTarget.getAttribute('data-hint');
         if (h === 'Press S to stash') {
           showStashDialog(pendingStashBranch);
         }
         toast.classList.remove('visible');
-        setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+        setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
       });
     }
 
-    setTimeout(function() {
+    setTimeout(() => {
       toast.classList.remove('visible');
-      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
     }, 6000);
   }
 
   // ── Keyboard ───────────────────────────────────────────────────
-  document.addEventListener('keydown', function(e) {
+  document.addEventListener('keydown', (e) => {
     // Ignore when typing in input fields (other than search)
     if (e.target.tagName === 'INPUT' && e.target.id !== 'search-input') return;
     if (e.target.tagName === 'BUTTON') return;
@@ -1095,7 +1073,7 @@ ${pureFnBlock}
       if (e.key === 'Escape') { e.preventDefault(); hideConfirm(); }
       if (e.key === 'Enter') {
         e.preventDefault();
-        var cb = confirmCallback;
+        const cb = confirmCallback;
         hideConfirm();
         if (cb) cb();
       }
@@ -1134,9 +1112,9 @@ ${pureFnBlock}
     }
 
     // Tab switching with number keys (1-9)
-    var projects = (state && state.projects) || [];
+    const projects = (state && state.projects) || [];
     if (projects.length > 1 && e.key >= '1' && e.key <= '9') {
-      var tabIdx = parseInt(e.key, 10) - 1;
+      const tabIdx = parseInt(e.key, 10) - 1;
       if (tabIdx < projects.length) {
         e.preventDefault();
         switchTab(projects[tabIdx].id);
@@ -1147,8 +1125,8 @@ ${pureFnBlock}
     // Tab cycling with Tab key
     if (e.key === 'Tab' && projects.length > 1) {
       e.preventDefault();
-      var curIdx = projects.findIndex(function(p) { return p.id === activeTabId; });
-      var nextIdx = e.shiftKey
+      const curIdx = projects.findIndex((p) => p.id === activeTabId);
+      const nextIdx = e.shiftKey
         ? (curIdx - 1 + projects.length) % projects.length
         : (curIdx + 1) % projects.length;
       switchTab(projects[nextIdx].id);
@@ -1169,9 +1147,9 @@ ${pureFnBlock}
         break;
       case 'Enter':
         e.preventDefault();
-        var branches = getDisplayBranches();
+        const branches = getDisplayBranches();
         if (branches.length > 0 && selectedIndex < branches.length) {
-          var b = branches[selectedIndex];
+          const b = branches[selectedIndex];
           if (b.isDeleted) {
             showToast('Cannot switch to a deleted branch', 'error');
           } else if (b.name === state.currentBranch) {
@@ -1188,7 +1166,7 @@ ${pureFnBlock}
         searchQuery = '';
         selectedIndex = 0;
         document.getElementById('search-bar').className = 'search-bar active';
-        var input = document.getElementById('search-input');
+        const input = document.getElementById('search-input');
         input.value = '';
         input.focus();
         break;
@@ -1215,7 +1193,7 @@ ${pureFnBlock}
           showConfirm(
             'Restart Server',
             'Restart the dev server process?',
-            function() {
+            () => {
               sendAction('restartServer');
               showToast('Restarting server...', 'info');
             },
@@ -1235,8 +1213,8 @@ ${pureFnBlock}
       case 'h':
         e.preventDefault();
         if (state && state.switchHistory && state.switchHistory.length > 0) {
-          var last = state.switchHistory[0];
-          var histMsg = 'Last: ' + last.from + ' \\u2192 ' + last.to;
+          const last = state.switchHistory[0];
+          const histMsg = 'Last: ' + last.from + ' \\u2192 ' + last.to;
           if (state.switchHistory.length > 1) histMsg += ' (+' + (state.switchHistory.length - 1) + ' more)';
           showToast(histMsg, 'info');
         } else {
@@ -1280,15 +1258,15 @@ ${pureFnBlock}
   });
 
   // Search input handler
-  document.getElementById('search-input').addEventListener('input', function(e) {
+  document.getElementById('search-input').addEventListener('input', (e) => {
     searchQuery = e.target.value;
     selectedIndex = 0;
     renderBranches();
   });
 
   function moveSelection(delta) {
-    var branches = getDisplayBranches();
-    var newIndex = selectedIndex + delta;
+    const branches = getDisplayBranches();
+    const newIndex = selectedIndex + delta;
     if (newIndex >= 0 && newIndex < branches.length) {
       selectedIndex = newIndex;
       renderBranches();
@@ -1296,18 +1274,18 @@ ${pureFnBlock}
   }
 
   // ── Click Handlers ─────────────────────────────────────────────
-  document.getElementById('branch-list').addEventListener('click', function(e) {
-    var item = e.target.closest('.branch-item');
+  document.getElementById('branch-list').addEventListener('click', (e) => {
+    const item = e.target.closest('.branch-item');
     if (!item) return;
-    var idx = parseInt(item.getAttribute('data-index'), 10);
+    const idx = parseInt(item.getAttribute('data-index'), 10);
     if (isNaN(idx)) return;
     selectedIndex = idx;
     renderBranches();
 
     // Double-click to switch with confirmation
     if (e.detail === 2) {
-      var branches = getDisplayBranches();
-      var br = branches[idx];
+      const branches = getDisplayBranches();
+      const br = branches[idx];
       if (br && !br.isDeleted && br.name !== state.currentBranch) {
         sendAction('switchBranch', { branch: br.name });
         showToast('Switching to ' + br.name + '...', 'info');
@@ -1315,25 +1293,25 @@ ${pureFnBlock}
     }
   });
 
-  document.getElementById('confirm-overlay').addEventListener('click', function(e) {
+  document.getElementById('confirm-overlay').addEventListener('click', (e) => {
     if (e.target === this) hideConfirm();
   });
 
   // Tab clicks
-  document.getElementById('tab-bar').addEventListener('click', function(e) {
-    var tab = e.target.closest('.tab');
+  document.getElementById('tab-bar').addEventListener('click', (e) => {
+    const tab = e.target.closest('.tab');
     if (!tab) return;
-    var projectId = tab.getAttribute('data-project-id');
+    const projectId = tab.getAttribute('data-project-id');
     if (projectId) switchTab(projectId);
   });
 
   // ── Preferences Bar ─────────────────────────────────────────────
   function renderPrefsBar() {
     // Insert prefs controls into footer if not already there
-    var footer = document.getElementById('footer');
-    var existing = document.getElementById('prefs-bar');
+    const footer = document.getElementById('footer');
+    const existing = document.getElementById('prefs-bar');
     if (!existing) {
-      var div = document.createElement('span');
+      const div = document.createElement('span');
       div.id = 'prefs-bar';
       div.style.cssText = 'display:flex;gap:6px;align-items:center;margin-left:auto;';
       div.innerHTML =
@@ -1347,23 +1325,23 @@ ${pureFnBlock}
   }
 
   // Prefs bar click handler
-  document.getElementById('footer').addEventListener('click', function(e) {
-    var sortBtn = e.target.closest('[data-sort]');
+  document.getElementById('footer').addEventListener('click', (e) => {
+    const sortBtn = e.target.closest('[data-sort]');
     if (sortBtn) {
       sortOrder = sortBtn.getAttribute('data-sort');
       savePrefs({ sortOrder: sortOrder });
-      var sortBtns = document.querySelectorAll('[data-sort]');
-      for (var i = 0; i < sortBtns.length; i++) {
+      const sortBtns = document.querySelectorAll('[data-sort]');
+      for (let i = 0; i < sortBtns.length; i++) {
         sortBtns[i].className = 'pref-btn' + (sortBtns[i].getAttribute('data-sort') === sortOrder ? ' active' : '');
       }
       renderBranches();
       return;
     }
     if (e.target.id === 'pin-selected-btn') {
-      var branches = getDisplayBranches();
+      const branches = getDisplayBranches();
       if (branches.length > 0 && selectedIndex < branches.length) {
-        var bn = branches[selectedIndex].name;
-        var idx = pinnedBranches.indexOf(bn);
+        const bn = branches[selectedIndex].name;
+        const idx = pinnedBranches.indexOf(bn);
         if (idx === -1) {
           pinnedBranches.push(bn);
           showToast('Pinned: ' + bn, 'success');
@@ -1379,7 +1357,7 @@ ${pureFnBlock}
     if (e.target.id === 'toggle-sidebar-btn') {
       sidebarCollapsed = !sidebarCollapsed;
       savePrefs({ sidebarCollapsed: sidebarCollapsed });
-      var layout = document.querySelector('.layout');
+      const layout = document.querySelector('.layout');
       if (sidebarCollapsed) {
         layout.classList.add('sidebar-collapsed');
       } else {
@@ -1391,20 +1369,20 @@ ${pureFnBlock}
   });
 
   // ── Sidebar Toggle (header) ───────────────────────────────────
-  document.getElementById('sidebar-toggle').addEventListener('click', function() {
+  document.getElementById('sidebar-toggle').addEventListener('click', () => {
     sidebarCollapsed = !sidebarCollapsed;
     savePrefs({ sidebarCollapsed: sidebarCollapsed });
-    var layout = document.querySelector('.layout');
+    const layout = document.querySelector('.layout');
     layout.classList.toggle('sidebar-collapsed', sidebarCollapsed);
-    var btn = document.getElementById('toggle-sidebar-btn');
+    const btn = document.getElementById('toggle-sidebar-btn');
     if (btn) btn.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
   });
 
   // ── Copy button delegation ────────────────────────────────────
-  document.addEventListener('click', function(e) {
-    var copyBtn = e.target.closest('.copy-btn');
+  document.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.copy-btn');
     if (!copyBtn) return;
-    var text = copyBtn.getAttribute('data-copy');
+    const text = copyBtn.getAttribute('data-copy');
     if (text) {
       e.preventDefault();
       e.stopPropagation();

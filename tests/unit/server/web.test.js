@@ -1447,7 +1447,7 @@ describe('getWebDashboardHtml', () => {
     it('should show all branches without visible count limit', () => {
       const html = getWebDashboardHtml(4000);
       // Web UI iterates all branches without a count limit
-      assert.ok(html.includes('for (var i = 0; i < branches.length; i++)'));
+      assert.ok(html.includes('for (let i = 0; i < branches.length; i++)'));
       // No visibleBranchCount limiter in web render
       assert.ok(!html.includes('visibleBranchCount'));
     });
