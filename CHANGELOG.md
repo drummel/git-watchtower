@@ -1,3 +1,10 @@
+## [1.10.6](https://github.com/drummel/git-watchtower/compare/v1.10.5...v1.10.6) (2026-04-03)
+
+
+### Bug Fixes
+
+* consolidate 19 UI state variables into single ui object ([d471fb2](https://github.com/drummel/git-watchtower/commit/d471fb292b9e87ef6e8f16ea6983981b8718ebc0))
+
 ## [1.10.5](https://github.com/drummel/git-watchtower/compare/v1.10.4...v1.10.5) (2026-04-03)
 
 
