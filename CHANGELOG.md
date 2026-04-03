@@ -1,3 +1,10 @@
+## [1.10.4](https://github.com/drummel/git-watchtower/compare/v1.10.3...v1.10.4) (2026-04-03)
+
+
+### Bug Fixes
+
+* use real newlines in SSE keepalive comment ([b875d4f](https://github.com/drummel/git-watchtower/commit/b875d4ff14242b01944a5e8857b5d625197a2d4f))
+
 ## [1.10.3](https://github.com/drummel/git-watchtower/compare/v1.10.2...v1.10.3) (2026-04-03)
 
 
