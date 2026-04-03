@@ -9,7 +9,6 @@
  */
 function getDashboardCss() {
   return `
-<style>
   :root {
     --bg: #0d1117;
     --bg-surface: #161b22;

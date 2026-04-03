@@ -69,6 +69,16 @@ describe('getWebDashboardHtml', () => {
     assert.ok(html.includes('<title>Git Watchtower</title>'), 'Should have title');
   });
 
+  it('should not have duplicate wrapper tags from assembly', () => {
+    const html = getWebDashboardHtml(4000);
+    assert.equal((html.match(/<style>/g) || []).length, 1, 'Should have exactly one <style> tag');
+    assert.equal((html.match(/<\/style>/g) || []).length, 1, 'Should have exactly one </style> tag');
+    assert.equal((html.match(/<script>/g) || []).length, 1, 'Should have exactly one <script> tag');
+    assert.equal((html.match(/<\/script>/g) || []).length, 1, 'Should have exactly one </script> tag');
+    assert.equal((html.match(/<body>/g) || []).length, 1, 'Should have exactly one <body> tag');
+    assert.equal((html.match(/<\/body>/g) || []).length, 1, 'Should have exactly one </body> tag');
+  });
+
   it('should accept port parameter for API compatibility', () => {
     // Port is currently unused but accepted for backward compatibility
     assert.doesNotThrow(() => getWebDashboardHtml(4000));
