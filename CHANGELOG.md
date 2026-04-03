@@ -1,3 +1,11 @@
+## [1.10.2](https://github.com/drummel/git-watchtower/compare/v1.10.1...v1.10.2) (2026-04-03)
+
+
+### Bug Fixes
+
+* align badge pills in same row as timestamp in web UI ([2a92ac9](https://github.com/drummel/git-watchtower/commit/2a92ac9dde6954bf4857accdc3e063317c7626a0))
+* remove duplicate <style> tag from extracted CSS module ([ecb597a](https://github.com/drummel/git-watchtower/commit/ecb597a43d48d794e2735673981e0359e5181785))
+
 ## [1.10.1](https://github.com/drummel/git-watchtower/compare/v1.10.0...v1.10.1) (2026-04-02)
 
 
