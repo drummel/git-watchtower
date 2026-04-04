@@ -1,25 +1,25 @@
 /* Git Watchtower - Custom Starlight Styles */
 
 /* ============================================
-   Color System
+   Color System — warm neutral + green accent
    ============================================ */
 
 :root {
-  --sl-color-accent-low: #172554;
-  --sl-color-accent: #3b82f6;
-  --sl-color-accent-high: #bfdbfe;
+  /* Green accent — muted, professional, ties to git/terminal */
+  --sl-color-accent-low: #0c1f17;
+  --sl-color-accent: #22c55e;
+  --sl-color-accent-high: #bbf7d0;
   --sl-font-system-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
-  --gw-glow: rgba(59, 130, 246, 0.12);
+  --gw-glow: rgba(34, 197, 94, 0.08);
   --gw-border: var(--sl-color-gray-5);
-  --gw-card-bg: var(--sl-color-gray-7, var(--sl-color-gray-6));
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #dbeafe;
-  --sl-color-accent: #2563eb;
-  --sl-color-accent-high: #1e3a5f;
-  --gw-glow: rgba(37, 99, 235, 0.06);
+  --sl-color-accent-low: #dcfce7;
+  --sl-color-accent: #16a34a;
+  --sl-color-accent-high: #14532d;
+  --gw-glow: rgba(22, 163, 74, 0.05);
 }
 
 /* ============================================
@@ -27,12 +27,52 @@
    ============================================ */
 
 .hero {
-  padding-block: 2rem 2.5rem;
+  padding-block: 2.5rem 3rem;
 }
 
-/* Tighten hero buttons — less round, more professional */
-.hero .action {
+/* ============================================
+   Hero Buttons — clean, minimal, professional
+   ============================================ */
+
+.hero .sl-link-button {
   border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.95rem;
+  transition: all 0.15s ease;
+}
+
+/* Primary button — solid dark with accent text */
+.hero .sl-link-button.primary {
+  background: var(--sl-color-white);
+  color: var(--sl-color-black);
+  border: 1px solid transparent;
+}
+
+.hero .sl-link-button.primary:hover {
+  background: var(--sl-color-gray-1, #e5e5e5);
+}
+
+:root:not([data-theme='light']) .hero .sl-link-button.primary {
+  background: var(--sl-color-white);
+  color: #0a0a0a;
+}
+
+:root:not([data-theme='light']) .hero .sl-link-button.primary:hover {
+  background: #e5e5e5;
+}
+
+/* Secondary button — ghost / outline */
+.hero .sl-link-button:not(.primary) {
+  background: transparent;
+  color: var(--sl-color-gray-2, var(--sl-color-white));
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+.hero .sl-link-button:not(.primary):hover {
+  border-color: var(--sl-color-gray-3);
+  background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.03));
 }
 
 /* ============================================
@@ -52,12 +92,11 @@
   background: var(--sl-color-gray-6);
   border-radius: 8px;
   border: 1px solid var(--gw-border);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .install-command-inner:hover {
-  border-color: var(--sl-color-accent);
-  box-shadow: 0 0 20px var(--gw-glow);
+  border-color: var(--sl-color-gray-3);
 }
 
 .install-prompt {
@@ -83,20 +122,15 @@
 
 .screenshot {
   border: 1px solid var(--gw-border);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   margin-block: 2.5rem;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.12),
-    0 0 60px var(--gw-glow);
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease;
 }
 
 .screenshot:hover {
-  box-shadow:
-    0 8px 40px rgba(0, 0, 0, 0.18),
-    0 0 80px var(--gw-glow);
-  transform: translateY(-2px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.14);
 }
 
 .screenshot img {
@@ -113,17 +147,16 @@
   text-align: center;
   margin-top: 4rem;
   padding: 3rem 2rem;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--gw-glow), transparent 60%);
+  border-radius: 10px;
   border: 1px solid var(--gw-border);
 }
 
 .cta-link {
-  font-size: 1.15rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  font-weight: 500;
   color: var(--sl-color-accent);
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.15s ease;
 }
 
 .cta-link:hover {
@@ -149,12 +182,10 @@
    Global Refinements
    ============================================ */
 
-/* Smoother link transitions */
 a {
   transition: color 0.15s ease;
 }
 
-/* Better code block styling */
 :not(pre) > code {
   border-radius: 4px;
 }
