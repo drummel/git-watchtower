@@ -1,3 +1,10 @@
+## [1.10.8](https://github.com/drummel/git-watchtower/compare/v1.10.7...v1.10.8) (2026-04-04)
+
+
+### Bug Fixes
+
+* debounce search input to avoid excessive DOM rebuilds ([9730b55](https://github.com/drummel/git-watchtower/commit/9730b55731a607c7b81075bd09f2537246afc9b7))
+
 ## [1.10.7](https://github.com/drummel/git-watchtower/compare/v1.10.6...v1.10.7) (2026-04-04)
 
 
