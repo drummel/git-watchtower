@@ -588,4 +588,61 @@ describe('dashboard JS — DOM behavior', () => {
       assert.ok(!env.isModalOpen('update-overlay'), 'Update modal should NOT open while info modal is open');
     });
   });
+
+  describe('KEY_MAP dispatch', () => {
+    it('should navigate branches with j/k keys', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        branches: [
+          { name: 'alpha', lastCommitDate: '2025-01-01' },
+          { name: 'beta', lastCommitDate: '2025-01-02' },
+          { name: 'gamma', lastCommitDate: '2025-01-03' },
+        ],
+      }));
+
+      // Initially first branch is selected
+      let selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.ok(selected, 'A branch should be selected');
+      assert.equal(selected.textContent.trim(), 'alpha');
+
+      // Press j to move down
+      env.pressKey('j');
+      selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.equal(selected.textContent.trim(), 'beta', 'j should move selection down');
+
+      // Press k to move back up
+      env.pressKey('k');
+      selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.equal(selected.textContent.trim(), 'alpha', 'k should move selection up');
+    });
+
+    it('should open search with / key', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      const searchBar = env.document.getElementById('search-bar');
+      assert.ok(!searchBar.className.includes('active'), 'Search should start inactive');
+
+      env.pressKey('/');
+      assert.ok(searchBar.className.includes('active'), '/ should activate search bar');
+    });
+
+    it('should open modals via their shortcut keys', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      const shortcuts = [
+        { key: 'i', overlay: 'info-overlay' },
+        { key: 'l', overlay: 'log-viewer-overlay' },
+        { key: 'd', overlay: 'cleanup-overlay' },
+      ];
+
+      for (const { key, overlay } of shortcuts) {
+        env.pressKey(key);
+        assert.ok(env.isModalOpen(overlay), key + ' should open ' + overlay);
+        env.pressKey('Escape');
+        assert.ok(!env.isModalOpen(overlay), 'Escape should close ' + overlay);
+      }
+    });
+  });
 });

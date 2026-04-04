@@ -89,6 +89,28 @@ describe('getDashboardJs', () => {
     assert.ok(js.includes('function moveSelection('), 'Should have moveSelection');
   });
 
+  it('should contain KEY_MAP and KEY_ACTIONS for normal mode', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('const KEY_MAP = {'), 'Should have KEY_MAP object');
+    assert.ok(js.includes('const KEY_ACTIONS = {'), 'Should have KEY_ACTIONS object');
+    // Verify key bindings are present
+    const expectedKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'Enter', '/', 'p', 'f', 'b', 'i', 'l', 's', 'S', 'd', 'h', 'u', 'o', 'c', 'r', 'R', 'Escape'];
+    for (const key of expectedKeys) {
+      assert.ok(js.includes("'" + key + "'"), 'KEY_MAP should include ' + key);
+    }
+    // Verify action names
+    const expectedActions = ['moveDown', 'moveUp', 'selectBranch', 'search', 'pull', 'fetch', 'branchActions', 'info', 'logViewer', 'stash', 'cleanup'];
+    for (const action of expectedActions) {
+      assert.ok(js.includes(action), 'KEY_ACTIONS should include ' + action);
+    }
+  });
+
+  it('should dispatch normal mode keys via KEY_MAP + KEY_ACTIONS', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('KEY_MAP[e.key]'), 'Should look up action from KEY_MAP');
+    assert.ok(js.includes('KEY_ACTIONS[action]'), 'Should dispatch to KEY_ACTIONS');
+  });
+
   it('should contain action dispatch', () => {
     const js = getDashboardJs();
     assert.ok(js.includes('function sendAction('), 'Should have sendAction');
