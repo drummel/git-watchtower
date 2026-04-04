@@ -1176,7 +1176,7 @@ describe('renderUpdateModal', () => {
       updateAvailable: '2.5.0',
       updateModalVisible: true,
     });
-    assert.ok(text.includes('Update now'), 'Expected "Update now" option in modal');
+    assert.ok(text.includes('Update & restart'), 'Expected "Update & restart" option in modal');
     assert.ok(text.includes('Show update command'), 'Expected "Show update command" option in modal');
   });
 
