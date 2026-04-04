@@ -27,24 +27,12 @@
    ============================================ */
 
 .hero {
-  padding-block: 1rem 2rem;
+  padding-block: 2rem 2.5rem;
 }
 
-/* Make the hero terminal illustration larger and more prominent */
-[data-page-title="Git Watchtower"] .hero img {
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 8px 40px rgba(0, 0, 0, 0.35),
-    0 0 80px var(--gw-glow);
-  max-width: 100%;
-}
-
-:root[data-theme='light'] [data-page-title="Git Watchtower"] .hero img {
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.08),
-    0 8px 40px rgba(0, 0, 0, 0.1),
-    0 0 60px var(--gw-glow);
+/* Tighten hero buttons — less round, more professional */
+.hero .action {
+  border-radius: 6px;
 }
 
 /* ============================================
@@ -62,7 +50,7 @@
   gap: 0.75rem;
   padding: 0.85rem 1.75rem;
   background: var(--sl-color-gray-6);
-  border-radius: 9999px;
+  border-radius: 8px;
   border: 1px solid var(--gw-border);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }

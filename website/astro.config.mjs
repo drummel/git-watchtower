@@ -6,11 +6,6 @@ export default defineConfig({
     starlight({
       title: 'Git Watchtower',
       description: 'Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.',
-      logo: {
-        light: './src/assets/logo-light.svg',
-        dark: './src/assets/logo-dark.svg',
-        replacesTitle: false,
-      },
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/drummel/git-watchtower' },
         { icon: 'x.com', label: 'X', href: 'https://x.com/AdrianDrummond' },
