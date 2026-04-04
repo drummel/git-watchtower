@@ -1,3 +1,10 @@
+## [1.10.7](https://github.com/drummel/git-watchtower/compare/v1.10.6...v1.10.7) (2026-04-04)
+
+
+### Bug Fixes
+
+* extract keyboard mapping from handler into declarative KEY_MAP ([a2c91bf](https://github.com/drummel/git-watchtower/commit/a2c91bfe1ddfbaf22fdcec256446eafd544a7cd5))
+
 ## [1.10.6](https://github.com/drummel/git-watchtower/compare/v1.10.5...v1.10.6) (2026-04-03)
 
 
