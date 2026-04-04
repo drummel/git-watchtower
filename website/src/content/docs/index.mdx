@@ -6,8 +6,8 @@ hero:
   title: Keep tabs on your <br/> AI coding agents.
   tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents."
   image:
-    dark: ../../assets/logo-dark.svg
-    light: ../../assets/logo-light.svg
+    dark: ../../assets/hero-terminal.svg
+    light: ../../assets/hero-terminal.svg
   actions:
     - text: Get Started
       link: /guides/quick-start/
@@ -21,7 +21,10 @@ hero:
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
 <div class="install-command">
-  <code>npm install -g git-watchtower</code>
+  <div class="install-command-inner">
+    <span class="install-prompt">$</span>
+    <code>npm install -g git-watchtower</code>
+  </div>
 </div>
 
 ## Why Git Watchtower?
@@ -36,7 +39,7 @@ Git Watchtower watches your remote and notifies you when branches are updated. P
 
 ## Features
 
-<CardGrid>
+<CardGrid stagger>
   <Card title="Live Branch Monitoring" icon="telescope">
     Real-time sparklines showing commit activity, ahead/behind counters, and status badges. Know instantly when a branch gets new commits.
   </Card>
@@ -57,9 +60,19 @@ Git Watchtower watches your remote and notifies you when branches are updated. P
   </Card>
 </CardGrid>
 
+## Web Dashboard
+
+Launch a browser-based dashboard alongside the terminal UI:
+
+```bash
+git-watchtower --web
+```
+
 <div class="screenshot">
   <img src="/git-watchtower-web-ui.png" alt="Git Watchtower web dashboard showing branch management and PR workflows" />
 </div>
+
+The web dashboard provides real-time branch monitoring, PR workflows, CI status, session statistics, and more. When running multiple instances across different projects, they coordinate automatically into a single multi-project dashboard.
 
 ## Built-in Dev Server
 
@@ -75,10 +88,6 @@ git-watchtower --mode command -c "npm run dev"
 # Branch monitoring only
 git-watchtower --no-server
 ```
-
-## Multi-Project Dashboard
-
-Running multiple AI agents across different repos? Each `git-watchtower --web` instance coordinates automatically into a single multi-project dashboard. No configuration needed.
 
 ## Quick Start
 
@@ -96,8 +105,8 @@ npx git-watchtower
 
 On first run, you'll be guided through a configuration wizard.
 
-<div style="text-align: center; margin-top: 4rem;">
-  <a href="/guides/quick-start/" style="font-size: 1.1rem;">Read the full documentation →</a>
+<div class="cta-section">
+  <a href="/guides/quick-start/" class="cta-link">Read the full documentation →</a>
 </div>
 
 <div style="text-align: center; margin-top: 6rem;">

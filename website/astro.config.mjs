@@ -11,10 +11,10 @@ export default defineConfig({
         dark: './src/assets/logo-dark.svg',
         replacesTitle: false,
       },
-      social: {
-        github: 'https://github.com/drummel/git-watchtower',
-        'x.com': 'https://x.com/AdrianDrummond',
-      },
+      social: [
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/drummel/git-watchtower' },
+        { icon: 'x.com', label: 'X', href: 'https://x.com/AdrianDrummond' },
+      ],
       customCss: ['./src/styles/custom.css'],
       sidebar: [
         {
