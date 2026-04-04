@@ -976,7 +976,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support l key to open log viewer', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'l':"));
+      assert.ok(html.includes("'l':") && html.includes("'logViewer'"));
       assert.ok(html.includes('showLogViewer'));
     });
 
@@ -1030,7 +1030,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support b key to open branch actions', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'b':"));
+      assert.ok(html.includes("'b':") && html.includes("'branchActions'"));
       assert.ok(html.includes('showBranchActions'));
     });
 
@@ -1104,7 +1104,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support i key to open info panel', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'i':"));
+      assert.ok(html.includes("'i':") && html.includes("'info'"));
       assert.ok(html.includes('showInfo'));
     });
 
@@ -1192,7 +1192,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support S key to open stash dialog', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'S':"));
+      assert.ok(html.includes("'S':") && html.includes("'stash'"));
       assert.ok(html.includes('showStashDialog'));
     });
 
@@ -1387,7 +1387,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support d key to open cleanup', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'd':"));
+      assert.ok(html.includes("'d':") && html.includes("'cleanup'"));
       assert.ok(html.includes('showCleanup'));
     });
 

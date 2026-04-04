@@ -1049,6 +1049,99 @@ ${pureFnBlock}
   }
 
   // ── Keyboard ───────────────────────────────────────────────────
+
+  // Key-to-action mapping for normal mode.
+  // Declarative — easy to test, extend, and share with TUI.
+  const KEY_MAP = {
+    'j':         'moveDown',
+    'ArrowDown': 'moveDown',
+    'k':         'moveUp',
+    'ArrowUp':   'moveUp',
+    'Enter':     'selectBranch',
+    '/':         'search',
+    'p':         'pull',
+    'f':         'fetch',
+    'r':         'reloadBrowsers',
+    'R':         'restartServer',
+    'c':         'toggleCasino',
+    'o':         'openBrowser',
+    'h':         'showHistory',
+    'u':         'undo',
+    's':         'toggleSound',
+    'b':         'branchActions',
+    'i':         'info',
+    'l':         'logViewer',
+    'S':         'stash',
+    'd':         'cleanup',
+    'Escape':    'escape',
+  };
+
+  // Action handlers for normal mode.
+  // Each receives the KeyboardEvent for cases that need it.
+  const KEY_ACTIONS = {
+    moveDown()    { moveSelection(1); },
+    moveUp()      { moveSelection(-1); },
+    selectBranch() {
+      const branches = getDisplayBranches();
+      if (branches.length > 0 && ui.selectedIndex < branches.length) {
+        const b = branches[ui.selectedIndex];
+        if (b.isDeleted) {
+          showToast('Cannot switch to a deleted branch', 'error');
+        } else if (b.name === state.currentBranch) {
+          showToast('Already on ' + b.name, 'info');
+        } else {
+          sendAction('switchBranch', { branch: b.name });
+          showToast('Switching to ' + b.name + '...', 'info');
+        }
+      }
+    },
+    search() {
+      ui.searchMode = true;
+      ui.searchQuery = '';
+      ui.selectedIndex = 0;
+      document.getElementById('search-bar').className = 'search-bar active';
+      const input = document.getElementById('search-input');
+      input.value = '';
+      input.focus();
+    },
+    pull()           { sendAction('pull'); showToast('Pulling current branch...', 'info'); },
+    fetch()          { sendAction('fetch'); showToast('Fetching all branches...', 'info'); },
+    reloadBrowsers() {
+      if (state && state.serverMode === 'static') {
+        sendAction('reloadBrowsers');
+        showToast('Reloading browsers...', 'info');
+      }
+    },
+    restartServer() {
+      if (state && state.serverMode === 'command') {
+        showConfirm('Restart Server', 'Restart the dev server process?', () => {
+          sendAction('restartServer');
+          showToast('Restarting server...', 'info');
+        }, { label: 'Restart' });
+      }
+    },
+    toggleCasino()   { sendAction('toggleCasino'); },
+    openBrowser()    { sendAction('openBrowser'); showToast('Opening in browser...', 'info'); },
+    showHistory() {
+      if (state && state.switchHistory && state.switchHistory.length > 0) {
+        const last = state.switchHistory[0];
+        let histMsg = 'Last: ' + last.from + ' \\u2192 ' + last.to;
+        if (state.switchHistory.length > 1) histMsg += ' (+' + (state.switchHistory.length - 1) + ' more)';
+        showToast(histMsg, 'info');
+      } else {
+        showToast('No switch history yet', 'info');
+      }
+    },
+    undo()           { sendAction('undo'); showToast('Undoing last switch...', 'info'); },
+    toggleSound()    { sendAction('toggleSound'); showToast(state && state.soundEnabled ? 'Sound off' : 'Sound on', 'info'); },
+    branchActions()  { showBranchActions(); },
+    info()           { showInfo(); },
+    logViewer()      { showLogViewer(); },
+    stash()          { showStashDialog(null); },
+    cleanup()        { showCleanup(); },
+    escape()         { /* no-op in normal mode */ },
+  };
+
   document.addEventListener('keydown', (e) => {
     // Ignore when typing in input fields (other than search)
     if (e.target.tagName === 'INPUT' && e.target.id !== 'search-input') return;
@@ -1139,127 +1232,11 @@ ${pureFnBlock}
       return;
     }
 
-    // Normal mode
-    switch (e.key) {
-      case 'j':
-      case 'ArrowDown':
-        e.preventDefault();
-        moveSelection(1);
-        break;
-      case 'k':
-      case 'ArrowUp':
-        e.preventDefault();
-        moveSelection(-1);
-        break;
-      case 'Enter':
-        e.preventDefault();
-        const branches = getDisplayBranches();
-        if (branches.length > 0 && ui.selectedIndex < branches.length) {
-          const b = branches[ui.selectedIndex];
-          if (b.isDeleted) {
-            showToast('Cannot switch to a deleted branch', 'error');
-          } else if (b.name === state.currentBranch) {
-            showToast('Already on ' + b.name, 'info');
-          } else {
-            sendAction('switchBranch', { branch: b.name });
-            showToast('Switching to ' + b.name + '...', 'info');
-          }
-        }
-        break;
-      case '/':
-        e.preventDefault();
-        ui.searchMode = true;
-        ui.searchQuery = '';
-        ui.selectedIndex = 0;
-        document.getElementById('search-bar').className = 'search-bar active';
-        const input = document.getElementById('search-input');
-        input.value = '';
-        input.focus();
-        break;
-      case 'p':
-        e.preventDefault();
-        sendAction('pull');
-        showToast('Pulling current branch...', 'info');
-        break;
-      case 'f':
-        e.preventDefault();
-        sendAction('fetch');
-        showToast('Fetching all branches...', 'info');
-        break;
-      case 'r':
-        e.preventDefault();
-        if (state && state.serverMode === 'static') {
-          sendAction('reloadBrowsers');
-          showToast('Reloading browsers...', 'info');
-        }
-        break;
-      case 'R':
-        e.preventDefault();
-        if (state && state.serverMode === 'command') {
-          showConfirm(
-            'Restart Server',
-            'Restart the dev server process?',
-            () => {
-              sendAction('restartServer');
-              showToast('Restarting server...', 'info');
-            },
-            { label: 'Restart' }
-          );
-        }
-        break;
-      case 'c':
-        e.preventDefault();
-        sendAction('toggleCasino');
-        break;
-      case 'o':
-        e.preventDefault();
-        sendAction('openBrowser');
-        showToast('Opening in browser...', 'info');
-        break;
-      case 'h':
-        e.preventDefault();
-        if (state && state.switchHistory && state.switchHistory.length > 0) {
-          const last = state.switchHistory[0];
-          const histMsg = 'Last: ' + last.from + ' \\u2192 ' + last.to;
-          if (state.switchHistory.length > 1) histMsg += ' (+' + (state.switchHistory.length - 1) + ' more)';
-          showToast(histMsg, 'info');
-        } else {
-          showToast('No switch history yet', 'info');
-        }
-        break;
-      case 'u':
-        e.preventDefault();
-        sendAction('undo');
-        showToast('Undoing last switch...', 'info');
-        break;
-      case 's':
-        e.preventDefault();
-        sendAction('toggleSound');
-        showToast(state && state.soundEnabled ? 'Sound off' : 'Sound on', 'info');
-        break;
-      case 'b':
-        e.preventDefault();
-        showBranchActions();
-        break;
-      case 'i':
-        e.preventDefault();
-        showInfo();
-        break;
-      case 'l':
-        e.preventDefault();
-        showLogViewer();
-        break;
-      case 'S':
-        e.preventDefault();
-        showStashDialog(null);
-        break;
-      case 'd':
-        e.preventDefault();
-        showCleanup();
-        break;
-      case 'Escape':
-        e.preventDefault();
-        break;
+    // Normal mode — look up action from key map
+    const action = KEY_MAP[e.key];
+    if (action && KEY_ACTIONS[action]) {
+      e.preventDefault();
+      KEY_ACTIONS[action](e);
     }
   });
 
