@@ -1241,10 +1241,12 @@ ${pureFnBlock}
   });
 
   // Search input handler
+  let _searchDebounce = null;
   document.getElementById('search-input').addEventListener('input', (e) => {
     ui.searchQuery = e.target.value;
     ui.selectedIndex = 0;
-    renderBranches();
+    clearTimeout(_searchDebounce);
+    _searchDebounce = setTimeout(() => renderBranches(), 80);
   });
 
   function moveSelection(delta) {
