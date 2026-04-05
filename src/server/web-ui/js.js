@@ -968,7 +968,7 @@ ${pureFnBlock}
     } else {
       html += '<div class="confirm-actions">';
       html += '<button class="confirm-btn" id="update-dismiss">Dismiss</button>';
-      html += '<button class="confirm-btn primary" id="update-install">Update Now</button>';
+      html += '<button class="confirm-btn primary" id="update-install">Update &amp; Restart</button>';
       html += '</div>';
     }
     document.getElementById('update-content').innerHTML = html;

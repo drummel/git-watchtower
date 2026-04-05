@@ -1485,7 +1485,7 @@ function renderUpdateModal(state, write) {
   const updateCmd = 'npm i -g git-watchtower';
 
   const options = [
-    'Update now',
+    'Update & restart',
     'Show update command',
   ];
   const selectedIdx = state.updateModalSelectedIndex || 0;
