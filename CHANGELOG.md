@@ -1,3 +1,10 @@
+## [1.10.10](https://github.com/drummel/git-watchtower/compare/v1.10.9...v1.10.10) (2026-04-05)
+
+
+### Bug Fixes
+
+* deduplicate sidebar toggle logic into a single function ([8f81574](https://github.com/drummel/git-watchtower/commit/8f81574b455d1035a3e5c09d5987aa67db6e25dd))
+
 ## [1.10.9](https://github.com/drummel/git-watchtower/compare/v1.10.8...v1.10.9) (2026-04-05)
 
 
