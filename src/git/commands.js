@@ -160,6 +160,9 @@ async function fetch(remoteName = 'origin', options = {}) {
   const args = ['fetch'];
   if (all) args.push('--all');
   if (prune) args.push('--prune');
+  // When not fetching all remotes, target the specified remote.
+  // (`git fetch --all <remote>` is redundant and can confuse older git versions.)
+  if (!all && remoteName) args.push(remoteName);
 
   try {
     await execGit(args, { cwd, timeout: FETCH_TIMEOUT });
