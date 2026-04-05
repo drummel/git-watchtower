@@ -159,6 +159,13 @@ describe('isGitDirectory', () => {
     assert.strictEqual(isGitDirectory('.gitattributes'), false);
   });
 
+  it('should return false for nested .git-prefixed paths like .github/', () => {
+    assert.strictEqual(isGitDirectory('src/.github/workflows/ci.yml'), false);
+    assert.strictEqual(isGitDirectory('src/.gitignore'), false);
+    assert.strictEqual(isGitDirectory('src/.gitattributes'), false);
+    assert.strictEqual(isGitDirectory('deep/path/.gitlab-ci.yml'), false);
+  });
+
   it('should return false for files with .git in name', () => {
     assert.strictEqual(isGitDirectory('my.github.io'), false);
     assert.strictEqual(isGitDirectory('.gitkeep'), false);
