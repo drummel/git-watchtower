@@ -1,3 +1,10 @@
+## [1.10.12](https://github.com/drummel/git-watchtower/compare/v1.10.11...v1.10.12) (2026-04-05)
+
+
+### Bug Fixes
+
+* isGitDirectory false-positive on .github, .gitignore, etc. ([b46941a](https://github.com/drummel/git-watchtower/commit/b46941a7d967e52d4fa883474467e6101f652019))
+
 ## [1.10.11](https://github.com/drummel/git-watchtower/compare/v1.10.10...v1.10.11) (2026-04-05)
 
 
