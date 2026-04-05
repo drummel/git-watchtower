@@ -151,9 +151,6 @@ module.exports = {
   loadConfig: configLoader.loadConfig,
   saveConfig: configLoader.saveConfig,
   deleteConfig: configLoader.deleteConfig,
-  applyCliArgs: configLoader.applyCliArgs,
-  parseCliArgs: configLoader.parseCliArgs,
-  ensureConfig: configLoader.ensureConfig,
 
   // Server process management
   ProcessManager: serverProcess.ProcessManager,
