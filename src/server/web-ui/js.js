@@ -1340,28 +1340,21 @@ ${pureFnBlock}
       return;
     }
     if (e.target.id === 'toggle-sidebar-btn') {
-      sidebarCollapsed = !sidebarCollapsed;
-      savePrefs({ sidebarCollapsed: sidebarCollapsed });
-      const layout = document.querySelector('.layout');
-      if (sidebarCollapsed) {
-        layout.classList.add('sidebar-collapsed');
-      } else {
-        layout.classList.remove('sidebar-collapsed');
-      }
-      e.target.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
+      toggleSidebar();
       return;
     }
   });
 
-  // ── Sidebar Toggle (header) ───────────────────────────────────
-  document.getElementById('sidebar-toggle').addEventListener('click', () => {
+  // ── Sidebar Toggle ────────────────────────────────────────────
+  function toggleSidebar() {
     sidebarCollapsed = !sidebarCollapsed;
-    savePrefs({ sidebarCollapsed: sidebarCollapsed });
-    const layout = document.querySelector('.layout');
-    layout.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+    savePrefs({ sidebarCollapsed });
+    document.querySelector('.layout').classList.toggle('sidebar-collapsed', sidebarCollapsed);
     const btn = document.getElementById('toggle-sidebar-btn');
     if (btn) btn.className = 'pref-btn' + (sidebarCollapsed ? ' active' : '');
-  });
+  }
+
+  document.getElementById('sidebar-toggle').addEventListener('click', toggleSidebar);
 
   // ── Copy button delegation ────────────────────────────────────
   document.addEventListener('click', (e) => {
