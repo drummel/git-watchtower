@@ -1,3 +1,10 @@
+## [1.10.11](https://github.com/drummel/git-watchtower/compare/v1.10.10...v1.10.11) (2026-04-05)
+
+
+### Bug Fixes
+
+* honor remoteName in fetch() when all:false ([e3cc20d](https://github.com/drummel/git-watchtower/commit/e3cc20d6c558dacb003d1bff253fd8d1ca99bc95))
+
 ## [1.10.10](https://github.com/drummel/git-watchtower/compare/v1.10.9...v1.10.10) (2026-04-05)
 
 
