@@ -1,3 +1,10 @@
+## [1.10.9](https://github.com/drummel/git-watchtower/compare/v1.10.8...v1.10.9) (2026-04-05)
+
+
+### Bug Fixes
+
+* escape single quotes in escHtml to prevent attribute breakout ([46cd857](https://github.com/drummel/git-watchtower/commit/46cd857b60c752511ff703b19854ea4336be309d)), closes [#39](https://github.com/drummel/git-watchtower/issues/39)
+
 ## [1.10.8](https://github.com/drummel/git-watchtower/compare/v1.10.7...v1.10.8) (2026-04-04)
 
 
