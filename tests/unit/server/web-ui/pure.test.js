@@ -33,11 +33,19 @@ describe('escHtml', () => {
     assert.equal(escHtml('say "hello"'), 'say &quot;hello&quot;');
   });
 
+  it('should escape single quotes', () => {
+    assert.equal(escHtml("it's"), 'it&#39;s');
+  });
+
   it('should escape all special characters together', () => {
     assert.equal(
       escHtml('<a href="x&y">'),
       '&lt;a href=&quot;x&amp;y&quot;&gt;'
     );
+  });
+
+  it('should handle strings with only special characters', () => {
+    assert.equal(escHtml('<>&"\''), '&lt;&gt;&amp;&quot;&#39;');
   });
 
   it('should return empty string for null', () => {
@@ -60,9 +68,6 @@ describe('escHtml', () => {
     assert.equal(escHtml('hello world'), 'hello world');
   });
 
-  it('should handle strings with only special characters', () => {
-    assert.equal(escHtml('<>&"'), '&lt;&gt;&amp;&quot;');
-  });
 });
 
 // ── timeAgo ─────────────────────────────────────────────────────────
