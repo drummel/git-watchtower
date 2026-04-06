@@ -2530,6 +2530,7 @@ function setupKeyboardInput() {
           const child = spawn('npm', ['i', '-g', 'git-watchtower'], {
             stdio: 'ignore',
             detached: false,
+            shell: process.platform === 'win32',
           });
           child.on('close', (code) => {
             store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
