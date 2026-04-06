@@ -1,3 +1,10 @@
+## [1.10.17](https://github.com/drummel/git-watchtower/compare/v1.10.16...v1.10.17) (2026-04-06)
+
+
+### Bug Fixes
+
+* use shell mode for npm spawn on Windows to resolve .cmd shims ([c2d4db6](https://github.com/drummel/git-watchtower/commit/c2d4db6fba395a013ab9fcf550636506d8f64778))
+
 ## [1.10.16](https://github.com/drummel/git-watchtower/compare/v1.10.15...v1.10.16) (2026-04-06)
 
 
