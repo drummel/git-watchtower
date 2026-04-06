@@ -1,3 +1,10 @@
+## [1.10.15](https://github.com/drummel/git-watchtower/compare/v1.10.14...v1.10.15) (2026-04-06)
+
+
+### Bug Fixes
+
+* bind static server to localhost instead of all interfaces ([166690c](https://github.com/drummel/git-watchtower/commit/166690cda9a9001a3872d7148d666de393f00009))
+
 ## [1.10.14](https://github.com/drummel/git-watchtower/compare/v1.10.13...v1.10.14) (2026-04-06)
 
 
