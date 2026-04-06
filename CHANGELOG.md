@@ -1,3 +1,10 @@
+## [1.10.14](https://github.com/drummel/git-watchtower/compare/v1.10.13...v1.10.14) (2026-04-06)
+
+
+### Bug Fixes
+
+* kill entire process group on dev-server stop to prevent orphans ([ac50c10](https://github.com/drummel/git-watchtower/commit/ac50c1076890309f1e50de17cd548a71d118d41c))
+
 ## [1.10.13](https://github.com/drummel/git-watchtower/compare/v1.10.12...v1.10.13) (2026-04-06)
 
 
