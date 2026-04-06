@@ -1,3 +1,10 @@
+## [1.10.18](https://github.com/drummel/git-watchtower/compare/v1.10.17...v1.10.18) (2026-04-06)
+
+
+### Bug Fixes
+
+* cap IPC receive buffers to prevent unbounded memory growth ([f9128b9](https://github.com/drummel/git-watchtower/commit/f9128b934e95d50a7893fa3b1c90aebba94d65e1))
+
 ## [1.10.17](https://github.com/drummel/git-watchtower/compare/v1.10.16...v1.10.17) (2026-04-06)
 
 
