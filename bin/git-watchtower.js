@@ -656,6 +656,9 @@ function startServerProcess() {
     env: { ...process.env, FORCE_COLOR: '1' },
     shell: isWindows,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // On Unix, create a new process group so we can kill the entire tree
+    // (e.g. npm -> node -> next). On Windows, taskkill /t handles this.
+    detached: !isWindows,
   };
 
   try {
@@ -713,13 +716,19 @@ function stopServerProcess() {
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
   } else {
-    proc.kill('SIGTERM');
+    // Kill the entire process group (negative PID) so that
+    // grandchildren (e.g. npm -> node -> vite) are also terminated.
+    try {
+      process.kill(-proc.pid, 'SIGTERM');
+    } catch (e) {
+      // Process group may already be dead
+    }
     // Force kill after grace period if process hasn't exited
     const forceKillTimeout = setTimeout(() => {
       try {
-        proc.kill('SIGKILL');
+        process.kill(-proc.pid, 'SIGKILL');
       } catch (e) {
-        // Process may already be dead
+        // Process group may already be dead
       }
     }, 3000);
 
