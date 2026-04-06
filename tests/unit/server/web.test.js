@@ -652,6 +652,52 @@ describe('WebDashboardServer', () => {
     });
   });
 
+  describe('Host header validation (DNS-rebinding protection)', () => {
+    beforeEach(async () => {
+      server = new WebDashboardServer({ store, port: 19884 });
+      await server.start();
+    });
+
+    function httpGetWithHost(urlPath, hostHeader) {
+      return new Promise((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${server.port}${urlPath}`, {
+          headers: { 'Connection': 'close', 'Host': hostHeader },
+        }, (res) => {
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, body }));
+        });
+        req.on('error', reject);
+      });
+    }
+
+    it('should allow requests with Host: localhost', async () => {
+      const res = await httpGetWithHost('/', `localhost:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should allow requests with Host: 127.0.0.1', async () => {
+      const res = await httpGetWithHost('/', `127.0.0.1:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should allow requests with Host: [::1]', async () => {
+      const res = await httpGetWithHost('/', `[::1]:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should reject requests with attacker-controlled Host header', async () => {
+      const res = await httpGetWithHost('/', 'evil.example.com');
+      assert.equal(res.status, 403);
+      assert.ok(res.body.includes('Forbidden'));
+    });
+
+    it('should reject requests with Host header containing subdomain of localhost', async () => {
+      const res = await httpGetWithHost('/', `attacker.localhost:${server.port}`);
+      assert.equal(res.status, 403);
+    });
+  });
+
   describe('multi-project support', () => {
     it('should set and get local project ID', () => {
       server = new WebDashboardServer({ store });
