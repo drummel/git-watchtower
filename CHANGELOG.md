@@ -1,3 +1,10 @@
+## [1.10.16](https://github.com/drummel/git-watchtower/compare/v1.10.15...v1.10.16) (2026-04-06)
+
+
+### Bug Fixes
+
+* add Host-header validation to prevent DNS-rebinding attacks ([ca9bd70](https://github.com/drummel/git-watchtower/commit/ca9bd70fef536d8f0ee84dc6639e1807bcaff1fc))
+
 ## [1.10.15](https://github.com/drummel/git-watchtower/compare/v1.10.14...v1.10.15) (2026-04-06)
 
 
