@@ -27,6 +27,13 @@ const crypto = require('crypto');
 const WATCHTOWER_DIR = path.join(os.homedir(), '.watchtower');
 
 /**
+ * Maximum IPC receive buffer size (1 MiB). Connections that exceed
+ * this without a complete newline-delimited message are dropped to
+ * prevent unbounded memory growth from malformed or malicious peers.
+ */
+const MAX_IPC_BUFFER = 1024 * 1024;
+
+/**
  * Lock file path
  */
 const LOCK_FILE = path.join(WATCHTOWER_DIR, 'web.lock');
@@ -268,6 +275,10 @@ class Coordinator {
 
     socket.on('data', (data) => {
       buffer += data.toString();
+      if (buffer.length > MAX_IPC_BUFFER) {
+        socket.destroy();
+        return;
+      }
       let newlineIdx;
       while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, newlineIdx);
@@ -413,6 +424,10 @@ class Worker {
 
       this.socket.on('data', (data) => {
         this._buffer += data.toString();
+        if (this._buffer.length > MAX_IPC_BUFFER) {
+          this.socket.destroy();
+          return;
+        }
         let idx;
         while ((idx = this._buffer.indexOf('\n')) !== -1) {
           const line = this._buffer.slice(0, idx);
