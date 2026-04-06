@@ -2082,6 +2082,14 @@ let server = null;
 
 function createStaticServer() {
   return http.createServer((req, res) => {
+  // DNS-rebinding protection: reject requests with non-loopback Host headers
+  const host = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden: invalid Host header');
+    return;
+  }
+
   const url = new URL(req.url, `http://localhost:${PORT}`);
   let pathname = url.pathname;
   const logPath = pathname; // Keep original for logging
