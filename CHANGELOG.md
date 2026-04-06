@@ -1,3 +1,10 @@
+## [1.10.13](https://github.com/drummel/git-watchtower/compare/v1.10.12...v1.10.13) (2026-04-06)
+
+
+### Bug Fixes
+
+* use execFile native timeout to kill hung git processes ([1ecbfa1](https://github.com/drummel/git-watchtower/commit/1ecbfa17554079f1cf98aa475cb8adbfed335f50))
+
 ## [1.10.12](https://github.com/drummel/git-watchtower/compare/v1.10.11...v1.10.12) (2026-04-05)
 
 
