@@ -3282,7 +3282,7 @@ async function start() {
   } else {
     // Static mode
     server = createStaticServer();
-    server.listen(PORT, () => {
+    server.listen(PORT, '127.0.0.1', () => {
       addLog(`Server started on http://localhost:${PORT}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
       addLog(`Current branch: ${store.get('currentBranch')}`, 'info');
