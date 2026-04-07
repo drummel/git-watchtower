@@ -8,17 +8,33 @@ const { version: currentVersion } = require('../../package.json');
 
 /**
  * Compare two semver version strings
+ * Handles missing segments (treated as 0), >3-part versions,
+ * and prerelease suffixes (e.g. 1.8.0-beta.1 < 1.8.0).
  * @param {string} a - First version (e.g. '1.8.0')
  * @param {string} b - Second version (e.g. '1.7.0')
  * @returns {number} 1 if a > b, -1 if a < b, 0 if equal
  */
 function compareVersions(a, b) {
-  const pa = a.split('.').map(Number);
-  const pb = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] > pb[i]) return 1;
-    if (pa[i] < pb[i]) return -1;
+  // Split off prerelease suffix (e.g. '1.8.0-beta.1' → core='1.8.0', pre='beta.1')
+  const [coreA, preA] = a.split('-', 2);
+  const [coreB, preB] = b.split('-', 2);
+
+  const pa = coreA.split('.').map(Number);
+  const pb = coreB.split('.').map(Number);
+  const len = Math.max(pa.length, pb.length);
+
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
   }
+
+  // Core versions are equal — check prerelease.
+  // A version with a prerelease tag is less than one without (semver §11).
+  if (preA && !preB) return -1;
+  if (!preA && preB) return 1;
+
   return 0;
 }
 
