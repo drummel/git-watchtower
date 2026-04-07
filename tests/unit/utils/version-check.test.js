@@ -27,6 +27,27 @@ describe('compareVersions', () => {
     assert.equal(compareVersions('1.7.1', '1.7.0'), 1);
     assert.equal(compareVersions('1.7.0', '1.7.1'), -1);
   });
+
+  it('should treat missing segments as 0', () => {
+    assert.equal(compareVersions('1.8', '1.8.0'), 0);
+    assert.equal(compareVersions('1.8', '1.8.1'), -1);
+    assert.equal(compareVersions('1.8.1', '1.8'), 1);
+  });
+
+  it('should handle >3-part versions', () => {
+    assert.equal(compareVersions('1.8.0.1', '1.8.0.2'), -1);
+    assert.equal(compareVersions('1.8.0.2', '1.8.0.1'), 1);
+    assert.equal(compareVersions('1.8.0.1', '1.8.0.1'), 0);
+  });
+
+  it('should treat prerelease as less than release (semver §11)', () => {
+    assert.equal(compareVersions('1.8.0-beta.1', '1.8.0'), -1);
+    assert.equal(compareVersions('1.8.0', '1.8.0-beta.1'), 1);
+  });
+
+  it('should treat two prereleases with same core as equal', () => {
+    assert.equal(compareVersions('1.8.0-alpha', '1.8.0-beta'), 0);
+  });
 });
 
 describe('UPDATE_CHECK_INTERVAL', () => {
