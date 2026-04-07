@@ -1,3 +1,10 @@
+## [1.10.20](https://github.com/drummel/git-watchtower/compare/v1.10.19...v1.10.20) (2026-04-07)
+
+
+### Bug Fixes
+
+* serialize ProcessManager.restart() with mutex to prevent race condition ([1e44743](https://github.com/drummel/git-watchtower/commit/1e447435c0d439503d6429567a315faa3d45611d))
+
 ## [1.10.19](https://github.com/drummel/git-watchtower/compare/v1.10.18...v1.10.19) (2026-04-07)
 
 
