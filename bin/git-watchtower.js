@@ -368,6 +368,14 @@ const cliArgs = parseCliArgs(process.argv.slice(2), {
   onHelp: (v) => { console.log(getHelpText(v)); process.exit(0); },
 });
 
+if (cliArgs.errors.length > 0) {
+  for (const err of cliArgs.errors) {
+    console.error(`Error: ${err}`);
+  }
+  console.error('\nRun git-watchtower --help for usage information.');
+  process.exit(1);
+}
+
 // Configuration - these will be set after config is loaded
 let SERVER_MODE = 'static';      // 'static' | 'command' | 'none'
 let NO_SERVER = false;            // Derived from SERVER_MODE === 'none'

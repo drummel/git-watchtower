@@ -44,9 +44,11 @@ describe('parseArgs', () => {
       assert.equal(result.mode, 'command');
     });
 
-    it('should ignore invalid mode values', () => {
+    it('should reject invalid mode values with error', () => {
       const result = parseArgs(['--mode', 'invalid']);
       assert.equal(result.mode, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('--mode'));
     });
   });
 
@@ -61,24 +63,29 @@ describe('parseArgs', () => {
       assert.equal(result.port, 3001);
     });
 
-    it('should reject port 0', () => {
+    it('should reject port 0 with error', () => {
       const result = parseArgs(['--port', '0']);
       assert.equal(result.port, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('--port'));
     });
 
-    it('should reject negative port', () => {
+    it('should reject negative port with error', () => {
       const result = parseArgs(['--port', '-1']);
       assert.equal(result.port, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject port >= 65536', () => {
+    it('should reject port >= 65536 with error', () => {
       const result = parseArgs(['--port', '65536']);
       assert.equal(result.port, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject non-numeric port', () => {
+    it('should reject non-numeric port with error', () => {
       const result = parseArgs(['--port', 'abc']);
       assert.equal(result.port, null);
+      assert.equal(result.errors.length, 1);
     });
   });
 
@@ -156,19 +163,22 @@ describe('parseArgs', () => {
       assert.equal(result.pollInterval, 10000);
     });
 
-    it('should reject zero interval', () => {
+    it('should reject zero interval with error', () => {
       const result = parseArgs(['--poll-interval', '0']);
       assert.equal(result.pollInterval, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject negative interval', () => {
+    it('should reject negative interval with error', () => {
       const result = parseArgs(['--poll-interval', '-5000']);
       assert.equal(result.pollInterval, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject non-numeric interval', () => {
+    it('should reject non-numeric interval with error', () => {
       const result = parseArgs(['--poll-interval', 'fast']);
       assert.equal(result.pollInterval, null);
+      assert.equal(result.errors.length, 1);
     });
   });
 
@@ -191,14 +201,16 @@ describe('parseArgs', () => {
       assert.equal(result.visibleBranches, 10);
     });
 
-    it('should reject zero', () => {
+    it('should reject zero with error', () => {
       const result = parseArgs(['--visible-branches', '0']);
       assert.equal(result.visibleBranches, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject negative', () => {
+    it('should reject negative with error', () => {
       const result = parseArgs(['--visible-branches', '-3']);
       assert.equal(result.visibleBranches, null);
+      assert.equal(result.errors.length, 1);
     });
   });
 
@@ -228,24 +240,28 @@ describe('parseArgs', () => {
       assert.equal(result.webPort, 5000);
     });
 
-    it('should reject port 0', () => {
+    it('should reject port 0 with error', () => {
       const result = parseArgs(['--web-port', '0']);
       assert.equal(result.webPort, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject negative port', () => {
+    it('should reject negative port with error', () => {
       const result = parseArgs(['--web-port', '-1']);
       assert.equal(result.webPort, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject port >= 65536', () => {
+    it('should reject port >= 65536 with error', () => {
       const result = parseArgs(['--web-port', '65536']);
       assert.equal(result.webPort, null);
+      assert.equal(result.errors.length, 1);
     });
 
-    it('should reject non-numeric port', () => {
+    it('should reject non-numeric port with error', () => {
       const result = parseArgs(['--web-port', 'abc']);
       assert.equal(result.webPort, null);
+      assert.equal(result.errors.length, 1);
     });
   });
 
@@ -300,6 +316,57 @@ describe('parseArgs', () => {
       assert.equal(result.sound, false);
       assert.equal(result.pollInterval, 10000);
       assert.equal(result.casino, true);
+    });
+  });
+
+  describe('error reporting', () => {
+    it('should report unknown flags', () => {
+      const result = parseArgs(['--unknown-flag']);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('Unknown option'));
+      assert.ok(result.errors[0].includes('--unknown-flag'));
+    });
+
+    it('should report multiple errors', () => {
+      const result = parseArgs(['--port', 'abc', '--bogus', '--web-port', 'xyz']);
+      assert.equal(result.errors.length, 3);
+    });
+
+    it('should have empty errors array for valid args', () => {
+      const result = parseArgs(['--port', '3000', '--web']);
+      assert.deepEqual(result.errors, []);
+    });
+
+    it('should have empty errors array for empty args', () => {
+      const result = parseArgs([]);
+      assert.deepEqual(result.errors, []);
+    });
+
+    it('should not treat non-flag positional args as unknown', () => {
+      // positional args (no leading dash) are silently ignored
+      const result = parseArgs(['somepath']);
+      assert.deepEqual(result.errors, []);
+    });
+
+    it('should report missing value for --static-dir', () => {
+      const result = parseArgs(['--static-dir']);
+      assert.equal(result.staticDir, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('Missing value'));
+    });
+
+    it('should report missing value for --command', () => {
+      const result = parseArgs(['--command']);
+      assert.equal(result.command, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('Missing value'));
+    });
+
+    it('should report missing value for --remote', () => {
+      const result = parseArgs(['--remote']);
+      assert.equal(result.remote, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('Missing value'));
     });
   });
 
