@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/drummel/git-watchtower/compare/v1.10.20...v1.11.0) (2026-04-07)
+
+
+### Features
+
+* auto-restart after successful update instead of requiring manual restart ([504ad7c](https://github.com/drummel/git-watchtower/commit/504ad7c0a73df0c09f77ca525f459bd0a5888b6b))
+
 ## [1.10.20](https://github.com/drummel/git-watchtower/compare/v1.10.19...v1.10.20) (2026-04-07)
 
 
