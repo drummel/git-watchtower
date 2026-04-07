@@ -1,3 +1,10 @@
+## [1.11.2](https://github.com/drummel/git-watchtower/compare/v1.11.1...v1.11.2) (2026-04-07)
+
+
+### Bug Fixes
+
+* handle prereleases and variable-length versions in compareVersions ([4acfd28](https://github.com/drummel/git-watchtower/commit/4acfd28adbfbe7a00047790f5d082e075e6f9636))
+
 ## [1.11.1](https://github.com/drummel/git-watchtower/compare/v1.11.0...v1.11.1) (2026-04-07)
 
 
