@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const { ServerError } = require('../utils/errors');
+const { Mutex } = require('../utils/async');
 
 /**
  * @typedef {Object} ServerProcessState
@@ -90,6 +91,7 @@ class ProcessManager {
     this.crashed = false;
     this.logs = [];
     this.command = '';
+    this._restartMutex = new Mutex();
   }
 
   /**
@@ -283,13 +285,15 @@ class ProcessManager {
    * @returns {Promise<{success: boolean, error?: Error, pid?: number}>}
    */
   async restart() {
-    const command = this.command;
-    this.stop();
+    return this._restartMutex.withLock(async () => {
+      const command = this.command;
+      this.stop();
 
-    // Wait before restarting
-    await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
+      // Wait before restarting
+      await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
 
-    return this.start(command);
+      return this.start(command);
+    });
   }
 
   /**
