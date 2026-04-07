@@ -1,3 +1,10 @@
+## [1.10.19](https://github.com/drummel/git-watchtower/compare/v1.10.18...v1.10.19) (2026-04-07)
+
+
+### Bug Fixes
+
+* report errors for unknown flags and malformed CLI values ([bbb6bdb](https://github.com/drummel/git-watchtower/commit/bbb6bdb39282433944e61a6a003f716c58f78ce8))
+
 ## [1.10.18](https://github.com/drummel/git-watchtower/compare/v1.10.17...v1.10.18) (2026-04-06)
 
 
