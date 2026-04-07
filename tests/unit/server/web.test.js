@@ -1370,7 +1370,7 @@ describe('getWebDashboardHtml', () => {
     it('should include update install button', () => {
       const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('update-install'));
-      assert.ok(html.includes('Update Now'));
+      assert.ok(html.includes('Update &amp; Restart'));
     });
 
     it('should include update dismiss button', () => {
