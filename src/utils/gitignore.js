@@ -125,19 +125,12 @@ function loadGitignorePatterns(searchPaths) {
  * @returns {boolean} - True if the file is in the .git directory
  */
 function isGitDirectory(filename) {
-  if (filename === '.git' || filename.startsWith('.git/') || filename.startsWith('.git\\')) {
-    return true;
-  }
-
   // Normalize path separators for cross-platform support
-  const normalizedPath = filename.replace(/\\/g, '/');
+  const p = filename.replace(/\\/g, '/');
 
-  // Check if path contains .git directory anywhere
-  if (normalizedPath.includes('/.git/') || normalizedPath.includes('/.git')) {
-    return true;
-  }
-
-  return false;
+  // Match exactly ".git" as a path segment, not ".github", ".gitignore", etc.
+  // Valid matches: ".git", ".git/hooks/pre-commit", "src/.git/config"
+  return /^\.git(\/|$)/.test(p) || /\/\.git(\/|$)/.test(p);
 }
 
 /**

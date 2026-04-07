@@ -5,7 +5,6 @@
 
 const { execFile } = require('child_process');
 const { GitError } = require('../utils/errors');
-const { withTimeout } = require('../utils/async');
 
 // Default timeout for git operations (30 seconds)
 const DEFAULT_TIMEOUT = 30000;
@@ -44,10 +43,12 @@ async function execGit(args, options = {}) {
   const command = `git ${args.join(' ')}`;
 
   try {
-    const promise = new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       execFile('git', args, {
         cwd,
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+        timeout,          // kill child process after timeout ms
+        killSignal: 'SIGTERM',
       }, (error, stdout, stderr) => {
         if (error) {
           error.stderr = stderr;
@@ -58,23 +59,13 @@ async function execGit(args, options = {}) {
       });
     });
 
-    const result = await withTimeout(
-      promise,
-      timeout,
-      `Git command timed out after ${timeout}ms: ${command}`
-    );
-
     return {
       stdout: result.stdout.trim(),
       stderr: result.stderr.trim(),
     };
   } catch (error) {
-    // Handle timeout error
-    if (error.message && error.message.includes('timed out')) {
-      throw new GitError(error.message, 'GIT_TIMEOUT', { command });
-    }
-
-    // Handle exec error
+    // execFile sets error.killed = true when the process is killed due to
+    // timeout.  GitError.fromExecError already maps killed → GIT_TIMEOUT.
     throw GitError.fromExecError(error, command, error.stderr);
   }
 }
@@ -160,6 +151,9 @@ async function fetch(remoteName = 'origin', options = {}) {
   const args = ['fetch'];
   if (all) args.push('--all');
   if (prune) args.push('--prune');
+  // When not fetching all remotes, target the specified remote.
+  // (`git fetch --all <remote>` is redundant and can confuse older git versions.)
+  if (!all && remoteName) args.push(remoteName);
 
   try {
     await execGit(args, { cwd, timeout: FETCH_TIMEOUT });

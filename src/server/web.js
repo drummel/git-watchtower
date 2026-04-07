@@ -342,6 +342,17 @@ class WebDashboardServer {
    * @private
    */
   _handleRequest(req, res) {
+    // DNS-rebinding protection: only allow requests whose Host header
+    // matches a known loopback address.  Without this, a malicious page
+    // could resolve an attacker-controlled hostname to 127.0.0.1 and
+    // POST to /api/action to trigger destructive actions.
+    const host = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden: invalid Host header');
+      return;
+    }
+
     const url = new URL(req.url, `http://localhost:${this.port}`);
     const pathname = url.pathname;
 

@@ -22,6 +22,7 @@ const { version: PACKAGE_VERSION } = require('../../package.json');
  * @property {boolean} casino - Enable casino mode
  * @property {boolean} web - Enable web dashboard mode
  * @property {number|null} webPort - Web dashboard port override
+ * @property {string[]} errors - Validation errors encountered during parsing
  */
 
 /**
@@ -55,6 +56,8 @@ function parseArgs(argv, options = {}) {
     // Actions
     init: false,
     casino: false,
+    // Parsing errors
+    errors: [],
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -63,21 +66,33 @@ function parseArgs(argv, options = {}) {
       const mode = args[i + 1];
       if (['static', 'command', 'none'].includes(mode)) {
         result.mode = mode;
+      } else {
+        result.errors.push(`Invalid value for ${args[i]}: "${mode || ''}" (expected: static, command, none)`);
       }
       i++;
     } else if (args[i] === '--port' || args[i] === '-p') {
       const portValue = parseInt(args[i + 1], 10);
       if (!isNaN(portValue) && portValue > 0 && portValue < 65536) {
         result.port = portValue;
+      } else {
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: port number 1-65535)`);
       }
       i++;
     } else if (args[i] === '--no-server' || args[i] === '-n') {
       result.noServer = true;
     } else if (args[i] === '--static-dir') {
-      result.staticDir = args[i + 1];
+      if (args[i + 1] && !args[i + 1].startsWith('-')) {
+        result.staticDir = args[i + 1];
+      } else {
+        result.errors.push(`Missing value for ${args[i]}`);
+      }
       i++;
     } else if (args[i] === '--command' || args[i] === '-c') {
-      result.command = args[i + 1];
+      if (args[i + 1] !== undefined) {
+        result.command = args[i + 1];
+      } else {
+        result.errors.push(`Missing value for ${args[i]}`);
+      }
       i++;
     } else if (args[i] === '--restart-on-switch') {
       result.restartOnSwitch = true;
@@ -86,7 +101,11 @@ function parseArgs(argv, options = {}) {
     }
     // Git settings
     else if (args[i] === '--remote' || args[i] === '-r') {
-      result.remote = args[i + 1];
+      if (args[i + 1] && !args[i + 1].startsWith('-')) {
+        result.remote = args[i + 1];
+      } else {
+        result.errors.push(`Missing value for ${args[i]}`);
+      }
       i++;
     } else if (args[i] === '--auto-pull') {
       result.autoPull = true;
@@ -96,6 +115,8 @@ function parseArgs(argv, options = {}) {
       const interval = parseInt(args[i + 1], 10);
       if (!isNaN(interval) && interval > 0) {
         result.pollInterval = interval;
+      } else {
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: positive integer in ms)`);
       }
       i++;
     }
@@ -108,6 +129,8 @@ function parseArgs(argv, options = {}) {
       const count = parseInt(args[i + 1], 10);
       if (!isNaN(count) && count > 0) {
         result.visibleBranches = count;
+      } else {
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: positive integer)`);
       }
       i++;
     } else if (args[i] === '--casino') {
@@ -120,6 +143,8 @@ function parseArgs(argv, options = {}) {
       const webPortValue = parseInt(args[i + 1], 10);
       if (!isNaN(webPortValue) && webPortValue > 0 && webPortValue < 65536) {
         result.webPort = webPortValue;
+      } else {
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: port number 1-65535)`);
       }
       i++;
     }
@@ -134,6 +159,10 @@ function parseArgs(argv, options = {}) {
       if (options.onHelp) {
         options.onHelp(PACKAGE_VERSION);
       }
+    }
+    // Unknown flag
+    else if (args[i].startsWith('-')) {
+      result.errors.push(`Unknown option: ${args[i]}`);
     }
   }
   return result;

@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const { ServerError } = require('../utils/errors');
+const { Mutex } = require('../utils/async');
 
 /**
  * @typedef {Object} ServerProcessState
@@ -90,6 +91,7 @@ class ProcessManager {
     this.crashed = false;
     this.logs = [];
     this.command = '';
+    this._restartMutex = new Mutex();
   }
 
   /**
@@ -174,6 +176,9 @@ class ProcessManager {
       env: { ...process.env, FORCE_COLOR: '1' },
       shell: isWindows,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // On Unix, create a new process group so we can kill the entire tree
+      // (e.g. npm -> node -> next). On Windows, taskkill /t handles this.
+      detached: !isWindows,
     };
 
     try {
@@ -247,14 +252,16 @@ class ProcessManager {
       }
     } else {
       try {
-        proc.kill('SIGTERM');
+        // Kill the entire process group (negative PID) so that
+        // grandchildren (e.g. npm -> node -> vite) are also terminated.
+        process.kill(-proc.pid, 'SIGTERM');
 
         // Force kill after grace period
         const forceKillTimeout = setTimeout(() => {
           try {
-            proc.kill('SIGKILL');
+            process.kill(-proc.pid, 'SIGKILL');
           } catch (e) {
-            // Process may already be dead
+            // Process group may already be dead
           }
         }, KILL_GRACE_PERIOD);
 
@@ -263,7 +270,7 @@ class ProcessManager {
           clearTimeout(forceKillTimeout);
         });
       } catch (e) {
-        // Process may already be dead
+        // Process group may already be dead
       }
     }
 
@@ -278,13 +285,15 @@ class ProcessManager {
    * @returns {Promise<{success: boolean, error?: Error, pid?: number}>}
    */
   async restart() {
-    const command = this.command;
-    this.stop();
+    return this._restartMutex.withLock(async () => {
+      const command = this.command;
+      this.stop();
 
-    // Wait before restarting
-    await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
+      // Wait before restarting
+      await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
 
-    return this.start(command);
+      return this.start(command);
+    });
   }
 
   /**
