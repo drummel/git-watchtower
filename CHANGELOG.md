@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/drummel/git-watchtower/compare/v1.11.0...v1.11.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* validate URLs before passing to OS open command ([feb098e](https://github.com/drummel/git-watchtower/commit/feb098e076261b4b45fb8d6530ff945396c8ecb5))
+
 # [1.11.0](https://github.com/drummel/git-watchtower/compare/v1.10.20...v1.11.0) (2026-04-07)
 
 
