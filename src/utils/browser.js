@@ -6,6 +6,22 @@
 const { execFile } = require('child_process');
 
 /**
+ * Validate that a string is a safe URL to pass to OS open commands.
+ * Rejects URLs containing shell metacharacters that could lead to
+ * command injection when passed through cmd.exe on Windows.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isSafeUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  // Must start with http://, https://, or file://
+  if (!/^https?:\/\/|^file:\/\//i.test(url)) return false;
+  // Reject shell metacharacters that cmd.exe would interpret
+  if (/[&|<>^"!%]/.test(url)) return false;
+  return true;
+}
+
+/**
  * Open a URL in the user's default browser.
  * Cross-platform: macOS (open), Windows (start), Linux (xdg-open).
  * Uses execFile (no shell) to prevent command injection via crafted URLs.
@@ -13,6 +29,13 @@ const { execFile } = require('child_process');
  * @param {function} [onError] - Optional error callback (receives Error)
  */
 function openInBrowser(url, onError) {
+  if (!isSafeUrl(url)) {
+    if (onError) {
+      onError(new Error(`Refusing to open unsafe URL: ${url}`));
+    }
+    return;
+  }
+
   const platform = process.platform;
   let command;
   let args;
@@ -22,7 +45,7 @@ function openInBrowser(url, onError) {
     args = [url];
   } else if (platform === 'win32') {
     // On Windows, 'start' is a shell built-in, so we must use cmd.exe.
-    // The URL is passed as a separate argument, not interpolated into a string.
+    // URL is validated above to reject shell metacharacters.
     command = 'cmd.exe';
     args = ['/c', 'start', '', url];
   } else {
@@ -37,4 +60,4 @@ function openInBrowser(url, onError) {
   });
 }
 
-module.exports = { openInBrowser };
+module.exports = { openInBrowser, isSafeUrl };
