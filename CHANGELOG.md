@@ -1,3 +1,10 @@
+## [1.11.5](https://github.com/drummel/git-watchtower/compare/v1.11.4...v1.11.5) (2026-04-08)
+
+
+### Bug Fixes
+
+* run validateConfig on loaded config files ([482dd5f](https://github.com/drummel/git-watchtower/commit/482dd5fc8d7e8f12d6915c6775279d7e83918304))
+
 ## [1.11.4](https://github.com/drummel/git-watchtower/compare/v1.11.3...v1.11.4) (2026-04-08)
 
 
