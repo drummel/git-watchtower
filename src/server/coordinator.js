@@ -318,7 +318,15 @@ class Coordinator {
    */
   _handleWorkerMessage(socket, msg, setWorkerId, getWorkerId) {
     switch (msg.type) {
-      case 'register':
+      case 'register': {
+        // Prevent re-registration: a socket that already registered cannot change its ID
+        const currentId = getWorkerId();
+        if (currentId) break;
+
+        // Reject if this ID is already claimed by a different socket
+        const existingSocket = this.workerSockets.get(msg.id);
+        if (existingSocket && existingSocket !== socket) break;
+
         setWorkerId(msg.id);
         this.workerSockets.set(msg.id, socket);
         this.projects.set(msg.id, {
@@ -331,6 +339,7 @@ class Coordinator {
         this._sendMessage(socket, { type: 'registered', id: msg.id });
         this._notifyProjectsChanged();
         break;
+      }
 
       case 'state': {
         // Validate sender — only accept state for the worker's own registered ID
