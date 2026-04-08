@@ -1,3 +1,10 @@
+## [1.11.4](https://github.com/drummel/git-watchtower/compare/v1.11.3...v1.11.4) (2026-04-08)
+
+
+### Bug Fixes
+
+* prevent coordinator register message spoofing ([d750fce](https://github.com/drummel/git-watchtower/commit/d750fceebdfd87916d3d2a0de5734ba4d2cace81))
+
 ## [1.11.3](https://github.com/drummel/git-watchtower/compare/v1.11.2...v1.11.3) (2026-04-08)
 
 
