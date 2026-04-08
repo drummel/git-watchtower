@@ -2110,10 +2110,23 @@ function createStaticServer() {
   pathname = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
   let filePath = path.join(STATIC_DIR, pathname);
 
-  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal
-  const resolvedPath = path.resolve(filePath);
+  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal.
+  // Use realpath to follow symlinks — without this, a symlink inside STATIC_DIR
+  // pointing outside would bypass the startsWith check.
   const resolvedStaticDir = path.resolve(STATIC_DIR);
-  if (!resolvedPath.startsWith(resolvedStaticDir + path.sep) && resolvedPath !== resolvedStaticDir) {
+  let resolvedPath = path.resolve(filePath);
+  try {
+    resolvedPath = fs.realpathSync(resolvedPath);
+  } catch {
+    // File doesn't exist — path.resolve is sufficient since there's no symlink to follow.
+  }
+  let realStaticDir;
+  try {
+    realStaticDir = fs.realpathSync(resolvedStaticDir);
+  } catch {
+    realStaticDir = resolvedStaticDir;
+  }
+  if (!resolvedPath.startsWith(realStaticDir + path.sep) && resolvedPath !== realStaticDir) {
     res.writeHead(403, { 'Content-Type': 'text/html' });
     res.end('<h1>403 Forbidden</h1>');
     addServerLog(`GET ${logPath} → 403 (path traversal blocked)`, true);
