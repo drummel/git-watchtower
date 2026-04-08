@@ -63,33 +63,9 @@ function injectLiveReload(html) {
   return html;
 }
 
-/**
- * Parse git diff --stat output into { added, deleted } counts.
- * @param {string} diffOutput - Output from `git diff --stat`
- * @returns {{ added: number, deleted: number }}
- */
-function parseDiffStats(diffOutput) {
-  if (!diffOutput) return { added: 0, deleted: 0 };
-
-  // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
-  const match = diffOutput.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
-  if (match) {
-    return { added: parseInt(match[1], 10), deleted: parseInt(match[2], 10) };
-  }
-
-  // Try to match just insertions or just deletions
-  const insertMatch = diffOutput.match(/(\d+) insertions?\(\+\)/);
-  const deleteMatch = diffOutput.match(/(\d+) deletions?\(-\)/);
-  return {
-    added: insertMatch ? parseInt(insertMatch[1], 10) : 0,
-    deleted: deleteMatch ? parseInt(deleteMatch[1], 10) : 0,
-  };
-}
-
 module.exports = {
   MIME_TYPES,
   getMimeType,
   LIVE_RELOAD_SCRIPT,
   injectLiveReload,
-  parseDiffStats,
 };

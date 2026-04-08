@@ -336,6 +336,8 @@ async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
  * @returns {{added: number, deleted: number}}
  */
 function parseDiffStats(diffStatOutput) {
+  if (!diffStatOutput) return { added: 0, deleted: 0 };
+
   // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
   const match = diffStatOutput.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
   if (match) {
