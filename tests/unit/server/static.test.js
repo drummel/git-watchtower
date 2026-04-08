@@ -4,8 +4,8 @@ const {
   getMimeType,
   MIME_TYPES,
   injectLiveReload,
-  parseDiffStats,
 } = require('../../../src/server/static');
+const { parseDiffStats } = require('../../../src/git/commands');
 
 describe('MIME_TYPES', () => {
   it('should include common web types', () => {
