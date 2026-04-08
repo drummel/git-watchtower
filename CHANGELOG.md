@@ -1,3 +1,31 @@
+## [1.11.3](https://github.com/drummel/git-watchtower/compare/v1.11.2...v1.11.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* use realpath in static server path traversal guard to block symlink escape ([ee26e3f](https://github.com/drummel/git-watchtower/commit/ee26e3f492230b879ab11fa96d6db87145a37ee2))
+
+## [1.11.2](https://github.com/drummel/git-watchtower/compare/v1.11.1...v1.11.2) (2026-04-07)
+
+
+### Bug Fixes
+
+* handle prereleases and variable-length versions in compareVersions ([4acfd28](https://github.com/drummel/git-watchtower/commit/4acfd28adbfbe7a00047790f5d082e075e6f9636))
+
+## [1.11.1](https://github.com/drummel/git-watchtower/compare/v1.11.0...v1.11.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* validate URLs before passing to OS open command ([feb098e](https://github.com/drummel/git-watchtower/commit/feb098e076261b4b45fb8d6530ff945396c8ecb5))
+
+# [1.11.0](https://github.com/drummel/git-watchtower/compare/v1.10.20...v1.11.0) (2026-04-07)
+
+
+### Features
+
+* auto-restart after successful update instead of requiring manual restart ([504ad7c](https://github.com/drummel/git-watchtower/commit/504ad7c0a73df0c09f77ca525f459bd0a5888b6b))
+
 ## [1.10.20](https://github.com/drummel/git-watchtower/compare/v1.10.19...v1.10.20) (2026-04-07)
 
 

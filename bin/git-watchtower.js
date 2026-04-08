@@ -2544,7 +2544,7 @@ function setupKeyboardInput() {
       if (key === '\r' || key === '\n') {
         const selectedIdx = store.get('updateModalSelectedIndex') || 0;
         if (selectedIdx === 0) {
-          // Update now — run npm i -g git-watchtower
+          // Update & restart — run npm i -g git-watchtower, then re-exec
           store.setState({ updateInProgress: true });
           render();
           const { spawn } = require('child_process');
@@ -2557,8 +2557,8 @@ function setupKeyboardInput() {
             store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
             if (code === 0) {
               store.setState({ updateAvailable: null });
-              addLog('Successfully updated git-watchtower! Restart to use new version.', 'update');
-              showFlash('Updated! Restart to use new version.');
+              addLog('Successfully updated git-watchtower! Restarting...', 'update');
+              restartProcess();
             } else {
               addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
               showFlash('Update failed. Try manually: npm i -g git-watchtower');
@@ -3000,6 +3000,36 @@ async function handleWebAction(action, payload) {
           }
         }
         break;
+      case 'checkUpdate':
+        if (payload && payload.install) {
+          store.setState({ updateInProgress: true });
+          render();
+          const { spawn: spawnUpdate } = require('child_process');
+          const updateChild = spawnUpdate('npm', ['i', '-g', 'git-watchtower'], {
+            stdio: 'ignore',
+            detached: false,
+          });
+          updateChild.on('close', (code) => {
+            store.setState({ updateInProgress: false });
+            if (code === 0) {
+              store.setState({ updateAvailable: null });
+              sendResult(true, 'Updated! Restarting...');
+              addLog('Successfully updated git-watchtower! Restarting...', 'update');
+              restartProcess();
+            } else {
+              sendResult(false, `Update failed (exit code ${code})`);
+              addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
+              render();
+            }
+          });
+          updateChild.on('error', (err2) => {
+            store.setState({ updateInProgress: false });
+            sendResult(false, err2.message);
+            addLog(`Update failed: ${err2.message}`, 'error');
+            render();
+          });
+        }
+        break;
     }
   } catch (err) {
     addLog(`Web action error: ${err.message}`, 'error');
@@ -3132,6 +3162,47 @@ function stopWebDashboard() {
   projectId = null;
 
   return wasPort;
+}
+
+// ============================================================================
+// Restart after update
+// ============================================================================
+
+/**
+ * Restart the process after a successful update by re-execing with the same
+ * arguments. Cleans up terminal state and spawns a replacement process,
+ * then exits the current one.
+ */
+function restartProcess() {
+  // Restore terminal state
+  write(ansi.showCursor);
+  write(ansi.restoreScreen);
+  restoreTerminalTitle();
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+
+  // Stop server, watcher, polling
+  if (fileWatcher) fileWatcher.close();
+  if (pollIntervalId) clearTimeout(pollIntervalId);
+  if (SERVER_MODE === 'command') stopServerProcess();
+  else if (SERVER_MODE === 'static') {
+    clients.forEach(client => client.end());
+    clients.clear();
+  }
+  stopWebDashboard();
+
+  console.log('\n♻ Restarting git-watchtower...\n');
+
+  const { spawn: spawnChild } = require('child_process');
+  const child = spawnChild(process.argv[0], process.argv.slice(1), {
+    stdio: 'inherit',
+    detached: false,
+  });
+  child.on('error', () => {
+    console.error('Failed to restart. Please run git-watchtower manually.');
+    process.exit(1);
+  });
+  // Forward the child's exit code when it finishes
+  child.on('close', (code) => process.exit(code || 0));
 }
 
 // ============================================================================
