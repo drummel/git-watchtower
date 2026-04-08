@@ -1,3 +1,10 @@
+## [1.11.3](https://github.com/drummel/git-watchtower/compare/v1.11.2...v1.11.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* use realpath in static server path traversal guard to block symlink escape ([ee26e3f](https://github.com/drummel/git-watchtower/commit/ee26e3f492230b879ab11fa96d6db87145a37ee2))
+
 ## [1.11.2](https://github.com/drummel/git-watchtower/compare/v1.11.1...v1.11.2) (2026-04-07)
 
 
