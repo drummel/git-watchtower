@@ -71,8 +71,9 @@ function loadConfig(projectRoot) {
     return null;
   }
 
-  // Migrate old format if needed
-  return migrateConfig(raw);
+  // Migrate old format if needed, then validate
+  const migrated = migrateConfig(raw);
+  return validateConfig(migrated);
 }
 
 /**
