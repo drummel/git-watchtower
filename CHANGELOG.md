@@ -1,3 +1,10 @@
+## [1.11.9](https://github.com/drummel/git-watchtower/compare/v1.11.8...v1.11.9) (2026-04-09)
+
+
+### Bug Fixes
+
+* suppress EIO error on stdin during shutdown ([a3b4224](https://github.com/drummel/git-watchtower/commit/a3b42249a90e12f6eeaed1b5431b0707481fdd88))
+
 ## [1.11.8](https://github.com/drummel/git-watchtower/compare/v1.11.7...v1.11.8) (2026-04-09)
 
 
