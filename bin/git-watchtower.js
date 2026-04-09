@@ -1097,7 +1097,9 @@ function write(str) {
 function setTerminalTitle(title) {
   // Set terminal tab/window title using ANSI escape sequence
   // \x1b]0;title\x07 sets both window and tab title (most compatible)
-  process.stdout.write(`\x1b]0;${title}\x07`);
+  // Strip control characters to prevent escape sequence injection
+  const safe = String(title).replace(/[\x00-\x1f\x7f]/g, '');
+  process.stdout.write(`\x1b]0;${safe}\x07`);
 }
 
 function restoreTerminalTitle() {
