@@ -1,3 +1,11 @@
+## [1.11.8](https://github.com/drummel/git-watchtower/compare/v1.11.7...v1.11.8) (2026-04-09)
+
+
+### Bug Fixes
+
+* sanitize terminal title to prevent escape sequence injection ([0d4fd1b](https://github.com/drummel/git-watchtower/commit/0d4fd1b05166a5501704aed2980a23b28315ede2))
+* use segment-based hostname matching in detectPlatform ([bbfab31](https://github.com/drummel/git-watchtower/commit/bbfab3198c441648522a31f4199184efadbdb0b4))
+
 ## [1.11.7](https://github.com/drummel/git-watchtower/compare/v1.11.6...v1.11.7) (2026-04-09)
 
 
