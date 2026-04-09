@@ -1,3 +1,10 @@
+## [1.11.6](https://github.com/drummel/git-watchtower/compare/v1.11.5...v1.11.6) (2026-04-09)
+
+
+### Bug Fixes
+
+* cap npm registry response size in checkForUpdate ([4fbc3f0](https://github.com/drummel/git-watchtower/commit/4fbc3f03a6ae07372b01100e85c53ebba33c3090))
+
 ## [1.11.5](https://github.com/drummel/git-watchtower/compare/v1.11.4...v1.11.5) (2026-04-08)
 
 
