@@ -2221,6 +2221,9 @@ function setupKeyboardInput() {
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
 
+  // Suppress EIO errors that occur when the PTY is torn down during exit
+  process.stdin.on('error', () => {});
+
   process.stdin.on('data', async (key) => {
     // Handle search mode input via actions module
     if (store.get('searchMode')) {
@@ -3225,6 +3228,7 @@ async function shutdown() {
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(false);
   }
+  process.stdin.pause();
 
   if (fileWatcher) fileWatcher.close();
   if (pollIntervalId) clearTimeout(pollIntervalId);
