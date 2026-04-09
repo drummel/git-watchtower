@@ -39,6 +39,12 @@ function compareVersions(a, b) {
 }
 
 /**
+ * Maximum response body size for npm registry queries (64 KiB).
+ * The expected response is a small JSON object (~200 bytes).
+ */
+const MAX_RESPONSE_SIZE = 64 * 1024;
+
+/**
  * Check npm registry for a newer version of git-watchtower
  * @returns {Promise<string|null>} Latest version string if newer, or null
  */
@@ -54,7 +60,16 @@ function checkForUpdate() {
           return;
         }
         let data = '';
-        res.on('data', (chunk) => { data += chunk; });
+        let size = 0;
+        res.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > MAX_RESPONSE_SIZE) {
+            req.destroy();
+            resolve(null);
+            return;
+          }
+          data += chunk;
+        });
         res.on('end', () => {
           try {
             const { version } = JSON.parse(data);
