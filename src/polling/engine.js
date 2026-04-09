@@ -87,7 +87,7 @@ function sortBranches(branches, prStatusMap) {
     if (!aMerged && bMerged && !a.isDeleted) return -1;
     if (a.isNew && !b.isNew) return -1;
     if (!a.isNew && b.isNew) return 1;
-    return b.date - a.date;
+    return (b.date || 0) - (a.date || 0);
   });
 }
 
