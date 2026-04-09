@@ -171,6 +171,16 @@ describe('sortBranches', () => {
     const result = sortBranches(branches, prMap);
     assert.equal(result[0].name, 'newer');
   });
+
+  it('should handle missing dates without NaN (sort to bottom)', () => {
+    const branches = [
+      { name: 'no-date' },
+      { name: 'has-date', date: new Date(1000) },
+      { name: 'also-no-date', date: null },
+    ];
+    const result = sortBranches(branches, prMap);
+    assert.equal(result[0].name, 'has-date');
+  });
 });
 
 describe('calculateAdaptiveInterval', () => {
