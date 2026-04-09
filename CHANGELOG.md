@@ -1,3 +1,10 @@
+## [1.11.7](https://github.com/drummel/git-watchtower/compare/v1.11.6...v1.11.7) (2026-04-09)
+
+
+### Bug Fixes
+
+* handle missing dates in sortBranches to prevent NaN comparisons ([8fd19c7](https://github.com/drummel/git-watchtower/commit/8fd19c7b44eb372714d95677d6c4a363328b8a72))
+
 ## [1.11.6](https://github.com/drummel/git-watchtower/compare/v1.11.5...v1.11.6) (2026-04-09)
 
 
