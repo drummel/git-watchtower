@@ -29,20 +29,20 @@ const REPO_ROOT = path.resolve(__dirname, '../../..');
 
 describe('execGit', () => {
   it('should execute git command and return output', async () => {
-    const result = await execGit('git --version');
+    const result = await execGit(['--version']);
     assert.ok(result.stdout.includes('git version'));
     assert.strictEqual(typeof result.stderr, 'string');
   });
 
   it('should trim output whitespace', async () => {
-    const result = await execGit('git rev-parse --short HEAD', { cwd: REPO_ROOT });
+    const result = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: REPO_ROOT });
     // Should not have leading/trailing whitespace
     assert.strictEqual(result.stdout, result.stdout.trim());
   });
 
   it('should throw GitError on invalid command', async () => {
     await assert.rejects(
-      execGit('git invalid-command-that-does-not-exist'),
+      execGit(['invalid-command-that-does-not-exist']),
       (err) => {
         assert.ok(err instanceof GitError);
         return true;
@@ -51,25 +51,32 @@ describe('execGit', () => {
   });
 
   it('should use custom working directory', async () => {
-    const result = await execGit('git rev-parse --show-toplevel', { cwd: REPO_ROOT });
+    const result = await execGit(['rev-parse', '--show-toplevel'], { cwd: REPO_ROOT });
     assert.ok(result.stdout.includes('git-watchtower'));
   });
 
   it('should timeout on long operations', async () => {
     // This tests that timeout parameter is accepted (but we can't easily test actual timeout)
-    const result = await execGit('git --version', { timeout: 5000 });
+    const result = await execGit(['--version'], { timeout: 5000 });
     assert.ok(result.stdout.includes('git'));
+  });
+
+  it('should throw TypeError when args is not an array', async () => {
+    await assert.rejects(
+      execGit('git --version'),
+      (err) => err instanceof TypeError
+    );
   });
 });
 
 describe('execGitSilent', () => {
   it('should return result on success', async () => {
-    const result = await execGitSilent('git --version');
+    const result = await execGitSilent(['--version']);
     assert.ok(result.stdout.includes('git version'));
   });
 
   it('should return null on error instead of throwing', async () => {
-    const result = await execGitSilent('git invalid-command-xyz');
+    const result = await execGitSilent(['invalid-command-xyz']);
     assert.strictEqual(result, null);
   });
 });
@@ -143,7 +150,7 @@ describe('timeout constants', () => {
 describe('GitError handling', () => {
   it('should include command in error details', async () => {
     try {
-      await execGit('git show nonexistent-ref-xyz');
+      await execGit(['show', 'nonexistent-ref-xyz']);
       assert.fail('Should have thrown');
     } catch (err) {
       assert.ok(err instanceof GitError);

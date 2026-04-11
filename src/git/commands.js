@@ -17,8 +17,7 @@ const SHORT_TIMEOUT = 5000;
 
 /**
  * Execute a git command safely using execFile (no shell).
- * @param {string | string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
- *   or a legacy command string (e.g. 'git --version') for backwards compatibility
+ * @param {string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
  * @param {Object} [options] - Execution options
  * @param {number} [options.timeout] - Command timeout in ms
  * @param {string} [options.cwd] - Working directory
@@ -28,16 +27,8 @@ const SHORT_TIMEOUT = 5000;
 async function execGit(args, options = {}) {
   const { timeout = DEFAULT_TIMEOUT, cwd = process.cwd() } = options;
 
-  // Backwards compatibility: accept a full command string for
-  // simple constant commands (no user-controlled data).
-  if (typeof args === 'string') {
-    const parts = /** @type {string} */ (args).split(/\s+/);
-    // Strip leading 'git' if present so callers can pass 'git --version'
-    if (parts[0] === 'git') {
-      args = parts.slice(1);
-    } else {
-      args = parts;
-    }
+  if (!Array.isArray(args)) {
+    throw new TypeError('execGit: args must be an array of strings');
   }
 
   const command = `git ${args.join(' ')}`;
@@ -72,7 +63,7 @@ async function execGit(args, options = {}) {
 
 /**
  * Execute git command silently (suppress errors)
- * @param {string | string[]} command - Git arguments (array or legacy string)
+ * @param {string[]} command - Git arguments
  * @param {Object} [options] - Execution options
  * @returns {Promise<{stdout: string, stderr: string}|null>}
  */
