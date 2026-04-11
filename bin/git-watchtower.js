@@ -448,7 +448,11 @@ function applyConfig(config) {
 // Server log management
 function addServerLog(line, isError = false) {
   const entry = { timestamp: new Date().toLocaleTimeString(), line, isError };
-  const serverLogBuffer = [...store.get('serverLogBuffer'), entry].slice(-MAX_SERVER_LOG_LINES);
+  const prev = store.get('serverLogBuffer');
+  // Drop the oldest entries to stay within MAX_SERVER_LOG_LINES after push
+  const startIdx = Math.max(0, prev.length + 1 - MAX_SERVER_LOG_LINES);
+  const serverLogBuffer = prev.slice(startIdx);
+  serverLogBuffer.push(entry);
   store.setState({ serverLogBuffer });
 }
 
@@ -976,7 +980,12 @@ function addLog(message, type = 'info') {
     icon: icons[type] || '○',
     color: colors[type] || 'white',
   };
-  const activityLog = [entry, ...store.get('activityLog')].slice(0, MAX_LOG_ENTRIES);
+  const prev = store.get('activityLog');
+  // Drop the oldest entries to stay within MAX_LOG_ENTRIES after prepend
+  const keepCount = Math.min(prev.length, MAX_LOG_ENTRIES - 1);
+  const activityLog = new Array(keepCount + 1);
+  activityLog[0] = entry;
+  for (let i = 0; i < keepCount; i++) activityLog[i + 1] = prev[i];
   store.setState({ activityLog });
 }
 
