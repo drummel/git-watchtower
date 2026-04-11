@@ -541,3 +541,72 @@ describe('clearArea', () => {
     assert.strictEqual(spaceRuns.length, 3);
   });
 });
+
+describe('NO_COLOR / TERM=dumb support', () => {
+  const ansiPath = require.resolve('../../../src/ui/ansi');
+
+  /**
+   * Load a fresh copy of the ansi module with the given env vars applied.
+   * Restores env and module cache after.
+   */
+  function loadWithEnv(env) {
+    const prevNoColor = process.env.NO_COLOR;
+    const prevTerm = process.env.TERM;
+    const prevCached = require.cache[ansiPath];
+    for (const [k, v] of Object.entries(env)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    delete require.cache[ansiPath];
+    try {
+      return require('../../../src/ui/ansi');
+    } finally {
+      if (prevNoColor === undefined) delete process.env.NO_COLOR;
+      else process.env.NO_COLOR = prevNoColor;
+      if (prevTerm === undefined) delete process.env.TERM;
+      else process.env.TERM = prevTerm;
+      delete require.cache[ansiPath];
+      if (prevCached) require.cache[ansiPath] = prevCached;
+    }
+  }
+
+  it('should strip color codes when NO_COLOR is set', () => {
+    const mod = loadWithEnv({ NO_COLOR: '1', TERM: 'xterm-256color' });
+    assert.strictEqual(mod.colorsEnabled, false);
+    assert.strictEqual(mod.ansi.red, '');
+    assert.strictEqual(mod.ansi.bold, '');
+    assert.strictEqual(mod.ansi.reset, '');
+    assert.strictEqual(mod.ansi.fgRgb(255, 0, 0), '');
+  });
+
+  it('should still emit cursor/screen control codes when NO_COLOR is set', () => {
+    const mod = loadWithEnv({ NO_COLOR: '1', TERM: 'xterm-256color' });
+    assert.ok(mod.ansi.moveTo(1, 1).includes(ESC));
+    assert.ok(mod.ansi.clearScreen.includes(ESC));
+    assert.ok(mod.ansi.hideCursor.includes(ESC));
+  });
+
+  it('should strip color codes when TERM=dumb', () => {
+    const mod = loadWithEnv({ NO_COLOR: undefined, TERM: 'dumb' });
+    assert.strictEqual(mod.colorsEnabled, false);
+    assert.strictEqual(mod.ansi.green, '');
+  });
+
+  it('should treat empty NO_COLOR as not set (per no-color.org spec)', () => {
+    const mod = loadWithEnv({ NO_COLOR: '', TERM: 'xterm-256color' });
+    assert.strictEqual(mod.colorsEnabled, true);
+    assert.ok(mod.ansi.red.length > 0);
+  });
+
+  it('should enable colors by default', () => {
+    const mod = loadWithEnv({ NO_COLOR: undefined, TERM: 'xterm-256color' });
+    assert.strictEqual(mod.colorsEnabled, true);
+    assert.ok(mod.ansi.red.length > 0);
+  });
+
+  it('style() should be a no-op when colors are disabled', () => {
+    const mod = loadWithEnv({ NO_COLOR: '1', TERM: 'xterm-256color' });
+    const result = mod.style('hello', mod.ansi.red, mod.ansi.bold);
+    assert.strictEqual(result, 'hello');
+  });
+});
