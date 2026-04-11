@@ -1,3 +1,10 @@
+## [1.11.10](https://github.com/drummel/git-watchtower/compare/v1.11.9...v1.11.10) (2026-04-11)
+
+
+### Performance Improvements
+
+* avoid double-copy in addLog and addServerLog ([10262d2](https://github.com/drummel/git-watchtower/commit/10262d21c4b9cb09b362f8156e0e09adbfd99047))
+
 ## [1.11.9](https://github.com/drummel/git-watchtower/compare/v1.11.8...v1.11.9) (2026-04-09)
 
 
