@@ -285,7 +285,7 @@ describe('commands.js integration tests', () => {
 
   describe('execGit timeout handling', () => {
     it('should accept timeout parameter without error', async () => {
-      const result = await execGit('git status', {
+      const result = await execGit(['status'], {
         cwd: fixture.path,
         timeout: 5000,
       });
@@ -301,7 +301,7 @@ describe('commands.js integration tests', () => {
       assert.strictEqual(result.success, true);
 
       // Verify branch is gone
-      const { stdout } = await execGit('git branch --list', { cwd: fixture.path });
+      const { stdout } = await execGit(['branch', '--list'], { cwd: fixture.path });
       assert.ok(!stdout.includes('to-delete'));
     });
 
