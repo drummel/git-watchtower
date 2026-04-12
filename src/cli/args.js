@@ -175,7 +175,15 @@ function parseArgs(argv, options = {}) {
  * @returns {object} Merged config
  */
 function applyCliArgsToConfig(config, cliArgs) {
-  const merged = JSON.parse(JSON.stringify(config)); // deep clone
+  // Shallow clone with nested object spreading — the config is at most two
+  // levels deep and all values are primitives, so this is equivalent to a deep
+  // clone but avoids the JSON round-trip (which silently drops `undefined`,
+  // functions, and throws on circular refs).
+  const merged = {
+    ...config,
+    server: { ...config.server },
+    web: { ...config.web },
+  };
 
   // Server settings
   if (cliArgs.mode !== null) {

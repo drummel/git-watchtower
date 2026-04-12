@@ -494,6 +494,23 @@ describe('applyCliArgsToConfig', () => {
     assert.equal(result.soundEnabled, true);
     assert.equal(result.visibleBranches, 7);
   });
+
+  it('should preserve undefined values in config (no JSON round-trip loss)', () => {
+    const config = getBaseConfig();
+    config.customField = undefined;
+    const result = applyCliArgsToConfig(config, parseArgs([]));
+    // undefined should survive the clone — JSON.parse(JSON.stringify()) would drop it
+    assert.ok('customField' in result);
+    assert.strictEqual(result.customField, undefined);
+  });
+
+  it('should handle config without web property', () => {
+    const config = getBaseConfig();
+    // getBaseConfig() has no `web` — applyCliArgsToConfig should still work
+    const result = applyCliArgsToConfig(config, parseArgs(['--web', '--web-port', '9999']));
+    assert.equal(result.web.enabled, true);
+    assert.equal(result.web.port, 9999);
+  });
 });
 
 describe('getHelpText', () => {
