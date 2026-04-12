@@ -389,6 +389,20 @@ let AUTO_PULL = true;
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
 
+// Timing constants (ms)
+/** Grace period before SIGKILLing a process after SIGTERM. */
+const FORCE_KILL_GRACE_MS = 3000;
+/** Additional grace period added to a command's timeout before SIGKILL. */
+const SIGKILL_GRACE_AFTER_TIMEOUT_MS = 5000;
+/** Delay between stopping and restarting the dev server. */
+const SERVER_RESTART_DELAY_MS = 500;
+/** How long a transient flash message stays on screen. */
+const FLASH_MESSAGE_DURATION_MS = 3000;
+/** Debounce window for file watcher events before notifying clients. */
+const FILE_WATCHER_DEBOUNCE_MS = 100;
+/** Max time to wait for the static HTTP server to close on shutdown. */
+const SERVER_CLOSE_TIMEOUT_MS = 2000;
+
 // Telemetry session tracking
 let branchSwitchCount = 0;
 let sessionStartTime = null;
@@ -742,7 +756,7 @@ function stopServerProcess() {
       } catch (e) {
         // Process group may already be dead
       }
-    }, 3000);
+    }, FORCE_KILL_GRACE_MS);
 
     // Clear the force-kill timer if the process exits cleanly
     proc.once('close', () => {
@@ -760,7 +774,7 @@ function restartServerProcess() {
   setTimeout(() => {
     startServerProcess();
     render();
-  }, 500);
+  }, SERVER_RESTART_DELAY_MS);
 }
 
 // Network and polling state
@@ -857,7 +871,7 @@ function execCli(cmd, args = [], options = {}) {
     if (timeout > 0) {
       const killTimer = setTimeout(() => {
         try { child.kill('SIGKILL'); } catch (e) { /* already dead */ }
-      }, timeout + 5000);
+      }, timeout + SIGKILL_GRACE_AFTER_TIMEOUT_MS);
       child.on('close', () => clearTimeout(killTimer));
     }
   });
@@ -1336,7 +1350,7 @@ function showFlash(message) {
   flashTimeout = setTimeout(() => {
     store.setState({ flashMessage: null });
     render();
-  }, 3000);
+  }, FLASH_MESSAGE_DURATION_MS);
 }
 
 function hideFlash() {
@@ -2194,7 +2208,7 @@ function setupFileWatcher() {
         addLog(`File changed: ${filename}`, 'info');
         notifyClients();
         render();
-      }, 100);
+      }, FILE_WATCHER_DEBOUNCE_MS);
     });
 
     fileWatcher.on('error', (err) => {
@@ -3250,7 +3264,7 @@ async function shutdown() {
     clients.clear();
 
     const serverClosePromise = new Promise(resolve => server.close(resolve));
-    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
+    const timeoutPromise = new Promise(resolve => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
 
