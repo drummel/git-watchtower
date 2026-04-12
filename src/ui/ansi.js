@@ -8,6 +8,22 @@ const ESC = '\x1b';
 const CSI = `${ESC}[`;
 
 /**
+ * Whether color output is enabled.
+ * Honors the NO_COLOR convention (https://no-color.org/) and TERM=dumb.
+ * Structural codes (cursor movement, screen control) are still emitted
+ * so the TUI layout remains functional — only color/style codes are stripped.
+ */
+const colorsEnabled = !(
+  (process.env.NO_COLOR && process.env.NO_COLOR !== '') ||
+  process.env.TERM === 'dumb'
+);
+
+/** Empty string for disabled color codes, or the given code when enabled. */
+const c = (code) => (colorsEnabled ? code : '');
+/** Empty-returning function for disabled color functions. */
+const cFn = (fn) => (colorsEnabled ? fn : () => '');
+
+/**
  * ANSI escape codes for terminal control and styling
  */
 const ansi = {
@@ -44,81 +60,81 @@ const ansi = {
   restoreCursor: `${CSI}u`,
 
   // Text styles
-  reset: `${CSI}0m`,
-  bold: `${CSI}1m`,
-  dim: `${CSI}2m`,
-  italic: `${CSI}3m`,
-  underline: `${CSI}4m`,
-  blink: `${CSI}5m`,
-  inverse: `${CSI}7m`,
-  hidden: `${CSI}8m`,
-  strikethrough: `${CSI}9m`,
+  reset: c(`${CSI}0m`),
+  bold: c(`${CSI}1m`),
+  dim: c(`${CSI}2m`),
+  italic: c(`${CSI}3m`),
+  underline: c(`${CSI}4m`),
+  blink: c(`${CSI}5m`),
+  inverse: c(`${CSI}7m`),
+  hidden: c(`${CSI}8m`),
+  strikethrough: c(`${CSI}9m`),
 
   // Reset specific styles
-  resetBold: `${CSI}22m`,
-  resetDim: `${CSI}22m`,
-  resetItalic: `${CSI}23m`,
-  resetUnderline: `${CSI}24m`,
-  resetBlink: `${CSI}25m`,
-  resetInverse: `${CSI}27m`,
-  resetHidden: `${CSI}28m`,
-  resetStrikethrough: `${CSI}29m`,
+  resetBold: c(`${CSI}22m`),
+  resetDim: c(`${CSI}22m`),
+  resetItalic: c(`${CSI}23m`),
+  resetUnderline: c(`${CSI}24m`),
+  resetBlink: c(`${CSI}25m`),
+  resetInverse: c(`${CSI}27m`),
+  resetHidden: c(`${CSI}28m`),
+  resetStrikethrough: c(`${CSI}29m`),
 
   // Foreground colors (standard)
-  black: `${CSI}30m`,
-  red: `${CSI}31m`,
-  green: `${CSI}32m`,
-  yellow: `${CSI}33m`,
-  blue: `${CSI}34m`,
-  magenta: `${CSI}35m`,
-  cyan: `${CSI}36m`,
-  white: `${CSI}37m`,
-  default: `${CSI}39m`,
+  black: c(`${CSI}30m`),
+  red: c(`${CSI}31m`),
+  green: c(`${CSI}32m`),
+  yellow: c(`${CSI}33m`),
+  blue: c(`${CSI}34m`),
+  magenta: c(`${CSI}35m`),
+  cyan: c(`${CSI}36m`),
+  white: c(`${CSI}37m`),
+  default: c(`${CSI}39m`),
 
   // Foreground colors (bright)
-  gray: `${CSI}90m`,
-  brightRed: `${CSI}91m`,
-  brightGreen: `${CSI}92m`,
-  brightYellow: `${CSI}93m`,
-  brightBlue: `${CSI}94m`,
-  brightMagenta: `${CSI}95m`,
-  brightCyan: `${CSI}96m`,
-  brightWhite: `${CSI}97m`,
+  gray: c(`${CSI}90m`),
+  brightRed: c(`${CSI}91m`),
+  brightGreen: c(`${CSI}92m`),
+  brightYellow: c(`${CSI}93m`),
+  brightBlue: c(`${CSI}94m`),
+  brightMagenta: c(`${CSI}95m`),
+  brightCyan: c(`${CSI}96m`),
+  brightWhite: c(`${CSI}97m`),
 
   // Background colors (standard)
-  bgBlack: `${CSI}40m`,
-  bgRed: `${CSI}41m`,
-  bgGreen: `${CSI}42m`,
-  bgYellow: `${CSI}43m`,
-  bgBlue: `${CSI}44m`,
-  bgMagenta: `${CSI}45m`,
-  bgCyan: `${CSI}46m`,
-  bgWhite: `${CSI}47m`,
-  bgDefault: `${CSI}49m`,
+  bgBlack: c(`${CSI}40m`),
+  bgRed: c(`${CSI}41m`),
+  bgGreen: c(`${CSI}42m`),
+  bgYellow: c(`${CSI}43m`),
+  bgBlue: c(`${CSI}44m`),
+  bgMagenta: c(`${CSI}45m`),
+  bgCyan: c(`${CSI}46m`),
+  bgWhite: c(`${CSI}47m`),
+  bgDefault: c(`${CSI}49m`),
 
   // Background colors (bright)
-  bgGray: `${CSI}100m`,
-  bgBrightRed: `${CSI}101m`,
-  bgBrightGreen: `${CSI}102m`,
-  bgBrightYellow: `${CSI}103m`,
-  bgBrightBlue: `${CSI}104m`,
-  bgBrightMagenta: `${CSI}105m`,
-  bgBrightCyan: `${CSI}106m`,
-  bgBrightWhite: `${CSI}107m`,
+  bgGray: c(`${CSI}100m`),
+  bgBrightRed: c(`${CSI}101m`),
+  bgBrightGreen: c(`${CSI}102m`),
+  bgBrightYellow: c(`${CSI}103m`),
+  bgBrightBlue: c(`${CSI}104m`),
+  bgBrightMagenta: c(`${CSI}105m`),
+  bgBrightCyan: c(`${CSI}106m`),
+  bgBrightWhite: c(`${CSI}107m`),
 
   /**
    * Set foreground color using 256-color palette
    * @param {number} n - Color number (0-255)
    * @returns {string}
    */
-  fg256: (n) => `${CSI}38;5;${n}m`,
+  fg256: cFn((n) => `${CSI}38;5;${n}m`),
 
   /**
    * Set background color using 256-color palette
    * @param {number} n - Color number (0-255)
    * @returns {string}
    */
-  bg256: (n) => `${CSI}48;5;${n}m`,
+  bg256: cFn((n) => `${CSI}48;5;${n}m`),
 
   /**
    * Set foreground color using RGB
@@ -127,7 +143,7 @@ const ansi = {
    * @param {number} b - Blue (0-255)
    * @returns {string}
    */
-  fgRgb: (r, g, b) => `${CSI}38;2;${r};${g};${b}m`,
+  fgRgb: cFn((r, g, b) => `${CSI}38;2;${r};${g};${b}m`),
 
   /**
    * Set background color using RGB
@@ -136,7 +152,7 @@ const ansi = {
    * @param {number} b - Blue (0-255)
    * @returns {string}
    */
-  bgRgb: (r, g, b) => `${CSI}48;2;${r};${g};${b}m`,
+  bgRgb: cFn((r, g, b) => `${CSI}48;2;${r};${g};${b}m`),
 };
 
 /**
@@ -492,6 +508,7 @@ module.exports = {
   wordWrap,
   horizontalLine,
   style,
+  colorsEnabled,
   // Export constants for direct use
   ESC,
   CSI,
