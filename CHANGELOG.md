@@ -1,3 +1,10 @@
+## [1.12.1](https://github.com/drummel/git-watchtower/compare/v1.12.0...v1.12.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* handle escaped quotes and backslashes in parseCommand (L7) ([9c4f3c8](https://github.com/drummel/git-watchtower/commit/9c4f3c81ef55001aecbe8dd2770fe26dd415d38c))
+
 # [1.12.0](https://github.com/drummel/git-watchtower/compare/v1.11.10...v1.12.0) (2026-04-12)
 
 
