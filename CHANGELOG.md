@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/drummel/git-watchtower/compare/v1.11.10...v1.12.0) (2026-04-12)
+
+
+### Features
+
+* honor NO_COLOR and TERM=dumb in ANSI module ([c4a4ba7](https://github.com/drummel/git-watchtower/commit/c4a4ba723dd8b511c57c0e39621dddb4a0056fc0))
+
 ## [1.11.10](https://github.com/drummel/git-watchtower/compare/v1.11.9...v1.11.10) (2026-04-11)
 
 
