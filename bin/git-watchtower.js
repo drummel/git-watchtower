@@ -481,6 +481,17 @@ function openInBrowser(url) {
   });
 }
 
+/**
+ * Build a localhost URL for the given port.
+ * Centralizes the `http://localhost:${port}` pattern so it's easy to adjust
+ * (e.g. switch protocol or host) in one place.
+ * @param {number} port
+ * @returns {string}
+ */
+function localhostUrl(port) {
+  return `http://localhost:${port}`;
+}
+
 // parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl
 // imported from src/git/remote.js
 
@@ -2123,7 +2134,7 @@ function createStaticServer() {
     return;
   }
 
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url, localhostUrl(PORT));
   let pathname = url.pathname;
   const logPath = pathname; // Keep original for logging
 
@@ -2773,7 +2784,7 @@ function setupKeyboardInput() {
 
       case 'o': // Open live server in browser
         if (!NO_SERVER) {
-          const serverUrl = `http://localhost:${PORT}`;
+          const serverUrl = localhostUrl(PORT);
           addLog(`Opening ${serverUrl} in browser...`, 'info');
           openInBrowser(serverUrl);
           render();
@@ -3016,7 +3027,7 @@ async function handleWebAction(action, payload) {
         break;
       case 'openBrowser':
         if (!NO_SERVER) {
-          openInBrowser(`http://localhost:${PORT}`);
+          openInBrowser(localhostUrl(PORT));
           sendResult(true, 'Opened in browser');
         }
         break;
@@ -3103,7 +3114,7 @@ async function startWebDashboard(openBrowser) {
       });
       worker.onCommand = (action, payload) => handleWebAction(action, payload);
       await worker.connect();
-      addLog(`Joined web dashboard at http://localhost:${existing.port} (tab)`, 'success');
+      addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
 
       // Push state periodically
       webStateInterval = setInterval(() => {
@@ -3154,8 +3165,8 @@ async function startWebDashboard(openBrowser) {
     WEB_PORT = port;
     writeLock(process.pid, port, coordinator.socketPath);
 
-    addLog(`Web dashboard: http://localhost:${port}`, 'success');
-    if (openBrowser) openInBrowser(`http://localhost:${port}`);
+    addLog(`Web dashboard: ${localhostUrl(port)}`, 'success');
+    if (openBrowser) openInBrowser(localhostUrl(port));
     render();
   } catch (err) {
     addLog(`Web dashboard failed: ${err.message}`, 'error');
@@ -3413,11 +3424,11 @@ async function start() {
     // Static mode
     server = createStaticServer();
     server.listen(PORT, '127.0.0.1', () => {
-      addLog(`Server started on http://localhost:${PORT}`, 'success');
+      addLog(`Server started on ${localhostUrl(PORT)}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
       addLog(`Current branch: ${store.get('currentBranch')}`, 'info');
       // Add server log entries for static server
-      addServerLog(`Static server started on http://localhost:${PORT}`);
+      addServerLog(`Static server started on ${localhostUrl(PORT)}`);
       addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
       addServerLog(`Live reload enabled - waiting for browser connections...`);
       render();
