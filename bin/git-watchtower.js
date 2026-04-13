@@ -101,7 +101,7 @@ const store = new Store();
 
 // Web dashboard server
 const { WebDashboardServer } = require('../src/server/web');
-const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket } = require('../src/server/coordinator');
+const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket, isProcessAlive } = require('../src/server/coordinator');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -802,7 +802,7 @@ const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, p
 
 // Error detection utilities imported from src/utils/errors.js
 const { ErrorHandler, isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
-const { Mutex } = require('../src/utils/async');
+const { Mutex, sleep } = require('../src/utils/async');
 
 // Keyboard handling utilities imported from src/ui/keybindings.js
 const { filterBranches } = require('../src/ui/keybindings');
@@ -3082,6 +3082,50 @@ async function handleWebAction(action, payload) {
 }
 
 /**
+ * Maximum attempts to connect to an existing coordinator as a worker
+ * before giving up (or reclaiming the lock if the coordinator is dead).
+ */
+const WORKER_CONNECT_MAX_ATTEMPTS = 3;
+
+/**
+ * Base delay for exponential backoff between worker-connect attempts (ms).
+ * Delays are 200ms, 400ms — total added latency ~600ms in the worst case.
+ */
+const WORKER_CONNECT_BASE_DELAY_MS = 200;
+
+/**
+ * Attempt to connect to an existing coordinator as a worker, with bounded
+ * exponential backoff. Returns the connected Worker on success, or null if
+ * every attempt failed. Between attempts, if the coordinator's process is
+ * no longer alive, we stop retrying so the caller can reclaim the lock.
+ *
+ * @param {{pid: number, port: number, socketPath: string}} existing - Coordinator lock info
+ * @param {string} projectIdArg - Project ID for worker registration
+ * @returns {Promise<Worker|null>}
+ */
+async function connectWorkerWithRetry(existing, projectIdArg) {
+  for (let attempt = 1; attempt <= WORKER_CONNECT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const w = new Worker({
+        id: projectIdArg,
+        projectPath: PROJECT_ROOT,
+        projectName: path.basename(PROJECT_ROOT),
+        socketPath: existing.socketPath,
+      });
+      w.onCommand = (action, payload) => handleWebAction(action, payload);
+      await w.connect();
+      return w;
+    } catch (err) {
+      if (attempt >= WORKER_CONNECT_MAX_ATTEMPTS) return null;
+      // Stop early if the coordinator has exited — caller will reclaim.
+      if (!isProcessAlive(existing.pid)) return null;
+      await sleep(WORKER_CONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+    }
+  }
+  return null;
+}
+
+/**
  * Create and start the web dashboard, with coordinator support.
  * @param {boolean} openBrowser - Whether to auto-open the browser
  */
@@ -3108,51 +3152,75 @@ async function startWebDashboard(openBrowser) {
   // already owns the lock, connect as a worker instead. This prevents a
   // TOCTOU race where two instances both pass a "no coordinator" check and
   // then clobber each other's socket in Coordinator.start().
-  const lockResult = tryAcquireLock(process.pid);
-
-  if (!lockResult.acquired) {
-    const existing = lockResult.existing || getActiveCoordinator();
-    if (existing) {
-      try {
-        worker = new Worker({
-          id: projectId,
-          projectPath: PROJECT_ROOT,
-          projectName: path.basename(PROJECT_ROOT),
-          socketPath: existing.socketPath,
-        });
-        worker.onCommand = (action, payload) => handleWebAction(action, payload);
-        await worker.connect();
-        addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
-
-        // Push state periodically
-        webStateInterval = setInterval(() => {
-          if (worker && worker.isConnected()) {
-            worker.pushState(webDashboard.getSerializableState());
-          } else {
-            clearInterval(webStateInterval);
-            webStateInterval = null;
-          }
-        }, 500);
-
-        // Don't start our own server — piggyback on the coordinator's.
-        // Don't open browser either — the existing tab will show this project automatically.
-        WEB_PORT = existing.port;
-        render();
-        return;
-      } catch (err) {
-        // Another coordinator owns the lock but we can't talk to it. Do NOT
-        // take over (that would unlink the live coordinator's socket). Run
-        // without a web dashboard for this instance.
-        worker = null;
-        addLog(`Could not join web dashboard at ${localhostUrl(existing.port)}: ${err.message}`, 'error');
-        webDashboard = null;
-        render();
-        return;
-      }
+  //
+  // The outer loop runs at most twice so we can reclaim the coordinator
+  // role if the existing coordinator dies while we're retrying the worker
+  // handshake (e.g. it crashed just before we attached). Without this, a
+  // transient connect failure (peer not yet accepting, EPIPE, slow fork)
+  // against a coordinator that later crashes would leave us with no web
+  // dashboard even though we could safely take over.
+  let acquired = false;
+  let existing = null;
+  for (let outer = 0; outer < 2 && !acquired; outer++) {
+    const lockResult = tryAcquireLock(process.pid);
+    if (lockResult.acquired) {
+      acquired = true;
+      break;
     }
-    // Lock exists but we couldn't claim it and couldn't read the owner.
-    // Bail out rather than race a concurrent startup.
-    addLog('Web dashboard unavailable: could not acquire coordinator lock', 'error');
+
+    existing = lockResult.existing || getActiveCoordinator();
+    if (!existing) {
+      // Lock exists but we couldn't claim it and couldn't read the owner.
+      // Bail out rather than race a concurrent startup.
+      addLog('Web dashboard unavailable: could not acquire coordinator lock', 'error');
+      webDashboard = null;
+      render();
+      return;
+    }
+
+    // Try to connect as a worker with bounded retry + exponential backoff.
+    // The coordinator may still be finishing its bind after finalizeLock()
+    // writes the real socket path, or temporarily unresponsive.
+    const connectedWorker = await connectWorkerWithRetry(existing, projectId);
+    if (connectedWorker) {
+      worker = connectedWorker;
+      addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
+
+      // Push state periodically
+      webStateInterval = setInterval(() => {
+        if (worker && worker.isConnected()) {
+          worker.pushState(webDashboard.getSerializableState());
+        } else {
+          clearInterval(webStateInterval);
+          webStateInterval = null;
+        }
+      }, 500);
+
+      // Don't start our own server — piggyback on the coordinator's.
+      // Don't open browser either — the existing tab will show this project automatically.
+      WEB_PORT = existing.port;
+      render();
+      return;
+    }
+
+    // Every connect attempt failed. If the coordinator process died while
+    // we were retrying, clean up the stale lock/socket and loop once to
+    // claim the coordinator role ourselves. Otherwise abort — do NOT take
+    // over a live coordinator's socket.
+    if (!isProcessAlive(existing.pid)) {
+      removeLock();
+      removeSocket();
+      continue;
+    }
+
+    addLog(`Could not join web dashboard at ${localhostUrl(existing.port)}: coordinator unreachable`, 'error');
+    webDashboard = null;
+    render();
+    return;
+  }
+
+  if (!acquired) {
+    addLog('Web dashboard unavailable: could not acquire coordinator lock after retry', 'error');
     webDashboard = null;
     render();
     return;
