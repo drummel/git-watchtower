@@ -2059,13 +2059,21 @@ async function pollGitChanges() {
 }
 
 function schedulePoll() {
+  // Bail out if shutdown has started: both here (no new timer) and again
+  // inside the timer callback after each await (the in-flight poll may
+  // have started before shutdown() cleared pollIntervalId, and clearTimeout
+  // on a timer whose callback is already executing is a no-op).
+  if (isShuttingDown) return;
   pollIntervalId = setTimeout(async () => {
+    if (isShuttingDown) return;
     await pollGitChanges();
+    if (isShuttingDown) return;
     schedulePoll();
   }, store.get('adaptivePollInterval'));
 }
 
 function restartPolling() {
+  if (isShuttingDown) return;
   if (pollIntervalId) {
     clearTimeout(pollIntervalId);
   }
