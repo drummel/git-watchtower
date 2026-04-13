@@ -1,3 +1,11 @@
+## [1.12.3](https://github.com/drummel/git-watchtower/compare/v1.12.2...v1.12.3) (2026-04-13)
+
+
+### Bug Fixes
+
+* atomically claim coordinator lock to prevent socket clobbering race ([519d902](https://github.com/drummel/git-watchtower/commit/519d9022b35db7fa35749bf611a2fe8e6081db92))
+* broaden tryAcquireLock JSDoc return type to match readLock ([1189891](https://github.com/drummel/git-watchtower/commit/11898919c58098c973ba697754497fb41aa334c1))
+
 ## [1.12.2](https://github.com/drummel/git-watchtower/compare/v1.12.1...v1.12.2) (2026-04-13)
 
 
