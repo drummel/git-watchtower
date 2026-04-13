@@ -109,7 +109,7 @@ function writeLock(pid, port, socketPath) {
  * (and socket) are cleaned up and the acquisition is retried once.
  *
  * @param {number} pid - PID of the acquiring process
- * @returns {{acquired: true} | {acquired: false, existing: {pid: number, port: number, socketPath: string} | null}}
+ * @returns {{acquired: true} | {acquired: false, existing: {pid: number, port?: number, socketPath?: string, pending?: boolean} | null}}
  */
 function tryAcquireLock(pid) {
   ensureDir();
