@@ -1,3 +1,10 @@
+## [1.12.4](https://github.com/drummel/git-watchtower/compare/v1.12.3...v1.12.4) (2026-04-13)
+
+
+### Bug Fixes
+
+* retry worker connect with backoff, never take over a live coordinator ([ca39640](https://github.com/drummel/git-watchtower/commit/ca396408fddacc7cdbe6ec90609459ebd740ee32)), closes [#1](https://github.com/drummel/git-watchtower/issues/1)
+
 ## [1.12.3](https://github.com/drummel/git-watchtower/compare/v1.12.2...v1.12.3) (2026-04-13)
 
 
