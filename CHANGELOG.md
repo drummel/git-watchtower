@@ -1,3 +1,10 @@
+## [1.12.2](https://github.com/drummel/git-watchtower/compare/v1.12.1...v1.12.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* register exit handler at module scope for periodic update check (L10) ([9b96246](https://github.com/drummel/git-watchtower/commit/9b962461aed407f28cbbf4a5c86fcc86b1c67513))
+
 ## [1.12.1](https://github.com/drummel/git-watchtower/compare/v1.12.0...v1.12.1) (2026-04-12)
 
 
