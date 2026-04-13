@@ -101,7 +101,7 @@ const store = new Store();
 
 // Web dashboard server
 const { WebDashboardServer } = require('../src/server/web');
-const { Coordinator, Worker, generateProjectId, getActiveCoordinator, writeLock, removeLock } = require('../src/server/coordinator');
+const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket } = require('../src/server/coordinator');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -3104,44 +3104,64 @@ async function startWebDashboard(openBrowser) {
     if (url) webDashboard.setRepoWebUrl(url);
   }).catch(() => {});
 
-  // Check if a coordinator is already running
-  const existing = getActiveCoordinator();
+  // Atomically try to claim the coordinator role. If another live instance
+  // already owns the lock, connect as a worker instead. This prevents a
+  // TOCTOU race where two instances both pass a "no coordinator" check and
+  // then clobber each other's socket in Coordinator.start().
+  const lockResult = tryAcquireLock(process.pid);
 
-  if (existing) {
-    // Connect as a worker to the existing coordinator
-    try {
-      worker = new Worker({
-        id: projectId,
-        projectPath: PROJECT_ROOT,
-        projectName: path.basename(PROJECT_ROOT),
-        socketPath: existing.socketPath,
-      });
-      worker.onCommand = (action, payload) => handleWebAction(action, payload);
-      await worker.connect();
-      addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
+  if (!lockResult.acquired) {
+    const existing = lockResult.existing || getActiveCoordinator();
+    if (existing) {
+      try {
+        worker = new Worker({
+          id: projectId,
+          projectPath: PROJECT_ROOT,
+          projectName: path.basename(PROJECT_ROOT),
+          socketPath: existing.socketPath,
+        });
+        worker.onCommand = (action, payload) => handleWebAction(action, payload);
+        await worker.connect();
+        addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
 
-      // Push state periodically
-      webStateInterval = setInterval(() => {
-        if (worker && worker.isConnected()) {
-          worker.pushState(webDashboard.getSerializableState());
-        } else {
-          clearInterval(webStateInterval);
-          webStateInterval = null;
-        }
-      }, 500);
+        // Push state periodically
+        webStateInterval = setInterval(() => {
+          if (worker && worker.isConnected()) {
+            worker.pushState(webDashboard.getSerializableState());
+          } else {
+            clearInterval(webStateInterval);
+            webStateInterval = null;
+          }
+        }, 500);
 
-      // Don't start our own server — piggyback on the coordinator's.
-      // Don't open browser either — the existing tab will show this project automatically.
-      WEB_PORT = existing.port;
-      render();
-      return;
-    } catch (err) {
-      // Couldn't connect — become coordinator instead
-      worker = null;
+        // Don't start our own server — piggyback on the coordinator's.
+        // Don't open browser either — the existing tab will show this project automatically.
+        WEB_PORT = existing.port;
+        render();
+        return;
+      } catch (err) {
+        // Another coordinator owns the lock but we can't talk to it. Do NOT
+        // take over (that would unlink the live coordinator's socket). Run
+        // without a web dashboard for this instance.
+        worker = null;
+        addLog(`Could not join web dashboard at ${localhostUrl(existing.port)}: ${err.message}`, 'error');
+        webDashboard = null;
+        render();
+        return;
+      }
     }
+    // Lock exists but we couldn't claim it and couldn't read the owner.
+    // Bail out rather than race a concurrent startup.
+    addLog('Web dashboard unavailable: could not acquire coordinator lock', 'error');
+    webDashboard = null;
+    render();
+    return;
   }
 
-  // We are the coordinator
+  // We hold the lock — it is now safe to remove any leftover socket and
+  // start listening. The lock file contains a placeholder pid-only entry
+  // until finalizeLock() writes the real port/socketPath after a successful
+  // bind.
   try {
     coordinator = new Coordinator();
     coordinator.onProjectsChanged = (projects) => {
@@ -3155,7 +3175,12 @@ async function startWebDashboard(openBrowser) {
     await coordinator.start();
     coordinator.registerLocal(projectId, PROJECT_ROOT, path.basename(PROJECT_ROOT), webDashboard.getSerializableState());
 
-    // Update coordinator with our latest state periodically
+    const { port } = await webDashboard.start();
+    WEB_PORT = port;
+    finalizeLock(process.pid, port, coordinator.socketPath);
+
+    // Update coordinator with our latest state periodically. Started only
+    // after a successful bind so a failed start doesn't leak an interval.
     webStateInterval = setInterval(() => {
       if (coordinator && webDashboard) {
         coordinator.updateLocal(projectId, webDashboard.getSerializableState());
@@ -3165,15 +3190,16 @@ async function startWebDashboard(openBrowser) {
       }
     }, 500);
 
-    const { port } = await webDashboard.start();
-    WEB_PORT = port;
-    writeLock(process.pid, port, coordinator.socketPath);
-
     addLog(`Web dashboard: ${localhostUrl(port)}`, 'success');
     if (openBrowser) openInBrowser(localhostUrl(port));
     render();
   } catch (err) {
     addLog(`Web dashboard failed: ${err.message}`, 'error');
+    if (coordinator) {
+      try { coordinator.stop(); } catch (_) { /* ignore */ }
+    }
+    removeLock();
+    removeSocket();
     webDashboard = null;
     coordinator = null;
     render();

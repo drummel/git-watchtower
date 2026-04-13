@@ -68,13 +68,18 @@ function isProcessAlive(pid) {
 
 /**
  * Read the lock file.
- * @returns {{ pid: number, port: number, socketPath: string } | null}
+ *
+ * A lock may be a placeholder (pid only, no port/socketPath) while a new
+ * coordinator is still binding its socket. Callers that need a connectable
+ * coordinator should use getActiveCoordinator(), which rejects placeholders.
+ *
+ * @returns {{ pid: number, port?: number, socketPath?: string, pending?: boolean } | null}
  */
 function readLock() {
   try {
     if (!fs.existsSync(LOCK_FILE)) return null;
     const data = JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8'));
-    if (!data || !data.pid || !data.port) return null;
+    if (!data || !data.pid) return null;
     return data;
   } catch (e) {
     return null;
@@ -93,6 +98,66 @@ function writeLock(pid, port, socketPath) {
 }
 
 /**
+ * Atomically reserve the coordinator lock.
+ *
+ * Uses `fs.openSync(..., 'wx')` to create the lock file exclusively, so two
+ * instances racing to become coordinator cannot both succeed. A placeholder
+ * entry ({ pid, pending: true }) is written immediately so that any process
+ * reading the lock while we bind our socket still sees a valid owning PID.
+ *
+ * If the lock already exists but the owning process is dead, the stale lock
+ * (and socket) are cleaned up and the acquisition is retried once.
+ *
+ * @param {number} pid - PID of the acquiring process
+ * @returns {{acquired: true} | {acquired: false, existing: {pid: number, port?: number, socketPath?: string, pending?: boolean} | null}}
+ */
+function tryAcquireLock(pid) {
+  ensureDir();
+
+  // One retry after stale-lock cleanup; avoids looping if another process
+  // keeps recreating the lock faster than we can clean it up.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(LOCK_FILE, 'wx');
+      try {
+        fs.writeSync(fd, JSON.stringify({ pid, pending: true }) + '\n');
+      } finally {
+        fs.closeSync(fd);
+      }
+      return { acquired: true };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+
+      // Lock file exists — check if the owner is alive.
+      const existing = readLock();
+      if (existing && isProcessAlive(existing.pid)) {
+        return { acquired: false, existing };
+      }
+      // Stale or unreadable — clean up and retry the exclusive create.
+      removeLock();
+      removeSocket();
+    }
+  }
+
+  // Another process raced us to re-create the lock. Treat it as active.
+  const existing = readLock();
+  return { acquired: false, existing: existing || null };
+}
+
+/**
+ * Replace the placeholder lock with the final port/socket details after the
+ * coordinator has successfully bound its IPC socket and the web server has
+ * started listening. Caller must already own the lock via tryAcquireLock().
+ *
+ * @param {number} pid
+ * @param {number} port
+ * @param {string} socketPath
+ */
+function finalizeLock(pid, port, socketPath) {
+  writeLock(pid, port, socketPath);
+}
+
+/**
  * Remove the lock file.
  */
 function removeLock() {
@@ -107,18 +172,25 @@ function removeSocket() {
 }
 
 /**
- * Check if a coordinator is already running.
- * Cleans up stale lock if the process is dead.
+ * Check if a coordinator is already running and reachable.
+ *
+ * Returns null for stale locks (cleans them up) and for placeholder locks
+ * that haven't finished binding yet — callers shouldn't try to connect to
+ * a coordinator that isn't listening.
+ *
  * @returns {{ pid: number, port: number, socketPath: string } | null}
  */
 function getActiveCoordinator() {
   const lock = readLock();
   if (!lock) return null;
-  if (isProcessAlive(lock.pid)) return lock;
-  // Stale lock — clean up
-  removeLock();
-  removeSocket();
-  return null;
+  if (!isProcessAlive(lock.pid)) {
+    removeLock();
+    removeSocket();
+    return null;
+  }
+  // Placeholder (pending) — coordinator is still binding.
+  if (!lock.port || !lock.socketPath) return null;
+  return /** @type {{pid:number,port:number,socketPath:string}} */ (lock);
 }
 
 // ─── Coordinator (first instance) ────────────────────────────────
@@ -533,6 +605,8 @@ module.exports = {
   getActiveCoordinator,
   readLock,
   writeLock,
+  tryAcquireLock,
+  finalizeLock,
   removeLock,
   removeSocket,
   isProcessAlive,
