@@ -14,6 +14,8 @@ const {
   getActiveCoordinator,
   readLock,
   writeLock,
+  tryAcquireLock,
+  finalizeLock,
   removeLock,
   removeSocket,
   isProcessAlive,
@@ -80,6 +82,71 @@ describe('lock file operations', () => {
     writeLock(12345, 4000, '/tmp/test.sock');
     removeLock();
     assert.equal(readLock(), null);
+  });
+});
+
+describe('tryAcquireLock / finalizeLock', () => {
+  afterEach(() => {
+    removeLock();
+  });
+
+  it('should acquire when no lock exists', () => {
+    removeLock();
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    // Placeholder lock should exist and name the acquiring pid
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+  });
+
+  it('should refuse to acquire when a live owner holds the lock', () => {
+    ensureDir();
+    // First acquisition succeeds
+    const first = tryAcquireLock(process.pid);
+    assert.equal(first.acquired, true);
+    // Second acquisition from the same process (which is still alive) must fail
+    const second = tryAcquireLock(process.pid);
+    assert.equal(second.acquired, false);
+    assert.ok(second.existing);
+    assert.equal(second.existing.pid, process.pid);
+  });
+
+  it('should clean up a stale lock and acquire', () => {
+    ensureDir();
+    // Write a lock for a pid that will never exist
+    writeLock(999999999, 4000, '/tmp/stale.sock');
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+  });
+
+  it('finalizeLock should replace the placeholder with full info', () => {
+    removeLock();
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    // Placeholder has no port
+    assert.equal(readLock().port, undefined);
+
+    finalizeLock(process.pid, 4242, '/tmp/final.sock');
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+    assert.equal(lock.port, 4242);
+    assert.equal(lock.socketPath, '/tmp/final.sock');
+  });
+
+  it('should prevent two concurrent acquirers from both succeeding', () => {
+    removeLock();
+    // Simulate a race by attempting to acquire twice in sequence without
+    // releasing. Even in the fastest possible interleaving on a single
+    // process, the exclusive-create semantic ensures only one wins.
+    const a = tryAcquireLock(process.pid);
+    const b = tryAcquireLock(process.pid);
+    assert.equal(a.acquired, true);
+    assert.equal(b.acquired, false);
   });
 });
 
