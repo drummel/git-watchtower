@@ -419,6 +419,10 @@ let worker = null;
 let projectId = null;
 let webStateInterval = null;
 
+// Periodic update check controller — hoisted to module scope so the exit
+// handler can clean it up regardless of where in start() we are.
+let periodicUpdateCheck = null;
+
 function applyConfig(config) {
   // Server settings
   SERVER_MODE = config.server?.mode || 'static';
@@ -3296,6 +3300,11 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+// Clean up long-lived timers on exit, regardless of which code path got us
+// here (normal exit, uncaught exception, early failure in start()).
+process.on('exit', () => {
+  if (periodicUpdateCheck) periodicUpdateCheck.stop();
+});
 process.on('uncaughtException', async (err) => {
   telemetry.captureError(err);
   write(ansi.showCursor);
@@ -3479,8 +3488,9 @@ async function start() {
     }
   }).catch(() => {});
 
-  // Re-check for updates periodically (every 4 hours) while running
-  const periodicCheck = startPeriodicUpdateCheck((latestVersion) => {
+  // Re-check for updates periodically (every 4 hours) while running.
+  // Assigned to module scope so the top-level exit handler can stop it.
+  periodicUpdateCheck = startPeriodicUpdateCheck((latestVersion) => {
     const alreadyKnown = store.get('updateAvailable');
     store.setState({ updateAvailable: latestVersion });
     if (!alreadyKnown) {
@@ -3490,9 +3500,6 @@ async function start() {
     }
     render();
   });
-
-  // Clean up periodic check on exit
-  process.on('exit', () => periodicCheck.stop());
 }
 
 start().catch(err => {
