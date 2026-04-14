@@ -3271,6 +3271,18 @@ async function startWebDashboard(openBrowser) {
     render();
   } catch (err) {
     addLog(`Web dashboard failed: ${err.message}`, 'error');
+    // Defensive: if we got far enough to arm the state-push interval,
+    // clear it. The current ordering starts the interval only after
+    // webDashboard.start() resolves, but this keeps cleanup robust
+    // against future reordering and against failures in the
+    // post-bind statements (e.g. openInBrowser, addLog).
+    if (webStateInterval) {
+      clearInterval(webStateInterval);
+      webStateInterval = null;
+    }
+    if (webDashboard) {
+      try { webDashboard.stop(); } catch (_) { /* ignore */ }
+    }
     if (coordinator) {
       try { coordinator.stop(); } catch (_) { /* ignore */ }
     }
