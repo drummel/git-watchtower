@@ -22,6 +22,7 @@ const { version: PACKAGE_VERSION } = require('../../package.json');
  * @property {boolean} casino - Enable casino mode
  * @property {boolean} web - Enable web dashboard mode
  * @property {number|null} webPort - Web dashboard port override
+ * @property {boolean} force - Bypass the single-instance lock for this repo
  * @property {string[]} errors - Validation errors encountered during parsing
  */
 
@@ -56,6 +57,7 @@ function parseArgs(argv, options = {}) {
     // Actions
     init: false,
     casino: false,
+    force: false,
     // Parsing errors
     errors: [],
   };
@@ -151,6 +153,8 @@ function parseArgs(argv, options = {}) {
     // Actions and info
     else if (args[i] === '--init') {
       result.init = true;
+    } else if (args[i] === '--force') {
+      result.force = true;
     } else if (args[i] === '--version' || args[i] === '-v') {
       if (options.onVersion) {
         options.onVersion(PACKAGE_VERSION);
@@ -277,6 +281,8 @@ Web Dashboard:
 
 General:
   --init                  Run the configuration wizard
+  --force                 Allow starting even if another instance is running
+                          against this repo (not recommended)
   -v, --version           Show version number
   -h, --help              Show this help message
 

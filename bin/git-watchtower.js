@@ -102,6 +102,7 @@ const store = new Store();
 // Web dashboard server
 const { WebDashboardServer } = require('../src/server/web');
 const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket, isProcessAlive } = require('../src/server/coordinator');
+const monitorLock = require('../src/utils/monitor-lock');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -1003,8 +1004,12 @@ function getCasinoMessage(type) {
 function addLog(message, type = 'info') {
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
+  // Collapse any whitespace (newlines, tabs, CRs) into a single space so that
+  // multi-line content (e.g. git stderr from a failed auto-pull) cannot leak
+  // cursor movement into the rendered box and corrupt the surrounding UI.
+  const safeMessage = String(message == null ? '' : message).replace(/\s+/g, ' ').trim();
   const entry = {
-    message, type,
+    message: safeMessage, type,
     timestamp: new Date().toLocaleTimeString(),
     icon: icons[type] || '○',
     color: colors[type] || 'white',
@@ -3368,6 +3373,9 @@ function restartProcess() {
 
 let isShuttingDown = false;
 let _resourcesCleaned = false;
+// Path of the per-repo monitor lock we own, if any. Set during start() and
+// cleared in cleanupResources() after release.
+let monitorLockFile = null;
 
 /**
  * Idempotent, best-effort cleanup of every long-lived resource we own:
@@ -3423,6 +3431,13 @@ function cleanupResources() {
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
   try { stopWebDashboard(); } catch (_) { /* ignore */ }
+
+  // Per-repo monitor lock — release last so the slot stays reserved for the
+  // entire lifetime of this process, including any errors in the steps above.
+  if (monitorLockFile) {
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    monitorLockFile = null;
+  }
 }
 
 async function shutdown() {
@@ -3487,6 +3502,44 @@ async function start() {
     console.error('\n  Git Watchtower requires Git to be installed.');
     console.error('  Install Git from: https://git-scm.com/downloads\n');
     process.exit(1);
+  }
+
+  // Single-instance guard (per repo). Two TUIs rendering to the same terminal
+  // stomp on each other's frames — selection cursor bounces between their
+  // independent selectedIndex values, the activity log flips between two
+  // buffers, and each sees the other's `git checkout` as an "external" switch.
+  // Acquire before any TTY writes so a refusal leaves the user's prompt clean.
+  const lockResult = monitorLock.acquire(PROJECT_ROOT);
+  if (!lockResult.acquired) {
+    if (cliArgs.force) {
+      console.error(
+        ansi.yellow + '⚠ Warning: another git-watchtower (PID ' +
+        lockResult.existing.pid + ') is already running against this repo. ' +
+        'Continuing due to --force.' + ansi.reset
+      );
+    } else {
+      const existing = lockResult.existing || {};
+      console.error('\n' + ansi.red + ansi.bold +
+        '✗ Error: git-watchtower is already running against this repository' + ansi.reset);
+      console.error('\n  Existing PID: ' + ansi.bold + (existing.pid || 'unknown') + ansi.reset);
+      if (existing.startedAt) {
+        const ageMs = Date.now() - existing.startedAt;
+        const ageStr = ageMs < 60000
+          ? Math.round(ageMs / 1000) + 's'
+          : Math.round(ageMs / 60000) + 'm';
+        console.error('  Started:      ' + ageStr + ' ago');
+      }
+      console.error('  Repo:         ' + PROJECT_ROOT);
+      console.error('  Lock file:    ' + lockResult.file);
+      console.error('\n  Running two instances against the same repo makes the TUI');
+      console.error('  unusable (selection bouncing, flipping logs, CURRENT label');
+      console.error('  snap-back). Stop the other instance first:');
+      console.error('\n    ' + ansi.bold + 'kill ' + (existing.pid || '<pid>') + ansi.reset);
+      console.error('\n  Or pass --force to override (not recommended).\n');
+      process.exit(1);
+    }
+  } else {
+    monitorLockFile = lockResult.file;
   }
 
   // Load or create configuration
