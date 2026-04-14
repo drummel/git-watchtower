@@ -20,6 +20,7 @@ describe('parseArgs', () => {
     assert.equal(result.casino, false);
     assert.equal(result.web, false);
     assert.equal(result.webPort, null);
+    assert.equal(result.force, false);
   });
 
   // Server settings
@@ -269,6 +270,18 @@ describe('parseArgs', () => {
     it('should set init flag', () => {
       const result = parseArgs(['--init']);
       assert.equal(result.init, true);
+    });
+  });
+
+  describe('--force', () => {
+    it('should default to false', () => {
+      const result = parseArgs([]);
+      assert.equal(result.force, false);
+    });
+
+    it('should set force flag', () => {
+      const result = parseArgs(['--force']);
+      assert.equal(result.force, true);
     });
   });
 
