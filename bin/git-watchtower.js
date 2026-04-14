@@ -1003,8 +1003,12 @@ function getCasinoMessage(type) {
 function addLog(message, type = 'info') {
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
+  // Collapse any whitespace (newlines, tabs, CRs) into a single space so that
+  // multi-line content (e.g. git stderr from a failed auto-pull) cannot leak
+  // cursor movement into the rendered box and corrupt the surrounding UI.
+  const safeMessage = String(message == null ? '' : message).replace(/\s+/g, ' ').trim();
   const entry = {
-    message, type,
+    message: safeMessage, type,
     timestamp: new Date().toLocaleTimeString(),
     icon: icons[type] || '○',
     color: colors[type] || 'white',
