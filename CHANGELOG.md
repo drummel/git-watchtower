@@ -1,3 +1,15 @@
+# [1.13.0](https://github.com/drummel/git-watchtower/compare/v1.12.7...v1.13.0) (2026-04-14)
+
+
+### Bug Fixes
+
+* sanitize multi-line activity log messages ([4700e4a](https://github.com/drummel/git-watchtower/commit/4700e4a3bc5be6a6748de85406abc8e0484f0103))
+
+
+### Features
+
+* prevent concurrent monitors against the same repo ([f507b28](https://github.com/drummel/git-watchtower/commit/f507b284ff533350ba78c5d4e35eb5907fe25f74))
+
 ## [1.12.7](https://github.com/drummel/git-watchtower/compare/v1.12.6...v1.12.7) (2026-04-14)
 
 
