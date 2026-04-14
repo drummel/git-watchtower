@@ -3352,6 +3352,14 @@ function restartProcess() {
   }
   stopWebDashboard();
 
+  // Release the per-repo monitor lock before spawning the replacement, so the
+  // child can acquire it. The parent stays alive waiting on child.on('close'),
+  // so without this the child sees the parent as an active owner and refuses.
+  if (monitorLockFile) {
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    monitorLockFile = null;
+  }
+
   console.log('\n♻ Restarting git-watchtower...\n');
 
   const { spawn: spawnChild } = require('child_process');
