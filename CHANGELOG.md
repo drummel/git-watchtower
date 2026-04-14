@@ -1,3 +1,10 @@
+## [1.12.7](https://github.com/drummel/git-watchtower/compare/v1.12.6...v1.12.7) (2026-04-14)
+
+
+### Bug Fixes
+
+* clear webStateInterval and stop webDashboard in startWebDashboard catch ([9b0c61e](https://github.com/drummel/git-watchtower/commit/9b0c61ea9d9332f7012281dd91582d990322e1b8))
+
 ## [1.12.6](https://github.com/drummel/git-watchtower/compare/v1.12.5...v1.12.6) (2026-04-14)
 
 
