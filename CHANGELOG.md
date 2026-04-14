@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/drummel/git-watchtower/compare/v1.13.0...v1.13.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* release monitor lock before self-upgrade restart ([3fae71d](https://github.com/drummel/git-watchtower/commit/3fae71de6923b3faa9144a1238c8f3510db740d1))
+
 # [1.13.0](https://github.com/drummel/git-watchtower/compare/v1.12.7...v1.13.0) (2026-04-14)
 
 
