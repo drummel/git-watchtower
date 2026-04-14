@@ -1,3 +1,10 @@
+## [1.12.5](https://github.com/drummel/git-watchtower/compare/v1.12.4...v1.12.5) (2026-04-14)
+
+
+### Bug Fixes
+
+* guard schedulePoll against running after shutdown() has started ([2e864e7](https://github.com/drummel/git-watchtower/commit/2e864e716b2b1205c1b8b3cda048fb36b327f9dd))
+
 ## [1.12.4](https://github.com/drummel/git-watchtower/compare/v1.12.3...v1.12.4) (2026-04-13)
 
 
