@@ -3355,38 +3355,79 @@ function restartProcess() {
 // ============================================================================
 
 let isShuttingDown = false;
+let _resourcesCleaned = false;
+
+/**
+ * Idempotent, best-effort cleanup of every long-lived resource we own:
+ * terminal state, timers, file watcher, live-reload SSE clients, the
+ * user's dev-server child process, and the web-dashboard / coordinator
+ * (which unlinks the lock file and IPC socket). Safe to call multiple
+ * times and from any exit path (shutdown, uncaughtException, 'exit').
+ *
+ * Every step is wrapped in try/catch so a failure in one resource does
+ * not prevent the rest from being cleaned up. Stays synchronous so it
+ * can run inside an 'exit' handler where async callbacks won't execute.
+ */
+function cleanupResources() {
+  if (_resourcesCleaned) return;
+  _resourcesCleaned = true;
+
+  // Restore terminal first so the user sees a clean prompt even if a
+  // later step throws.
+  try { write(ansi.showCursor); } catch (_) { /* ignore */ }
+  try { write(ansi.restoreScreen); } catch (_) { /* ignore */ }
+  try { restoreTerminalTitle(); } catch (_) { /* ignore */ }
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* ignore */ }
+  try { process.stdin.pause(); } catch (_) { /* ignore */ }
+
+  if (pollIntervalId) {
+    try { clearTimeout(pollIntervalId); } catch (_) { /* ignore */ }
+    pollIntervalId = null;
+  }
+
+  if (periodicUpdateCheck) {
+    try { periodicUpdateCheck.stop(); } catch (_) { /* ignore */ }
+  }
+
+  if (fileWatcher) {
+    try { fileWatcher.close(); } catch (_) { /* ignore */ }
+    fileWatcher = null;
+  }
+
+  // Live-reload SSE clients (static mode)
+  if (SERVER_MODE === 'static') {
+    try {
+      clients.forEach((client) => {
+        try { client.end(); } catch (_) { /* ignore */ }
+      });
+      clients.clear();
+    } catch (_) { /* ignore */ }
+  }
+
+  // User's dev-server process (command mode)
+  if (SERVER_MODE === 'command') {
+    try { stopServerProcess(); } catch (_) { /* ignore */ }
+  }
+
+  // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
+  try { stopWebDashboard(); } catch (_) { /* ignore */ }
+}
 
 async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  // Restore terminal
-  write(ansi.showCursor);
-  write(ansi.restoreScreen);
-  restoreTerminalTitle();
+  cleanupResources();
 
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
-  process.stdin.pause();
-
-  if (fileWatcher) fileWatcher.close();
-  if (pollIntervalId) clearTimeout(pollIntervalId);
-
-  // Stop server based on mode
-  if (SERVER_MODE === 'command') {
-    stopServerProcess();
-  } else if (SERVER_MODE === 'static') {
-    clients.forEach(client => client.end());
-    clients.clear();
-
-    const serverClosePromise = new Promise(resolve => server.close(resolve));
-    const timeoutPromise = new Promise(resolve => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
+  // For the static HTTP server, give in-flight connections a brief
+  // grace period to drain. cleanupResources ended the SSE clients; this
+  // races server.close against SERVER_CLOSE_TIMEOUT_MS so we never hang
+  // forever on a stuck browser.
+  if (SERVER_MODE === 'static' && server) {
+    const serverClosePromise = new Promise((resolve) => server.close(resolve));
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
-
-  // Stop web dashboard and coordinator
-  stopWebDashboard();
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3402,19 +3443,23 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-// Clean up long-lived timers on exit, regardless of which code path got us
-// here (normal exit, uncaught exception, early failure in start()).
+// Belt-and-suspenders: if we exit via a path that didn't call
+// cleanupResources (e.g. a hard crash in startup before handlers were
+// registered), still do synchronous best-effort cleanup.
 process.on('exit', () => {
-  if (periodicUpdateCheck) periodicUpdateCheck.stop();
+  cleanupResources();
 });
 process.on('uncaughtException', async (err) => {
-  telemetry.captureError(err);
-  write(ansi.showCursor);
-  write(ansi.restoreScreen);
-  restoreTerminalTitle();
-  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  isShuttingDown = true;
+
+  // Synchronous teardown first — so the coordinator socket, lock file,
+  // dev-server child process group, and SSE clients are released even
+  // if telemetry shutdown hangs or throws.
+  cleanupResources();
+
+  try { telemetry.captureError(err); } catch (_) { /* ignore */ }
   console.error('Uncaught exception:', err);
-  await telemetry.shutdown();
+  try { await telemetry.shutdown(); } catch (_) { /* ignore */ }
   process.exit(1);
 });
 
