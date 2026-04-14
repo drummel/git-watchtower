@@ -1,3 +1,10 @@
+## [1.12.6](https://github.com/drummel/git-watchtower/compare/v1.12.5...v1.12.6) (2026-04-14)
+
+
+### Bug Fixes
+
+* route uncaughtException through shared idempotent cleanup ([8acbbfa](https://github.com/drummel/git-watchtower/commit/8acbbfa0817e6c940a394758c2eaace1471ef50b))
+
 ## [1.12.5](https://github.com/drummel/git-watchtower/compare/v1.12.4...v1.12.5) (2026-04-14)
 
 
