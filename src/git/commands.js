@@ -198,7 +198,13 @@ async function log(branchName, options = {}) {
 }
 
 /**
- * Get commit count by day for sparkline
+ * Get commit count by day for sparkline.
+ *
+ * Buckets commits by local calendar date rather than by dividing a ms
+ * difference by 86 400 000, which breaks on DST transitions (a
+ * spring-forward day is only 23 h, causing Math.floor(23/24) = 0 and
+ * merging yesterday's commits into today's bucket).
+ *
  * @param {string} branchName - Branch name
  * @param {number} [days=7] - Number of days
  * @param {string} [cwd] - Working directory
@@ -215,15 +221,23 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
 
     if (!stdout) return counts;
 
+    // Build a map from "YYYY-MM-DD" → bucket index. Using setDate()
+    // to step backwards is DST-safe because it adjusts the calendar
+    // day without relying on a fixed ms offset.
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const dayBuckets = new Map();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dayBuckets.set(key, days - 1 - i);
+    }
 
     for (const line of stdout.split('\n').filter(Boolean)) {
       const commitDate = new Date(line);
-      commitDate.setHours(0, 0, 0, 0);
-      const daysDiff = Math.floor((today.getTime() - commitDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysDiff >= 0 && daysDiff < days) {
-        counts[days - 1 - daysDiff]++;
+      const key = `${commitDate.getFullYear()}-${String(commitDate.getMonth() + 1).padStart(2, '0')}-${String(commitDate.getDate()).padStart(2, '0')}`;
+      const idx = dayBuckets.get(key);
+      if (idx !== undefined) {
+        counts[idx]++;
       }
     }
   } catch (error) {
