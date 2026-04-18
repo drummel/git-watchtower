@@ -1,3 +1,10 @@
+## [1.14.1](https://github.com/drummel/git-watchtower/compare/v1.14.0...v1.14.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* use calendar-date bucketing in getCommitsByDay to avoid DST errors ([4f88227](https://github.com/drummel/git-watchtower/commit/4f88227d8f05ec0f844cddec197d70203681ecdf))
+
 # [1.14.0](https://github.com/drummel/git-watchtower/compare/v1.13.1...v1.14.0) (2026-04-18)
 
 
