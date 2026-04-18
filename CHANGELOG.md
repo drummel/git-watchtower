@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/drummel/git-watchtower/compare/v1.13.1...v1.14.0) (2026-04-18)
+
+
+### Features
+
+* report "already up to date" and +/- diff summary on successful pulls ([5c21fc7](https://github.com/drummel/git-watchtower/commit/5c21fc76228428e709d1aeecf9eb59e1ea63f7b9))
+
 ## [1.13.1](https://github.com/drummel/git-watchtower/compare/v1.13.0...v1.13.1) (2026-04-14)
 
 
