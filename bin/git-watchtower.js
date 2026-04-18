@@ -1583,8 +1583,33 @@ async function pullCurrentBranch() {
     addLog(`Pulling from ${REMOTE_NAME}/${branch}...`, 'update');
     render();
 
-    await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
-    addLog('Pulled successfully', 'success');
+    // Capture HEAD before pull so we can diff against it when git pull
+    // doesn't put a clean "already up to date" message on stdout.
+    const preHead = await execGitSilent(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
+    const oldCommit = preHead && preHead.stdout ? preHead.stdout.trim() : null;
+
+    const result = await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
+    const pullOutput = `${result.stdout || ''}\n${result.stderr || ''}`;
+
+    if (/already up[- ]to[- ]date/i.test(pullOutput)) {
+      addLog(`Already up to date with ${REMOTE_NAME}/${branch}`, 'success');
+    } else {
+      // Prefer the summary line from git's own output (it's locale-sensitive
+      // but matches how git reports its work). Fall back to a diff against
+      // the old HEAD when git's summary line is missing (e.g. merge commit
+      // without --stat).
+      let summary = '';
+      const diffStats = parseDiffStats(pullOutput);
+      if (diffStats.added || diffStats.deleted) {
+        summary = ` (+${diffStats.added}/-${diffStats.deleted})`;
+      } else if (oldCommit) {
+        const fallback = await getDiffStats(oldCommit, 'HEAD');
+        if (fallback.added || fallback.deleted) {
+          summary = ` (+${fallback.added}/-${fallback.deleted})`;
+        }
+      }
+      addLog(`Pulled ${REMOTE_NAME}/${branch}${summary}`, 'success');
+    }
     pendingDirtyOperation = null;
     notifyClients();
     return { success: true };
@@ -1952,7 +1977,6 @@ async function pollGitChanges() {
 
       try {
         await execGit(['pull', REMOTE_NAME, autoPullBranchName], { cwd: PROJECT_ROOT, timeout: 60000 });
-        addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
         // Update the stored commit to the new one
         const newCommit = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
@@ -1962,9 +1986,10 @@ async function pollGitChanges() {
         // Reload browsers
         notifyClients();
 
-        // Calculate actual diff for stats tracking
+        // Calculate actual diff for stats tracking + status message
+        let diffStats = { added: 0, deleted: 0 };
         if (oldCommit) {
-          const diffStats = await getDiffStats(oldCommit, 'HEAD');
+          diffStats = await getDiffStats(oldCommit, 'HEAD');
           const totalLines = diffStats.added + diffStats.deleted;
           // Always track session churn
           sessionStats.recordChurn(diffStats.added, diffStats.deleted);
@@ -1978,6 +2003,12 @@ async function pollGitChanges() {
             }
           }
         }
+
+        // Indicate what was updated so the log isn't just a generic "success"
+        const summary = (diffStats.added || diffStats.deleted)
+          ? ` (+${diffStats.added}/-${diffStats.deleted})`
+          : '';
+        addLog(`Auto-pulled ${autoPullBranchName}${summary}`, 'success');
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
         if (isMergeConflict(errMsg)) {
