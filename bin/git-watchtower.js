@@ -1963,7 +1963,7 @@ async function pollGitChanges() {
     }
 
     // Background ahead/behind fetch for visible branches
-    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => {});
+    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => { /* transient git/network error — next poll will retry */ });
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
     const autoPullBranchName = store.get('currentBranch');
@@ -2447,7 +2447,7 @@ function setupKeyboardInput() {
                 store.setState({ actionData: fullData, actionLoading: false });
                 render();
               }
-            }).catch(() => {});
+            }).catch(() => { /* PR was created; modal refresh is a nice-to-have, user can reopen */ });
           } catch (e) {
             const msg = (e && e.stderr) || (e && e.message) || String(e);
             addLog(`Failed to create ${prLabel}: ${msg.split('\n')[0]}`, 'error');
@@ -2930,7 +2930,7 @@ function setupKeyboardInput() {
         } else {
           startWebDashboard(true).then(() => {
             showFlash(`Web dashboard on :${WEB_PORT}`);
-          }).catch(() => {});
+          }).catch(() => { /* startWebDashboard surfaces its own errors via addLog/showErrorToast */ });
         }
         break;
       }
@@ -3190,7 +3190,7 @@ async function startWebDashboard(openBrowser) {
   // Resolve and cache the repo web URL for link building in the web UI
   getRemoteWebUrl(null).then((url) => {
     if (url) webDashboard.setRepoWebUrl(url);
-  }).catch(() => {});
+  }).catch(() => { /* no remote or unreachable — web UI falls back to branch names without links */ });
 
   // Atomically try to claim the coordinator role. If another live instance
   // already owns the lock, connect as a worker instead. This prevents a
@@ -3652,11 +3652,11 @@ async function start() {
 
   // Detect default branch for ahead/behind counts, then fetch initial data
   detectDefaultBranch().then(() => {
-    fetchAheadBehindForBranches(initBranches).catch(() => {});
-  }).catch(() => {});
+    fetchAheadBehindForBranches(initBranches).catch(() => { /* ahead/behind is background-only — stale counts are better than a noisy startup */ });
+  }).catch(() => { /* no default branch detectable (no remote refs yet) — ahead/behind stays hidden */ });
 
   // Load sparklines and action cache in background
-  refreshAllSparklines().catch(() => {});
+  refreshAllSparklines().catch(() => { /* sparkline cache stays empty — activity column just renders blank */ });
   initActionCache().then(() => {
     // Once env is known, kick off initial PR status fetch
     fetchAllPrStatuses().then(map => {
@@ -3665,8 +3665,8 @@ async function start() {
         lastPrStatusFetch = Date.now();
         render();
       }
-    }).catch(() => {});
-  }).catch(() => {});
+    }).catch(() => { /* gh/glab unreachable — inline PR indicators stay hidden, poller will retry */ });
+  }).catch(() => { /* cliEnv detection failed — PR actions fall back to web links where possible */ });
 
   // Start server based on mode
   const startBranchName = store.get('currentBranch');
@@ -3737,7 +3737,7 @@ async function start() {
       addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
       render();
     }
-  }).catch(() => {});
+  }).catch(() => { /* npm registry unreachable — periodic check will try again in 4h */ });
 
   // Re-check for updates periodically (every 4 hours) while running.
   // Assigned to module scope so the top-level exit handler can stop it.
