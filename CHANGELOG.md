@@ -1,3 +1,10 @@
+## [1.14.2](https://github.com/drummel/git-watchtower/compare/v1.14.1...v1.14.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* unref SIGKILL grace timer and add Windows force-kill fallback ([efa07d9](https://github.com/drummel/git-watchtower/commit/efa07d97cbf4fc15a2079778bd1f54d37400fee9))
+
 ## [1.14.1](https://github.com/drummel/git-watchtower/compare/v1.14.0...v1.14.1) (2026-04-18)
 
 
