@@ -265,44 +265,90 @@ class ProcessManager {
       return false;
     }
 
-    // Capture reference before nulling — needed for deferred SIGKILL
+    // Capture reference before nulling — needed for deferred force-kill
     const proc = this.process;
 
-    // Try graceful shutdown first
     if (process.platform === 'win32') {
-      try {
-        spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
-      } catch (e) {
-        // Ignore taskkill errors
-      }
+      this._stopWindows(proc);
     } else {
-      try {
-        // Kill the entire process group (negative PID) so that
-        // grandchildren (e.g. npm -> node -> vite) are also terminated.
-        process.kill(-proc.pid, 'SIGTERM');
-
-        // Force kill after grace period
-        const forceKillTimeout = setTimeout(() => {
-          try {
-            process.kill(-proc.pid, 'SIGKILL');
-          } catch (e) {
-            // Process group may already be dead
-          }
-        }, KILL_GRACE_PERIOD);
-
-        // Clear timeout if process exits cleanly
-        proc.once('close', () => {
-          clearTimeout(forceKillTimeout);
-        });
-      } catch (e) {
-        // Process group may already be dead
-      }
+      this._stopUnix(proc);
     }
 
     this.process = null;
     this.running = false;
     this.notifyStateChange();
     return true;
+  }
+
+  /**
+   * Unix stop: SIGTERM the process group, then SIGKILL after a grace period.
+   * The grace timer is unref'd so it doesn't keep the event loop alive when
+   * the main process wants to exit.
+   * @param {import('child_process').ChildProcess} proc
+   * @private
+   */
+  _stopUnix(proc) {
+    // If the process has already exited, there's nothing to signal.
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+    try {
+      process.kill(-proc.pid, 'SIGTERM');
+    } catch (e) {
+      // Process group may already be dead
+      return;
+    }
+
+    const forceKillTimeout = setTimeout(() => {
+      // Re-check: process may have exited during the grace period.
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      try {
+        process.kill(-proc.pid, 'SIGKILL');
+      } catch (e) {
+        // Process group may already be dead
+      }
+    }, KILL_GRACE_PERIOD);
+
+    // Don't let this timer keep the event loop alive on shutdown.
+    forceKillTimeout.unref();
+
+    // Clear early if the process exits before the grace period.
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
+  }
+
+  /**
+   * Windows stop: taskkill /t (tree kill). If the process doesn't exit
+   * within the grace period, retry with /f (force).
+   * @param {import('child_process').ChildProcess} proc
+   * @private
+   */
+  _stopWindows(proc) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+    try {
+      spawn('taskkill', ['/pid', proc.pid.toString(), '/t']);
+    } catch (e) {
+      // Ignore spawn errors (PID already gone, etc.)
+      return;
+    }
+
+    // Fallback: force-kill if the process is still alive after the
+    // grace period. This mirrors the Unix SIGTERM → SIGKILL pattern.
+    const forceKillTimeout = setTimeout(() => {
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      try {
+        spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
+      } catch (e) {
+        // Ignore — process may already be dead
+      }
+    }, KILL_GRACE_PERIOD);
+
+    forceKillTimeout.unref();
+
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
   }
 
   /**
