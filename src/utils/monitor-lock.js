@@ -74,7 +74,7 @@ function readLock(file) {
 }
 
 function removeLock(file) {
-  try { fs.unlinkSync(file); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(file); } catch (e) { /* lock file may not exist (already removed or never created) */ }
 }
 
 /**

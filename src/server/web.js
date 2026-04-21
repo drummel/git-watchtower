@@ -272,7 +272,7 @@ class WebDashboardServer {
 
     // Close all SSE connections
     for (const client of this.clients) {
-      try { client.end(); } catch (e) { /* ignore */ }
+      try { client.end(); } catch (e) { /* SSE client may already be disconnected */ }
     }
     this.clients.clear();
 
@@ -293,7 +293,7 @@ class WebDashboardServer {
       try {
         client.write('event: flash\n');
         client.write('data: ' + data + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 
@@ -307,7 +307,7 @@ class WebDashboardServer {
       try {
         client.write('event: preview\n');
         client.write('data: ' + json + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 
@@ -321,7 +321,7 @@ class WebDashboardServer {
       try {
         client.write('event: actionResult\n');
         client.write('data: ' + json + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 

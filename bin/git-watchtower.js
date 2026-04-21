@@ -654,7 +654,7 @@ async function loadAsyncActionData(branch, currentData) {
     try {
       const host = new URL(env.webUrlBase).hostname;
       webUrl = buildBranchUrl(env.webUrlBase, host, branch.name);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* invalid webUrlBase — leave webUrl null, modal hides the link */ }
   }
 
   // Fetch session URL (local git, fast but async)
@@ -3317,10 +3317,10 @@ async function startWebDashboard(openBrowser) {
       webStateInterval = null;
     }
     if (webDashboard) {
-      try { webDashboard.stop(); } catch (_) { /* ignore */ }
+      try { webDashboard.stop(); } catch (_) { /* web server may not have bound yet — nothing to stop */ }
     }
     if (coordinator) {
-      try { coordinator.stop(); } catch (_) { /* ignore */ }
+      try { coordinator.stop(); } catch (_) { /* coordinator may not have started its IPC server */ }
     }
     removeLock();
     removeSocket();
@@ -3387,7 +3387,7 @@ function restartProcess() {
   // child can acquire it. The parent stays alive waiting on child.on('close'),
   // so without this the child sees the parent as an active owner and refuses.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
     monitorLockFile = null;
   }
 
@@ -3433,23 +3433,23 @@ function cleanupResources() {
 
   // Restore terminal first so the user sees a clean prompt even if a
   // later step throws.
-  try { write(ansi.showCursor); } catch (_) { /* ignore */ }
-  try { write(ansi.restoreScreen); } catch (_) { /* ignore */ }
-  try { restoreTerminalTitle(); } catch (_) { /* ignore */ }
-  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* ignore */ }
-  try { process.stdin.pause(); } catch (_) { /* ignore */ }
+  try { write(ansi.showCursor); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { write(ansi.restoreScreen); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { restoreTerminalTitle(); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* stdin may already be unraw or detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused or destroyed */ }
 
   if (pollIntervalId) {
-    try { clearTimeout(pollIntervalId); } catch (_) { /* ignore */ }
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive — clearTimeout normally won't throw */ }
     pollIntervalId = null;
   }
 
   if (periodicUpdateCheck) {
-    try { periodicUpdateCheck.stop(); } catch (_) { /* ignore */ }
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval handle may already be cleared */ }
   }
 
   if (fileWatcher) {
-    try { fileWatcher.close(); } catch (_) { /* ignore */ }
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed by OS or previous cleanup */ }
     fileWatcher = null;
   }
 
@@ -3457,24 +3457,24 @@ function cleanupResources() {
   if (SERVER_MODE === 'static') {
     try {
       clients.forEach((client) => {
-        try { client.end(); } catch (_) { /* ignore */ }
+        try { client.end(); } catch (_) { /* SSE client socket already closed */ }
       });
       clients.clear();
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
   }
 
   // User's dev-server process (command mode)
   if (SERVER_MODE === 'command') {
-    try { stopServerProcess(); } catch (_) { /* ignore */ }
+    try { stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
   }
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
-  try { stopWebDashboard(); } catch (_) { /* ignore */ }
+  try { stopWebDashboard(); } catch (_) { /* web dashboard may never have been started */ }
 
   // Per-repo monitor lock — release last so the slot stays reserved for the
   // entire lifetime of this process, including any errors in the steps above.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
     monitorLockFile = null;
   }
 }
@@ -3523,9 +3523,9 @@ process.on('uncaughtException', async (err) => {
   // if telemetry shutdown hangs or throws.
   cleanupResources();
 
-  try { telemetry.captureError(err); } catch (_) { /* ignore */ }
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
-  try { await telemetry.shutdown(); } catch (_) { /* ignore */ }
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   process.exit(1);
 });
 

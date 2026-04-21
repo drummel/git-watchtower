@@ -77,7 +77,7 @@ function detectPlatform(webUrl) {
     if (host === 'gitlab.com' || parts.includes('gitlab')) return 'gitlab';
     if (host === 'bitbucket.org' || parts.includes('bitbucket')) return 'bitbucket';
     if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) return 'azure';
-  } catch (e) { /* ignore */ }
+  } catch (e) { /* webUrl isn't a valid URL — fall through to the self-hosted default */ }
   return 'github'; // default assumption for self-hosted
 }
 
