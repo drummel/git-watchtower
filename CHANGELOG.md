@@ -1,3 +1,10 @@
+## [1.14.3](https://github.com/drummel/git-watchtower/compare/v1.14.2...v1.14.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* parse branch-action data from dataset instead of silently dropping it ([bcba481](https://github.com/drummel/git-watchtower/commit/bcba4817e54a55725415871db9ed9546e783f80a))
+
 ## [1.14.2](https://github.com/drummel/git-watchtower/compare/v1.14.1...v1.14.2) (2026-04-21)
 
 
