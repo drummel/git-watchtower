@@ -70,7 +70,7 @@ function getDashboardJs() {
   function savePrefs(updates) {
     const prefs = loadPrefs();
     Object.keys(updates).forEach((k) => { prefs[k] = updates[k]; });
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (e) { /* localStorage quota exceeded or disabled (private mode) — prefs are best-effort */ }
     return prefs;
   }
   const prefs = loadPrefs();
@@ -122,7 +122,7 @@ function getDashboardJs() {
     try {
       const n = new Notification(title, { body, tag: tag || 'git-watchtower', icon: '', silent: false });
       setTimeout(() => n.close(), 8000);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* Notification constructor can throw on some browsers (e.g. permission revoked mid-session) */ }
   }
 
   function diffBranchesForNotifications(oldBranches, newBranches) {
@@ -232,14 +232,14 @@ function getDashboardJs() {
         }
         renderTabs();
         render();
-      } catch (err) { /* ignore parse errors */ }
+      } catch (err) { /* malformed SSE state frame — skip this push, next one will re-render */ }
     });
 
     evtSource.addEventListener('flash', (e) => {
       try {
         const data = JSON.parse(e.data);
         showFlash(data.text, data.type);
-      } catch (err) { /* ignore */ }
+      } catch (err) { /* malformed flash payload — not worth surfacing, skip */ }
     });
 
     evtSource.addEventListener('actionResult', (e) => {
@@ -251,7 +251,7 @@ function getDashboardJs() {
         } else {
           showToast(data.message, data.success ? 'success' : 'error');
         }
-      } catch (err) { /* ignore */ }
+      } catch (err) { /* malformed actionResult payload — skip (the action already ran server-side) */ }
     });
 
     evtSource.onerror = () => {
@@ -434,7 +434,7 @@ function getDashboardJs() {
           state.serverMode = pState.serverMode || 'none';
           state.repoWebUrl = pState.repoWebUrl || null;
           render();
-        } catch (err) { /* ignore */ }
+        } catch (err) { /* malformed per-project state response — keep current view until the next poll */ }
       }
     };
     xhr.send();
