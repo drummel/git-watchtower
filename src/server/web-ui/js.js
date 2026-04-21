@@ -804,8 +804,8 @@ ${pureFnBlock}
     const btn = e.target.closest('.action-item');
     if (!btn) return;
     const key = btn.getAttribute('data-action-key');
-    const data = {};
-    try { data = JSON.parse(btn.getAttribute('data-action-data') || '{}'); } catch (err) { /* ignore */ }
+    let data = {};
+    try { data = JSON.parse(btn.getAttribute('data-action-data') || '{}'); } catch (err) { /* malformed data-action-data — fall through with empty object */ }
 
     hideBranchActions();
 
