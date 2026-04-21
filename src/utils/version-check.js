@@ -100,7 +100,7 @@ function startPeriodicUpdateCheck(onUpdateFound, interval = UPDATE_CHECK_INTERVA
       .then((latestVersion) => {
         if (latestVersion) onUpdateFound(latestVersion);
       })
-      .catch(() => {});
+      .catch(() => { /* npm registry unreachable — next scheduled tick will try again */ });
   }, interval);
 
   return { stop: () => clearInterval(timerId) };
