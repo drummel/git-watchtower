@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const telemetry = require('../telemetry');
 
 /**
  * Directory for watchtower runtime files
@@ -359,7 +360,12 @@ class Coordinator {
           try {
             const msg = JSON.parse(line);
             this._handleWorkerMessage(socket, msg, (id) => { workerId = id; }, () => workerId);
-          } catch (e) { /* malformed IPC frame from worker — skip it and keep reading */ }
+          } catch (e) {
+            // Both sides of this socket are our own code, so a JSON-parse
+            // failure indicates a protocol/version bug worth diagnosing.
+            telemetry.captureError(e);
+            /* skip malformed frame and keep reading */
+          }
         }
       }
     });
@@ -517,7 +523,12 @@ class Worker {
             try {
               const msg = JSON.parse(line);
               this._handleMessage(msg);
-            } catch (e) { /* malformed IPC frame from coordinator — skip it and keep reading */ }
+            } catch (e) {
+              // Both sides of this socket are our own code, so a JSON-parse
+              // failure indicates a protocol/version bug worth diagnosing.
+              telemetry.captureError(e);
+              /* skip malformed frame and keep reading */
+            }
           }
         }
       });
