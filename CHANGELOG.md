@@ -1,3 +1,10 @@
+## [1.14.7](https://github.com/drummel/git-watchtower/compare/v1.14.6...v1.14.7) (2026-04-22)
+
+
+### Bug Fixes
+
+* propagate real git errors from getAllBranches instead of silencing ([14a9557](https://github.com/drummel/git-watchtower/commit/14a95577c9ebfec6c0bb2f902859a7cbf6180c95))
+
 ## [1.14.6](https://github.com/drummel/git-watchtower/compare/v1.14.5...v1.14.6) (2026-04-22)
 
 
