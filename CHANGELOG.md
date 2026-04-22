@@ -1,3 +1,10 @@
+## [1.14.6](https://github.com/drummel/git-watchtower/compare/v1.14.5...v1.14.6) (2026-04-22)
+
+
+### Bug Fixes
+
+* await old process exit in restart() instead of a static 500ms sleep ([067792f](https://github.com/drummel/git-watchtower/commit/067792fbed0e1f2b1655fa599db185fadfe8af14))
+
 ## [1.14.5](https://github.com/drummel/git-watchtower/compare/v1.14.4...v1.14.5) (2026-04-22)
 
 
