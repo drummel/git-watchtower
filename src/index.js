@@ -103,7 +103,7 @@ module.exports = {
   parseDiffStats: gitCommands.parseDiffStats,
   getDiffStats: gitCommands.getDiffStats,
   execGit: gitCommands.execGit,
-  execGitSilent: gitCommands.execGitSilent,
+  execGitOptional: gitCommands.execGitOptional,
   isGitAvailable: gitCommands.isGitAvailable,
   isGitRepository: gitCommands.isGitRepository,
   getRemotes: gitCommands.getRemotes,

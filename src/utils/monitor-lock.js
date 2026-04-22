@@ -69,6 +69,9 @@ function readLock(file) {
     if (!data || typeof data.pid !== 'number') return null;
     return data;
   } catch (e) {
+    // File was unlinked between existsSync and readFileSync, or contains
+    // garbage (crashed mid-write, foreign content). Treat as "no lock" so
+    // acquire() can clean it up and retry.
     return null;
   }
 }

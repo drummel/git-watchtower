@@ -3,7 +3,7 @@
  * Provides branch management and parsing
  */
 
-const { execGit, execGitSilent, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
+const { execGit, execGitOptional, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
 
 // Valid git branch name pattern (conservative)
@@ -73,6 +73,8 @@ async function getCurrentBranch(cwd) {
 
     return { name: stdout, isDetached: false };
   } catch (error) {
+    // Not in a git repo, or git is broken. name:null signals "no current
+    // branch" to the caller, which renders as "Not in a git repository".
     return { name: null, isDetached: false };
   }
 }
@@ -100,7 +102,7 @@ async function getAllBranches(options = {}) {
     // Get local branches
     // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
     const delimiter = '\x1f';
-    const localResult = await execGitSilent(
+    const localResult = await execGitOptional(
       ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
       { cwd }
     );
@@ -125,7 +127,7 @@ async function getAllBranches(options = {}) {
     }
 
     // Get remote branches
-    const remoteResult = await execGitSilent(
+    const remoteResult = await execGitOptional(
       ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${remoteName}/`],
       { cwd }
     );
@@ -300,6 +302,9 @@ async function getPreviewData(branchName, options = {}) {
 
     return { commits, files };
   } catch (error) {
+    // Preview is best-effort UI enrichment — branch may not exist on the
+    // remote yet, log may be empty, etc. Returning empty lists renders the
+    // preview pane as "no commits to show" rather than crashing the TUI.
     return { commits: [], files: [] };
   }
 }
@@ -345,6 +350,7 @@ async function getLocalBranches(cwd) {
       .map((b) => b.trim().replace(/^\* /, ''))
       .filter(Boolean);
   } catch (error) {
+    // Not in a git repo or git unavailable — treat as "no local branches".
     return [];
   }
 }
@@ -381,6 +387,8 @@ async function getGoneBranches(cwd) {
     }
     return gone;
   } catch (error) {
+    // `branch -vv` fails on a repo with no commits yet, or when git is
+    // broken. Caller treats "no gone branches" as "nothing to clean up".
     return [];
   }
 }
