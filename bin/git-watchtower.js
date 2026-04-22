@@ -3390,9 +3390,34 @@ function restartProcess() {
   restoreTerminalTitle();
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
 
-  // Stop server, watcher, polling
-  if (fileWatcher) fileWatcher.close();
-  if (pollIntervalId) clearTimeout(pollIntervalId);
+  // Silence the parent before the replacement takes over the TTY. The parent
+  // stays alive waiting on child.on('close') to forward the exit code, and
+  // stdio is inherited — so any stray listener here will race with the child
+  // (keystrokes consumed twice, render() drawing frames on top of the child's
+  // UI, Ctrl+C intercepted by both, etc.).
+  try { process.stdin.removeAllListeners('data'); } catch (_) { /* stdin may be detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused */ }
+  try { process.stdout.removeAllListeners('resize'); } catch (_) { /* stdout may be detached */ }
+  try { process.removeAllListeners('SIGWINCH'); } catch (_) { /* no SIGWINCH handler registered */ }
+  try { process.removeAllListeners('SIGINT'); } catch (_) { /* no SIGINT handler registered */ }
+  try { process.removeAllListeners('SIGTERM'); } catch (_) { /* no SIGTERM handler registered */ }
+
+  // Stop every scheduler that can trigger a render while we're waiting on the
+  // child. periodicUpdateCheck in particular will fire render() on completion
+  // and would draw over the replacement's frames.
+  if (pollIntervalId) {
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive */ }
+    pollIntervalId = null;
+  }
+  if (periodicUpdateCheck) {
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval may already be cleared */ }
+  }
+  if (fileWatcher) {
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed */ }
+    fileWatcher = null;
+  }
+
+  // Stop server, SSE clients, web dashboard
   if (SERVER_MODE === 'command') stopServerProcess();
   else if (SERVER_MODE === 'static') {
     clients.forEach(client => client.end());
@@ -3407,6 +3432,12 @@ function restartProcess() {
     try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
     monitorLockFile = null;
   }
+
+  // The parent's 'exit' handler (process.on('exit', cleanupResources)) writes
+  // ANSI escapes — showCursor / restoreScreen — to the shared TTY. Once the
+  // child owns the screen those writes would corrupt its UI on parent exit,
+  // so mark cleanup as already done.
+  _resourcesCleaned = true;
 
   console.log('\n♻ Restarting git-watchtower...\n');
 
