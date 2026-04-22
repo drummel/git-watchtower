@@ -1958,6 +1958,8 @@ async function pollGitChanges() {
         lastPrStatusFetch = Date.now();
         prStatusFetchInFlight = false;
       }).catch(() => {
+        // gh/glab errored (unauthed, rate-limited, network). PR indicators
+        // keep their last-known state; the next poll tick will retry.
         prStatusFetchInFlight = false;
       });
     }
@@ -2862,6 +2864,8 @@ function setupKeyboardInput() {
               render();
             }
           }).catch(() => {
+            // Async enrichment failed (no remote, gh/glab errored, etc.).
+            // Drop the spinner so the modal shows what we have from phase 1.
             if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
               store.setState({ actionLoading: false });
               render();
@@ -3530,6 +3534,23 @@ process.on('uncaughtException', async (err) => {
 
   try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  process.exit(1);
+});
+
+// Mirror of uncaughtException for unhandled promise rejections. Without this,
+// Node 15+ crashes the process on a missed .catch() tail with no telemetry
+// and no terminal restore — leaving the TUI user in a broken terminal. Also
+// high-signal: an unhandled rejection reaching here means we missed a .catch()
+// somewhere and telemetry will tell us where.
+process.on('unhandledRejection', async (reason) => {
+  isShuttingDown = true;
+
+  cleanupResources();
+
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  console.error('Unhandled rejection:', reason);
   try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   process.exit(1);
 });
