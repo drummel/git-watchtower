@@ -84,7 +84,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
 const { pruneStaleEntries } = require('../src/polling/engine');
-const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitOptional, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
 const sessionStats = require('../src/stats/session');
@@ -513,10 +513,10 @@ async function getRemoteWebUrl(branchName) {
 // Extract Claude Code session URL from the most recent commit on a branch
 async function getSessionUrl(branchName) {
   // Try remote branch first, fall back to local
-  const result = await execGitSilent(
+  const result = await execGitOptional(
     ['log', `${REMOTE_NAME}/${branchName}`, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
-  ) || await execGitSilent(
+  ) || await execGitOptional(
     ['log', branchName, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
   );
@@ -866,7 +866,7 @@ const CLI_TIMEOUT = 30000;
 
 /**
  * Execute a non-git CLI command safely using execFile (no shell interpolation).
- * For git commands, use execGit/execGitSilent from src/git/commands.js instead.
+ * For git commands, use execGit/execGitOptional from src/git/commands.js instead.
  * @param {string} cmd - The executable (e.g. 'gh', 'glab', 'which')
  * @param {string[]} args - Arguments array (no shell interpolation)
  * @param {Object} [options] - Execution options
@@ -1051,10 +1051,10 @@ async function refreshAllSparklines() {
 
     try {
       // Get commit counts for last 7 days (try remote, fall back to local)
-      const sparkResult = await execGitSilent(
+      const sparkResult = await execGitOptional(
         ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
-      ) || await execGitSilent(
+      ) || await execGitOptional(
         ['log', branch.name, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
       );
@@ -1090,10 +1090,10 @@ async function refreshAllSparklines() {
 async function getPreviewData(branchName) {
   try {
     // Get last 5 commits (try remote, fall back to local)
-    const logResult = await execGitSilent(
+    const logResult = await execGitOptional(
       ['log', `origin/${branchName}`, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['log', branchName, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
     );
@@ -1106,10 +1106,10 @@ async function getPreviewData(branchName) {
 
     // Get files changed (comparing to current branch)
     let filesChanged = [];
-    const diffResult = await execGitSilent(
+    const diffResult = await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...origin/${branchName}`],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...${branchName}`],
       { cwd: PROJECT_ROOT }
     );
@@ -1585,7 +1585,7 @@ async function pullCurrentBranch() {
 
     // Capture HEAD before pull so we can diff against it when git pull
     // doesn't put a clean "already up to date" message on stdout.
-    const preHead = await execGitSilent(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
+    const preHead = await execGitOptional(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
     const oldCommit = preHead && preHead.stdout ? preHead.stdout.trim() : null;
 
     const result = await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });

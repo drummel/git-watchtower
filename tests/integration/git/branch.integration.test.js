@@ -169,7 +169,7 @@ describe('branch.js integration tests', () => {
     });
 
     it('should return empty array for non-repository directory', async () => {
-      // getAllBranches uses execGitSilent which returns null on error,
+      // getAllBranches uses execGitOptional which returns null on error,
       // so it returns an empty array rather than throwing
       const branches = await getAllBranches({ fetch: false, cwd: '/tmp' });
       assert.deepStrictEqual(branches, []);

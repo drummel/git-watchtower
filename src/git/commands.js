@@ -62,12 +62,20 @@ async function execGit(args, options = {}) {
 }
 
 /**
- * Execute git command silently (suppress errors)
+ * Execute a git command, collapsing any failure into a null result.
+ *
+ * Callers use this when they want "the output, or nothing": the fallback
+ * pattern `execGitOptional(A) || execGitOptional(B)` relies on this, as does
+ * every caller that treats a missing result as "no data to show." This does
+ * conflate "branch has no commits" (empty stdout, non-null result) with
+ * "git errored" (null result) — if you need to distinguish those, use
+ * execGit() and handle the throw yourself.
+ *
  * @param {string[]} command - Git arguments
  * @param {Object} [options] - Execution options
- * @returns {Promise<{stdout: string, stderr: string}|null>}
+ * @returns {Promise<{stdout: string, stderr: string}|null>} Result, or null if git failed
  */
-async function execGitSilent(command, options = {}) {
+async function execGitOptional(command, options = {}) {
   try {
     return await execGit(command, options);
   } catch (error) {
@@ -444,7 +452,7 @@ async function getDiffShortstat(baseRef, branchRef, options = {}) {
 
 module.exports = {
   execGit,
-  execGitSilent,
+  execGitOptional,
   isGitAvailable,
   isGitRepository,
   getRemotes,
