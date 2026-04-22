@@ -1,3 +1,10 @@
+## [1.14.9](https://github.com/drummel/git-watchtower/compare/v1.14.8...v1.14.9) (2026-04-22)
+
+
+### Bug Fixes
+
+* wait for dev-server SIGKILL escalation before process.exit ([41435dc](https://github.com/drummel/git-watchtower/commit/41435dca685242296c97274d83869cc3ec71779b))
+
 ## [1.14.8](https://github.com/drummel/git-watchtower/compare/v1.14.7...v1.14.8) (2026-04-22)
 
 
