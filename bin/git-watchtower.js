@@ -2207,7 +2207,12 @@ function createStaticServer() {
   let realStaticDir;
   try {
     realStaticDir = fs.realpathSync(resolvedStaticDir);
-  } catch {
+  } catch (e) {
+    // STATIC_DIR comes from our own package layout, so a realpath failure
+    // means the install is broken (missing dir, permissions, etc.) — worth
+    // diagnosing. Fall back to the unresolved path so the request still
+    // gets its 403 rather than crashing.
+    telemetry.captureError(e);
     realStaticDir = resolvedStaticDir;
   }
   if (!resolvedPath.startsWith(realStaticDir + path.sep) && resolvedPath !== realStaticDir) {
