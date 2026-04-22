@@ -654,7 +654,7 @@ async function loadAsyncActionData(branch, currentData) {
     try {
       const host = new URL(env.webUrlBase).hostname;
       webUrl = buildBranchUrl(env.webUrlBase, host, branch.name);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* invalid webUrlBase — leave webUrl null, modal hides the link */ }
   }
 
   // Fetch session URL (local git, fast but async)
@@ -1958,12 +1958,14 @@ async function pollGitChanges() {
         lastPrStatusFetch = Date.now();
         prStatusFetchInFlight = false;
       }).catch(() => {
+        // gh/glab errored (unauthed, rate-limited, network). PR indicators
+        // keep their last-known state; the next poll tick will retry.
         prStatusFetchInFlight = false;
       });
     }
 
     // Background ahead/behind fetch for visible branches
-    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => {});
+    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => { /* transient git/network error — next poll will retry */ });
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
     const autoPullBranchName = store.get('currentBranch');
@@ -2207,7 +2209,12 @@ function createStaticServer() {
   let realStaticDir;
   try {
     realStaticDir = fs.realpathSync(resolvedStaticDir);
-  } catch {
+  } catch (e) {
+    // STATIC_DIR comes from our own package layout, so a realpath failure
+    // means the install is broken (missing dir, permissions, etc.) — worth
+    // diagnosing. Fall back to the unresolved path so the request still
+    // gets its 403 rather than crashing.
+    telemetry.captureError(e);
     realStaticDir = resolvedStaticDir;
   }
   if (!resolvedPath.startsWith(realStaticDir + path.sep) && resolvedPath !== realStaticDir) {
@@ -2447,7 +2454,7 @@ function setupKeyboardInput() {
                 store.setState({ actionData: fullData, actionLoading: false });
                 render();
               }
-            }).catch(() => {});
+            }).catch(() => { /* PR was created; modal refresh is a nice-to-have, user can reopen */ });
           } catch (e) {
             const msg = (e && e.stderr) || (e && e.message) || String(e);
             addLog(`Failed to create ${prLabel}: ${msg.split('\n')[0]}`, 'error');
@@ -2857,6 +2864,8 @@ function setupKeyboardInput() {
               render();
             }
           }).catch(() => {
+            // Async enrichment failed (no remote, gh/glab errored, etc.).
+            // Drop the spinner so the modal shows what we have from phase 1.
             if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
               store.setState({ actionLoading: false });
               render();
@@ -2930,7 +2939,7 @@ function setupKeyboardInput() {
         } else {
           startWebDashboard(true).then(() => {
             showFlash(`Web dashboard on :${WEB_PORT}`);
-          }).catch(() => {});
+          }).catch(() => { /* startWebDashboard surfaces its own errors via addLog/showErrorToast */ });
         }
         break;
       }
@@ -3190,7 +3199,7 @@ async function startWebDashboard(openBrowser) {
   // Resolve and cache the repo web URL for link building in the web UI
   getRemoteWebUrl(null).then((url) => {
     if (url) webDashboard.setRepoWebUrl(url);
-  }).catch(() => {});
+  }).catch(() => { /* no remote or unreachable — web UI falls back to branch names without links */ });
 
   // Atomically try to claim the coordinator role. If another live instance
   // already owns the lock, connect as a worker instead. This prevents a
@@ -3317,10 +3326,10 @@ async function startWebDashboard(openBrowser) {
       webStateInterval = null;
     }
     if (webDashboard) {
-      try { webDashboard.stop(); } catch (_) { /* ignore */ }
+      try { webDashboard.stop(); } catch (_) { /* web server may not have bound yet — nothing to stop */ }
     }
     if (coordinator) {
-      try { coordinator.stop(); } catch (_) { /* ignore */ }
+      try { coordinator.stop(); } catch (_) { /* coordinator may not have started its IPC server */ }
     }
     removeLock();
     removeSocket();
@@ -3387,7 +3396,7 @@ function restartProcess() {
   // child can acquire it. The parent stays alive waiting on child.on('close'),
   // so without this the child sees the parent as an active owner and refuses.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
     monitorLockFile = null;
   }
 
@@ -3433,23 +3442,23 @@ function cleanupResources() {
 
   // Restore terminal first so the user sees a clean prompt even if a
   // later step throws.
-  try { write(ansi.showCursor); } catch (_) { /* ignore */ }
-  try { write(ansi.restoreScreen); } catch (_) { /* ignore */ }
-  try { restoreTerminalTitle(); } catch (_) { /* ignore */ }
-  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* ignore */ }
-  try { process.stdin.pause(); } catch (_) { /* ignore */ }
+  try { write(ansi.showCursor); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { write(ansi.restoreScreen); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { restoreTerminalTitle(); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* stdin may already be unraw or detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused or destroyed */ }
 
   if (pollIntervalId) {
-    try { clearTimeout(pollIntervalId); } catch (_) { /* ignore */ }
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive — clearTimeout normally won't throw */ }
     pollIntervalId = null;
   }
 
   if (periodicUpdateCheck) {
-    try { periodicUpdateCheck.stop(); } catch (_) { /* ignore */ }
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval handle may already be cleared */ }
   }
 
   if (fileWatcher) {
-    try { fileWatcher.close(); } catch (_) { /* ignore */ }
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed by OS or previous cleanup */ }
     fileWatcher = null;
   }
 
@@ -3457,24 +3466,24 @@ function cleanupResources() {
   if (SERVER_MODE === 'static') {
     try {
       clients.forEach((client) => {
-        try { client.end(); } catch (_) { /* ignore */ }
+        try { client.end(); } catch (_) { /* SSE client socket already closed */ }
       });
       clients.clear();
-    } catch (_) { /* ignore */ }
+    } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
   }
 
   // User's dev-server process (command mode)
   if (SERVER_MODE === 'command') {
-    try { stopServerProcess(); } catch (_) { /* ignore */ }
+    try { stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
   }
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
-  try { stopWebDashboard(); } catch (_) { /* ignore */ }
+  try { stopWebDashboard(); } catch (_) { /* web dashboard may never have been started */ }
 
   // Per-repo monitor lock — release last so the slot stays reserved for the
   // entire lifetime of this process, including any errors in the steps above.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* ignore */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
     monitorLockFile = null;
   }
 }
@@ -3523,9 +3532,26 @@ process.on('uncaughtException', async (err) => {
   // if telemetry shutdown hangs or throws.
   cleanupResources();
 
-  try { telemetry.captureError(err); } catch (_) { /* ignore */ }
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
-  try { await telemetry.shutdown(); } catch (_) { /* ignore */ }
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  process.exit(1);
+});
+
+// Mirror of uncaughtException for unhandled promise rejections. Without this,
+// Node 15+ crashes the process on a missed .catch() tail with no telemetry
+// and no terminal restore — leaving the TUI user in a broken terminal. Also
+// high-signal: an unhandled rejection reaching here means we missed a .catch()
+// somewhere and telemetry will tell us where.
+process.on('unhandledRejection', async (reason) => {
+  isShuttingDown = true;
+
+  cleanupResources();
+
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  console.error('Unhandled rejection:', reason);
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   process.exit(1);
 });
 
@@ -3652,11 +3678,11 @@ async function start() {
 
   // Detect default branch for ahead/behind counts, then fetch initial data
   detectDefaultBranch().then(() => {
-    fetchAheadBehindForBranches(initBranches).catch(() => {});
-  }).catch(() => {});
+    fetchAheadBehindForBranches(initBranches).catch(() => { /* ahead/behind is background-only — stale counts are better than a noisy startup */ });
+  }).catch(() => { /* no default branch detectable (no remote refs yet) — ahead/behind stays hidden */ });
 
   // Load sparklines and action cache in background
-  refreshAllSparklines().catch(() => {});
+  refreshAllSparklines().catch(() => { /* sparkline cache stays empty — activity column just renders blank */ });
   initActionCache().then(() => {
     // Once env is known, kick off initial PR status fetch
     fetchAllPrStatuses().then(map => {
@@ -3665,8 +3691,8 @@ async function start() {
         lastPrStatusFetch = Date.now();
         render();
       }
-    }).catch(() => {});
-  }).catch(() => {});
+    }).catch(() => { /* gh/glab unreachable — inline PR indicators stay hidden, poller will retry */ });
+  }).catch(() => { /* cliEnv detection failed — PR actions fall back to web links where possible */ });
 
   // Start server based on mode
   const startBranchName = store.get('currentBranch');
@@ -3737,7 +3763,7 @@ async function start() {
       addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
       render();
     }
-  }).catch(() => {});
+  }).catch(() => { /* npm registry unreachable — periodic check will try again in 4h */ });
 
   // Re-check for updates periodically (every 4 hours) while running.
   // Assigned to module scope so the top-level exit handler can stop it.

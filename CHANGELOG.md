@@ -1,3 +1,24 @@
+## [1.14.5](https://github.com/drummel/git-watchtower/compare/v1.14.4...v1.14.5) (2026-04-22)
+
+
+### Bug Fixes
+
+* handle unhandledRejection so missed .catch() tails don't wreck the TUI ([bc4ebe3](https://github.com/drummel/git-watchtower/commit/bc4ebe347599b122ddd49f3263d1518e8ff56938)), closes [hi#signal](https://github.com/hi/issues/signal)
+
+## [1.14.4](https://github.com/drummel/git-watchtower/compare/v1.14.3...v1.14.4) (2026-04-22)
+
+
+### Bug Fixes
+
+* surface coordinator IPC and static-dir anomalies via telemetry ([0b4bcfb](https://github.com/drummel/git-watchtower/commit/0b4bcfbd8523944d06ea575ac997302a020ddfa6))
+
+## [1.14.3](https://github.com/drummel/git-watchtower/compare/v1.14.2...v1.14.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* parse branch-action data from dataset instead of silently dropping it ([bcba481](https://github.com/drummel/git-watchtower/commit/bcba4817e54a55725415871db9ed9546e783f80a))
+
 ## [1.14.2](https://github.com/drummel/git-watchtower/compare/v1.14.1...v1.14.2) (2026-04-21)
 
 

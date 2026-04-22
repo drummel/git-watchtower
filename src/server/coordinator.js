@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const telemetry = require('../telemetry');
 
 /**
  * Directory for watchtower runtime files
@@ -161,14 +162,14 @@ function finalizeLock(pid, port, socketPath) {
  * Remove the lock file.
  */
 function removeLock() {
-  try { fs.unlinkSync(LOCK_FILE); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(LOCK_FILE); } catch (e) { /* lock file may not exist */ }
 }
 
 /**
  * Remove stale socket file.
  */
 function removeSocket() {
-  try { fs.unlinkSync(SOCKET_PATH); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(SOCKET_PATH); } catch (e) { /* socket file may not exist */ }
 }
 
 /**
@@ -255,7 +256,7 @@ class Coordinator {
   stop() {
     // Close all worker sockets
     for (const socket of this.workerSockets.values()) {
-      try { socket.destroy(); } catch (e) { /* ignore */ }
+      try { socket.destroy(); } catch (e) { /* socket may already be destroyed */ }
     }
     this.workerSockets.clear();
     this.projects.clear();
@@ -359,7 +360,12 @@ class Coordinator {
           try {
             const msg = JSON.parse(line);
             this._handleWorkerMessage(socket, msg, (id) => { workerId = id; }, () => workerId);
-          } catch (e) { /* ignore bad JSON */ }
+          } catch (e) {
+            // Both sides of this socket are our own code, so a JSON-parse
+            // failure indicates a protocol/version bug worth diagnosing.
+            telemetry.captureError(e);
+            /* skip malformed frame and keep reading */
+          }
         }
       }
     });
@@ -445,7 +451,7 @@ class Coordinator {
   _sendMessage(socket, msg) {
     try {
       socket.write(JSON.stringify(msg) + '\n');
-    } catch (e) { /* ignore write errors on dead sockets */ }
+    } catch (e) { /* peer socket closed between iteration and write — peer will reconnect if it recovers */ }
   }
 
   /**
@@ -517,7 +523,12 @@ class Worker {
             try {
               const msg = JSON.parse(line);
               this._handleMessage(msg);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+              // Both sides of this socket are our own code, so a JSON-parse
+              // failure indicates a protocol/version bug worth diagnosing.
+              telemetry.captureError(e);
+              /* skip malformed frame and keep reading */
+            }
           }
         }
       });
@@ -574,7 +585,7 @@ class Worker {
     if (this.socket && this._connected) {
       try {
         this.socket.write(JSON.stringify(msg) + '\n');
-      } catch (e) { /* ignore */ }
+      } catch (e) { /* coordinator socket closed between isConnected() check and write */ }
     }
   }
 
