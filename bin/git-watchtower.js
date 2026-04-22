@@ -748,42 +748,63 @@ function startServerProcess() {
   }
 }
 
+/**
+ * Stop the user's dev-server child process and its entire process group.
+ *
+ * Returns a Promise that resolves when the process has actually exited (or a
+ * hard cap elapses). Callers on async exit paths — shutdown(), uncaughtException,
+ * unhandledRejection — must await this so the SIGKILL escalation timer fires
+ * before process.exit() drops it. Synchronous callers (startServerProcess's
+ * restart branch, the 'exit' fallback) can fire-and-forget; best effort only.
+ */
 function stopServerProcess() {
-  if (!serverProcess) return;
+  if (!serverProcess) return Promise.resolve();
 
   addLog('Stopping server...', 'update');
 
   // Capture reference before nulling — needed for deferred SIGKILL
   const proc = serverProcess;
+  serverProcess = null;
+  store.setState({ serverRunning: false });
 
-  // Try graceful shutdown first
+  // Resolves when the child actually exits
+  const closedPromise = proc.exitCode !== null
+    ? Promise.resolve()
+    : new Promise((resolve) => { proc.once('close', () => resolve()); });
+
+  // Hard cap so callers can never hang forever if 'close' never fires
+  // (e.g. stdio pipe torn down, handle state corrupted). Grace period plus
+  // a small buffer for SIGKILL delivery + OS reap of the process group.
+  const hardCap = new Promise((resolve) => setTimeout(resolve, FORCE_KILL_GRACE_MS + 500));
+
   if (process.platform === 'win32') {
+    // taskkill /f /t is already forceful and recursive; close should follow shortly
     spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
-  } else {
-    // Kill the entire process group (negative PID) so that
-    // grandchildren (e.g. npm -> node -> vite) are also terminated.
+    return Promise.race([closedPromise, hardCap]);
+  }
+
+  // Kill the entire process group (negative PID) so that grandchildren
+  // (e.g. npm -> node -> vite) are also terminated.
+  try {
+    process.kill(-proc.pid, 'SIGTERM');
+  } catch (e) {
+    // Process group may already be dead
+  }
+  // Force kill after grace period if process hasn't exited
+  const forceKillTimeout = setTimeout(() => {
     try {
-      process.kill(-proc.pid, 'SIGTERM');
+      process.kill(-proc.pid, 'SIGKILL');
     } catch (e) {
       // Process group may already be dead
     }
-    // Force kill after grace period if process hasn't exited
-    const forceKillTimeout = setTimeout(() => {
-      try {
-        process.kill(-proc.pid, 'SIGKILL');
-      } catch (e) {
-        // Process group may already be dead
-      }
-    }, FORCE_KILL_GRACE_MS);
+  }, FORCE_KILL_GRACE_MS);
 
-    // Clear the force-kill timer if the process exits cleanly
-    proc.once('close', () => {
-      clearTimeout(forceKillTimeout);
-    });
-  }
+  // Clear the force-kill timer if the process exits cleanly
+  proc.once('close', () => {
+    clearTimeout(forceKillTimeout);
+  });
 
-  serverProcess = null;
-  store.setState({ serverRunning: false });
+  return Promise.race([closedPromise, hardCap]);
 }
 
 function restartServerProcess() {
@@ -3472,11 +3493,16 @@ let monitorLockFile = null;
  * times and from any exit path (shutdown, uncaughtException, 'exit').
  *
  * Every step is wrapped in try/catch so a failure in one resource does
- * not prevent the rest from being cleaned up. Stays synchronous so it
- * can run inside an 'exit' handler where async callbacks won't execute.
+ * not prevent the rest from being cleaned up. The body is synchronous
+ * so it still runs inside an 'exit' handler where async callbacks won't
+ * execute; the dev-server close promise is bubbled up so async callers
+ * can await it before process.exit().
+ *
+ * @returns {Promise<void>} resolves when the dev-server child has exited
+ *   (or a hard cap elapses). Synchronous callers may ignore it.
  */
 function cleanupResources() {
-  if (_resourcesCleaned) return;
+  if (_resourcesCleaned) return Promise.resolve();
   _resourcesCleaned = true;
 
   // Restore terminal first so the user sees a clean prompt even if a
@@ -3511,9 +3537,14 @@ function cleanupResources() {
     } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
   }
 
-  // User's dev-server process (command mode)
+  // User's dev-server process (command mode). Capture the close promise so
+  // async callers (shutdown/uncaughtException/unhandledRejection) can await
+  // it before process.exit() — otherwise the SIGKILL escalation timer gets
+  // dropped and a dev server that ignored SIGTERM survives as a detached
+  // orphan (it was spawned in its own process group on Unix).
+  let serverStopPromise = Promise.resolve();
   if (SERVER_MODE === 'command') {
-    try { stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
+    try { serverStopPromise = stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
   }
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
@@ -3525,13 +3556,15 @@ function cleanupResources() {
     try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
     monitorLockFile = null;
   }
+
+  return serverStopPromise;
 }
 
 async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   // For the static HTTP server, give in-flight connections a brief
   // grace period to drain. cleanupResources ended the SSE clients; this
@@ -3542,6 +3575,12 @@ async function shutdown() {
     const timeoutPromise = new Promise((resolve) => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
+
+  // Wait for the user's dev-server child to actually exit (SIGTERM +
+  // FORCE_KILL_GRACE_MS SIGKILL escalation inside stopServerProcess).
+  // Without this the escalation timer gets dropped by process.exit() below
+  // and a dev server that ignored SIGTERM survives as a detached orphan.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3569,11 +3608,14 @@ process.on('uncaughtException', async (err) => {
   // Synchronous teardown first — so the coordinator socket, lock file,
   // dev-server child process group, and SSE clients are released even
   // if telemetry shutdown hangs or throws.
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
   try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
   process.exit(1);
 });
 
@@ -3585,12 +3627,15 @@ process.on('uncaughtException', async (err) => {
 process.on('unhandledRejection', async (reason) => {
   isShuttingDown = true;
 
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   const err = reason instanceof Error ? reason : new Error(String(reason));
   try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Unhandled rejection:', reason);
   try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
   process.exit(1);
 });
 
