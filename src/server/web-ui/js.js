@@ -65,7 +65,7 @@ function getDashboardJs() {
   function loadPrefs() {
     try {
       return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
-    } catch (e) { return {}; }
+    } catch (e) { /* localStorage unavailable (private mode) or stored JSON got corrupted — fall back to defaults */ return {}; }
   }
   function savePrefs(updates) {
     const prefs = loadPrefs();

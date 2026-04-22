@@ -506,6 +506,8 @@ async function getRemoteWebUrl(branchName) {
     const parsed = parseRemoteUrl(stdout);
     return buildWebUrl(parsed, branchName);
   } catch (e) {
+    // No remote configured, or URL isn't parseable as github/gitlab —
+    // action modal hides the "view on web" link, nothing else breaks.
     return null;
   }
 }
@@ -922,6 +924,9 @@ async function detectDefaultBranch() {
     const { stdout } = await execGit(['symbolic-ref', `refs/remotes/${REMOTE_NAME}/HEAD`], { cwd: PROJECT_ROOT });
     detectedDefaultBranch = stdout.trim().replace('refs/remotes/', '');
   } catch (e) {
+    // No remote HEAD and none of the common names exist — ahead/behind
+    // is hidden entirely (fetchAheadBehindForBranches short-circuits on
+    // a null detectedDefaultBranch).
     detectedDefaultBranch = null;
   }
 }
@@ -1119,6 +1124,9 @@ async function getPreviewData(branchName) {
 
     return { commits, filesChanged };
   } catch (e) {
+    // Preview pane is best-effort — branch may not exist on the remote yet,
+    // refs may have been pruned mid-fetch. Empty pane is better than an
+    // error toast for a background UI enrichment.
     return { commits: [], filesChanged: [] };
   }
 }
