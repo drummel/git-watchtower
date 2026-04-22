@@ -3,7 +3,7 @@
  * Provides branch management and parsing
  */
 
-const { execGit, execGitOptional, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
+const { execGit, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
 
 // Valid git branch name pattern (conservative)
@@ -102,7 +102,7 @@ async function getAllBranches(options = {}) {
     // Get local branches
     // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
     const delimiter = '\x1f';
-    const localResult = await execGitOptional(
+    const localResult = await execGit(
       ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
       { cwd }
     );
@@ -127,7 +127,7 @@ async function getAllBranches(options = {}) {
     }
 
     // Get remote branches
-    const remoteResult = await execGitOptional(
+    const remoteResult = await execGit(
       ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${remoteName}/`],
       { cwd }
     );
