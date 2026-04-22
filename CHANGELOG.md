@@ -1,3 +1,10 @@
+## [1.14.8](https://github.com/drummel/git-watchtower/compare/v1.14.7...v1.14.8) (2026-04-22)
+
+
+### Bug Fixes
+
+* silence parent process during self-restart to avoid TTY races ([4a933b7](https://github.com/drummel/git-watchtower/commit/4a933b785234da39743df4d1cabac2b8afd5d3a2))
+
 ## [1.14.7](https://github.com/drummel/git-watchtower/compare/v1.14.6...v1.14.7) (2026-04-22)
 
 
