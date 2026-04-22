@@ -1,3 +1,10 @@
+## [1.14.4](https://github.com/drummel/git-watchtower/compare/v1.14.3...v1.14.4) (2026-04-22)
+
+
+### Bug Fixes
+
+* surface coordinator IPC and static-dir anomalies via telemetry ([0b4bcfb](https://github.com/drummel/git-watchtower/commit/0b4bcfbd8523944d06ea575ac997302a020ddfa6))
+
 ## [1.14.3](https://github.com/drummel/git-watchtower/compare/v1.14.2...v1.14.3) (2026-04-21)
 
 
