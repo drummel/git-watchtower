@@ -1,3 +1,10 @@
+## [1.14.5](https://github.com/drummel/git-watchtower/compare/v1.14.4...v1.14.5) (2026-04-22)
+
+
+### Bug Fixes
+
+* handle unhandledRejection so missed .catch() tails don't wreck the TUI ([bc4ebe3](https://github.com/drummel/git-watchtower/commit/bc4ebe347599b122ddd49f3263d1518e8ff56938)), closes [hi#signal](https://github.com/hi/issues/signal)
+
 ## [1.14.4](https://github.com/drummel/git-watchtower/compare/v1.14.3...v1.14.4) (2026-04-22)
 
 
