@@ -1,3 +1,10 @@
+## [1.14.12](https://github.com/drummel/git-watchtower/compare/v1.14.11...v1.14.12) (2026-04-23)
+
+
+### Bug Fixes
+
+* refuse to start when stdout is not a TTY ([b4c4555](https://github.com/drummel/git-watchtower/commit/b4c45557edf46aa7cf00656a2c5f13aa63660eb8))
+
 ## [1.14.11](https://github.com/drummel/git-watchtower/compare/v1.14.10...v1.14.11) (2026-04-23)
 
 
