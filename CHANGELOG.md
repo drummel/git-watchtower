@@ -1,3 +1,10 @@
+## [1.14.14](https://github.com/drummel/git-watchtower/compare/v1.14.13...v1.14.14) (2026-04-23)
+
+
+### Bug Fixes
+
+* stop painting a "NOTHING" casino panel after disable() ([c7f31ef](https://github.com/drummel/git-watchtower/commit/c7f31eff16de8b06d84d9455928089a0827445db))
+
 ## [1.14.13](https://github.com/drummel/git-watchtower/compare/v1.14.12...v1.14.13) (2026-04-23)
 
 
