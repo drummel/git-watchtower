@@ -1,3 +1,10 @@
+## [1.14.10](https://github.com/drummel/git-watchtower/compare/v1.14.9...v1.14.10) (2026-04-23)
+
+
+### Bug Fixes
+
+* force-destroy lingering TCP sockets in WebDashboardServer.stop() ([e1909c0](https://github.com/drummel/git-watchtower/commit/e1909c022c420fcd9f3a595c67efe88e690c11a1))
+
 ## [1.14.9](https://github.com/drummel/git-watchtower/compare/v1.14.8...v1.14.9) (2026-04-22)
 
 
