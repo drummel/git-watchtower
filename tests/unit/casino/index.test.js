@@ -280,6 +280,64 @@ describe('slot reels', () => {
   });
 });
 
+describe('disable() slot cleanup', () => {
+  beforeEach(() => {
+    casino.disable();
+    casino.resetStats();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('does not leave a "NOTHING" result on screen after disable mid-spin', () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    assert.strictEqual(casino.isSlotSpinning(), true);
+
+    casino.disable();
+
+    // Pre-fix: disable() called stopSlotReels() which set slotResultLabel
+    // to "NOTHING" and scheduled a 2s setTimeout to null it. During those
+    // 2s, getSlotReelDisplay() would paint a casino panel even though
+    // casino mode is off.
+    assert.strictEqual(casino.getSlotResultLabel(), null);
+    assert.strictEqual(casino.hasSlotResult(), false);
+    assert.strictEqual(casino.isSlotsActive(), false);
+    assert.strictEqual(casino.getSlotReelDisplay(), '');
+  });
+
+  it('getSlotReelDisplay returns empty when disabled even if state is stale', () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    // Sanity: display is non-empty while spinning + enabled
+    assert.ok(casino.getSlotReelDisplay().length > 0);
+
+    casino.disable();
+    assert.strictEqual(casino.getSlotReelDisplay(), '');
+  });
+
+  it('cancels the pending no-win 2s clear timeout so it does not fire into the next session', async () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    // Simulate an end-of-poll with no updates — schedules the 2s clear.
+    casino.stopSlotReels(false, () => {});
+    // The no-win branch sets slotResult; this confirms we're in that state.
+    assert.strictEqual(casino.hasSlotResult(), true);
+
+    casino.disable();
+    // Re-enable and start a new spin immediately. If the old 2s timeout
+    // weren't cancelled, it would fire 2s into this fresh session and
+    // null the live spin state. Verify the spin survives past 2s.
+    casino.enable();
+    casino.startSlotReels(() => {});
+    await new Promise((r) => setTimeout(r, 2050));
+    assert.strictEqual(casino.isSlotSpinning(), true,
+      'the old disable()ed session\'s 2s timeout fired and clobbered the new spin');
+    casino.disable();
+  });
+});
+
 describe('marquee animation', () => {
   beforeEach(() => {
     casino.enable();
