@@ -63,6 +63,9 @@ class WebDashboardServer {
     this.pushInterval = null;
     this.lastPushedJson = '';
 
+    /** @type {Set<import('net').Socket>} Raw TCP sockets, tracked so stop() can force-close them */
+    this._sockets = new Set();
+
     // Multi-project support (populated by coordinator)
     /** @type {Map<string, Object>} */
     this.projects = new Map();
@@ -239,6 +242,14 @@ class WebDashboardServer {
         this._handleRequest(req, res);
       });
 
+      // Track raw TCP sockets so stop() can force-destroy lingering
+      // connections (long-lived SSE, paused browsers, proxied clients)
+      // instead of waiting for a full TCP FIN_WAIT2 timeout.
+      this.server.on('connection', (/** @type {import('net').Socket} */ socket) => {
+        this._sockets.add(socket);
+        socket.once('close', () => this._sockets.delete(socket));
+      });
+
       this.server.on('error', (/** @type {Error & {code?: string}} */ err) => {
         if (err.code === 'EADDRINUSE' && retries < MAX_PORT_RETRIES) {
           retries++;
@@ -270,7 +281,7 @@ class WebDashboardServer {
       this.pushInterval = null;
     }
 
-    // Close all SSE connections
+    // End SSE response streams gracefully (sends FIN).
     for (const client of this.clients) {
       try { client.end(); } catch (e) { /* SSE client may already be disconnected */ }
     }
@@ -278,6 +289,16 @@ class WebDashboardServer {
 
     if (this.server) {
       this.server.close();
+
+      // Force-destroy any TCP sockets that didn't close after the
+      // graceful end() above. Without this, a paused browser, a
+      // suspended tab, or a slow proxy can pin server.close() for the
+      // full TCP FIN_WAIT2 timeout (typically 60 s), delaying shutdown.
+      for (const socket of this._sockets) {
+        try { socket.destroy(); } catch (e) { /* ignore */ }
+      }
+      this._sockets.clear();
+
       this.server = null;
     }
   }
