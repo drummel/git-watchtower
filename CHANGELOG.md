@@ -1,3 +1,10 @@
+## [1.14.13](https://github.com/drummel/git-watchtower/compare/v1.14.12...v1.14.13) (2026-04-23)
+
+
+### Bug Fixes
+
+* exit cleanly on stdout/stderr EPIPE instead of crashing ([d17595f](https://github.com/drummel/git-watchtower/commit/d17595f5959323d3c54942f001cc2aab6324fbb4))
+
 ## [1.14.12](https://github.com/drummel/git-watchtower/compare/v1.14.11...v1.14.12) (2026-04-23)
 
 
