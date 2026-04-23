@@ -181,22 +181,43 @@ describe('buildGitEnv', () => {
 describe('execGit locale isolation', () => {
   it('produces English diff --stat output regardless of the parent LANG', async () => {
     // End-to-end check that buildGitEnv() actually flows through execGit:
-    // run `git diff --stat` on a known commit range and assert the summary
-    // line contains English words parseDiffStats expects. This would fail
-    // on a FR-locale runner without the LC_ALL=C override.
+    // run `git diff --stat` between two seeded commits in a throwaway repo
+    // and assert the summary line contains English words parseDiffStats
+    // expects. This would fail on a FR-locale runner without the
+    // LC_ALL=C override.
     //
-    // We use HEAD~1..HEAD against our own repo; that guarantees a
-    // non-empty diff and makes the test self-contained.
+    // We build our own repo inline — using HEAD~1..HEAD against the
+    // checkout doesn't work in CI where actions/checkout@v4 defaults to
+    // fetch-depth: 1 and the parent commit isn't present.
+    const fs = require('fs');
+    const os = require('os');
+    const { execSync } = require('child_process');
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'watchtower-locale-'));
+    const gitEnv = {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'Test',
+      GIT_AUTHOR_EMAIL: 'test@example.com',
+      GIT_COMMITTER_NAME: 'Test',
+      GIT_COMMITTER_EMAIL: 'test@example.com',
+      GIT_CONFIG_NOSYSTEM: '1',
+    };
+    const run = (cmd) => execSync(cmd, { cwd: tmp, env: gitEnv, stdio: 'pipe' });
+
+    run('git init -q');
+    run('git config commit.gpgsign false');
+    fs.writeFileSync(path.join(tmp, 'a.txt'), 'line1\nline2\nline3\n');
+    run('git add a.txt');
+    run('git commit -q -m first');
+    fs.writeFileSync(path.join(tmp, 'a.txt'), 'line1\nline2-changed\nline3\nline4\n');
+    run('git commit -q -am second');
+
     const originalLang = process.env.LANG;
     const originalLcAll = process.env.LC_ALL;
     try {
       process.env.LANG = 'fr_FR.UTF-8';
       process.env.LC_ALL = 'fr_FR.UTF-8';
-      const { stdout } = await execGit(['diff', '--stat', 'HEAD~1..HEAD'], { cwd: REPO_ROOT });
-      // At least one of "insertion" / "deletion" / "files changed" must be
-      // present in the English form. Localized git would use e.g.
-      // "fichiers modifiés" / "insertions" is loaned in some locales, so
-      // deletions(-) is the sharpest English-only marker when present.
+      const { stdout } = await execGit(['diff', '--stat', 'HEAD~1..HEAD'], { cwd: tmp });
       assert.ok(
         /insertions?\(\+\)|deletions?\(-\)|files? changed/.test(stdout),
         `expected English diff --stat summary; got: ${stdout}`,
@@ -206,6 +227,7 @@ describe('execGit locale isolation', () => {
       else process.env.LANG = originalLang;
       if (originalLcAll === undefined) delete process.env.LC_ALL;
       else process.env.LC_ALL = originalLcAll;
+      fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
 });
