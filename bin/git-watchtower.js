@@ -842,7 +842,7 @@ const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../s
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
-const { getMimeType, injectLiveReload } = require('../src/server/static');
+const { getMimeType, injectLiveReload, resolveStaticPath } = require('../src/server/static');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
@@ -2225,52 +2225,67 @@ function createStaticServer() {
   }
 
   pathname = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
-  let filePath = path.join(STATIC_DIR, pathname);
+  const candidate = path.join(STATIC_DIR, pathname);
 
-  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal.
-  // Use realpath to follow symlinks — without this, a symlink inside STATIC_DIR
-  // pointing outside would bypass the startsWith check.
-  const resolvedStaticDir = path.resolve(STATIC_DIR);
-  let resolvedPath = path.resolve(filePath);
-  try {
-    resolvedPath = fs.realpathSync(resolvedPath);
-  } catch {
-    // File doesn't exist — path.resolve is sufficient since there's no symlink to follow.
-  }
+  // Realpath the static root once per request. A failure here means the
+  // install is broken (missing dir, bad permissions) — fall back to the
+  // resolved-but-not-realpath'd form so the request still gets a 403
+  // from resolveStaticPath rather than crashing.
   let realStaticDir;
   try {
-    realStaticDir = fs.realpathSync(resolvedStaticDir);
+    realStaticDir = fs.realpathSync(path.resolve(STATIC_DIR));
   } catch (e) {
-    // STATIC_DIR comes from our own package layout, so a realpath failure
-    // means the install is broken (missing dir, permissions, etc.) — worth
-    // diagnosing. Fall back to the unresolved path so the request still
-    // gets its 403 rather than crashing.
     telemetry.captureError(e);
-    realStaticDir = resolvedStaticDir;
+    realStaticDir = path.resolve(STATIC_DIR);
   }
-  if (!resolvedPath.startsWith(realStaticDir + path.sep) && resolvedPath !== realStaticDir) {
+
+  const send403 = () => {
     res.writeHead(403, { 'Content-Type': 'text/html' });
     res.end('<h1>403 Forbidden</h1>');
     addServerLog(`GET ${logPath} → 403 (path traversal blocked)`, true);
-    return;
-  }
+  };
 
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'index.html');
-  }
+  const send404 = () => {
+    res.writeHead(404, { 'Content-Type': 'text/html' });
+    res.end('<h1>404 Not Found</h1>');
+    addServerLog(`GET ${logPath} → 404`, true);
+  };
 
-  if (!fs.existsSync(filePath)) {
-    if (fs.existsSync(filePath + '.html')) {
-      filePath = filePath + '.html';
+  // All downstream reads go through `finalPath` — the realpath-resolved
+  // target from resolveStaticPath(). Using the pre-realpath candidate
+  // opens a TOCTOU window where a symlink inside STATIC_DIR could be
+  // swapped between the containment check and the fs.readFile to point
+  // outside the root.
+  let finalPath = null;
+
+  const initial = resolveStaticPath(candidate, realStaticDir);
+  if (initial.status === 'forbidden') { send403(); return; }
+  if (initial.status === 'ok') {
+    // Directory requests resolve the index.html *inside the realpath'd*
+    // directory. Without this second realpath+check, a symlinked dir
+    // whose target pointed outside would serve its attacker-controlled
+    // index.html through our root check.
+    if (fs.statSync(initial.path).isDirectory()) {
+      const indexResult = resolveStaticPath(
+        path.join(initial.path, 'index.html'),
+        realStaticDir,
+      );
+      if (indexResult.status === 'forbidden') { send403(); return; }
+      if (indexResult.status === 'ok') finalPath = indexResult.path;
+      // 'missing' → fall through to 404 (no .html fallback for dirs)
     } else {
-      res.writeHead(404, { 'Content-Type': 'text/html' });
-      res.end('<h1>404 Not Found</h1>');
-      addServerLog(`GET ${logPath} → 404`, true);
-      return;
+      finalPath = initial.path;
     }
+  } else {
+    // 'missing' — try the `foo` → `foo.html` convenience fallback.
+    const htmlFallback = resolveStaticPath(candidate + '.html', realStaticDir);
+    if (htmlFallback.status === 'forbidden') { send403(); return; }
+    if (htmlFallback.status === 'ok') finalPath = htmlFallback.path;
   }
 
-  serveFile(res, filePath, logPath);
+  if (!finalPath) { send404(); return; }
+
+  serveFile(res, finalPath, logPath);
   });
 }
 
