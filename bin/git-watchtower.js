@@ -104,6 +104,7 @@ const { WebDashboardServer } = require('../src/server/web');
 const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket, isProcessAlive } = require('../src/server/coordinator');
 const monitorLock = require('../src/utils/monitor-lock');
 const { createPipeErrorHandler } = require('../src/utils/pipe-error');
+const { getRecursiveWatchSupport } = require('../src/utils/fs-watch');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -2288,6 +2289,21 @@ function setupFileWatcher() {
   ignorePatterns = loadGitignorePatterns([STATIC_DIR, PROJECT_ROOT]);
   if (ignorePatterns.length > 0) {
     addLog(`Loaded ${ignorePatterns.length} ignore patterns from .gitignore`, 'info');
+  }
+
+  // Before calling fs.watch, surface any known incompatibility explicitly —
+  // the generic catch below would otherwise report a confusing
+  // "Could not set up file watcher: ..." for the well-known case of a
+  // forced install on Node <20 Linux, where recursive watching is
+  // unreliable. A clear message points the user at the real fix
+  // (upgrade Node) instead of making them debug a live-reload that
+  // appears to work but silently ignores subdirectory edits.
+  const support = getRecursiveWatchSupport();
+  if (!support.supported) {
+    addLog(
+      `Live reload may miss nested file changes: ${support.reason}`,
+      'error',
+    );
   }
 
   try {
