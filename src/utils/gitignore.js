@@ -64,6 +64,9 @@ function gitignorePatternToRegex(pattern) {
   try {
     return new RegExp(regexStr);
   } catch (e) {
+    // A malformed pattern in .gitignore shouldn't disable the file watcher
+    // entirely — signal "skip this line" via null, caller drops it from
+    // the pattern list. Extremely rare in practice.
     return null;
   }
 }
@@ -97,7 +100,10 @@ function parseGitignoreFile(gitignorePath) {
       }
     }
   } catch (err) {
-    // Silently continue if we can't read .gitignore
+    // .gitignore exists but we can't read it (permissions, mid-edit truncation,
+    // encoding). The file watcher still runs — it just won't honor gitignore
+    // rules this session. Surfacing the error would be noise; the user will
+    // notice when they see changes to ignored files trigger reloads.
   }
 
   return patterns;

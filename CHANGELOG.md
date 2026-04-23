@@ -1,3 +1,38 @@
+## [1.14.10](https://github.com/drummel/git-watchtower/compare/v1.14.9...v1.14.10) (2026-04-23)
+
+
+### Bug Fixes
+
+* force-destroy lingering TCP sockets in WebDashboardServer.stop() ([e1909c0](https://github.com/drummel/git-watchtower/commit/e1909c022c420fcd9f3a595c67efe88e690c11a1))
+
+## [1.14.9](https://github.com/drummel/git-watchtower/compare/v1.14.8...v1.14.9) (2026-04-22)
+
+
+### Bug Fixes
+
+* wait for dev-server SIGKILL escalation before process.exit ([41435dc](https://github.com/drummel/git-watchtower/commit/41435dca685242296c97274d83869cc3ec71779b))
+
+## [1.14.8](https://github.com/drummel/git-watchtower/compare/v1.14.7...v1.14.8) (2026-04-22)
+
+
+### Bug Fixes
+
+* silence parent process during self-restart to avoid TTY races ([4a933b7](https://github.com/drummel/git-watchtower/commit/4a933b785234da39743df4d1cabac2b8afd5d3a2))
+
+## [1.14.7](https://github.com/drummel/git-watchtower/compare/v1.14.6...v1.14.7) (2026-04-22)
+
+
+### Bug Fixes
+
+* propagate real git errors from getAllBranches instead of silencing ([14a9557](https://github.com/drummel/git-watchtower/commit/14a95577c9ebfec6c0bb2f902859a7cbf6180c95))
+
+## [1.14.6](https://github.com/drummel/git-watchtower/compare/v1.14.5...v1.14.6) (2026-04-22)
+
+
+### Bug Fixes
+
+* await old process exit in restart() instead of a static 500ms sleep ([067792f](https://github.com/drummel/git-watchtower/commit/067792fbed0e1f2b1655fa599db185fadfe8af14))
+
 ## [1.14.5](https://github.com/drummel/git-watchtower/compare/v1.14.4...v1.14.5) (2026-04-22)
 
 

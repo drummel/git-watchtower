@@ -352,16 +352,35 @@ class ProcessManager {
   }
 
   /**
-   * Restart the server process
+   * Restart the server process.
+   *
+   * Waits for the old process to fully exit (so it releases its port)
+   * rather than sleeping a static RESTART_DELAY that is shorter than
+   * the SIGKILL grace period. Bounded by KILL_GRACE_PERIOD + a small
+   * margin so we never hang indefinitely if 'close' doesn't fire.
+   *
    * @returns {Promise<{success: boolean, error?: Error, pid?: number}>}
    */
   async restart() {
     return this._restartMutex.withLock(async () => {
       const command = this.command;
+      // Capture before stop() nulls this.process.
+      const oldProc = this.process;
+
       this.stop();
 
-      // Wait before restarting
-      await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
+      if (oldProc && oldProc.exitCode === null && oldProc.signalCode === null) {
+        // Old process hasn't exited yet — wait for 'close' with a bounded
+        // timeout so we don't hang if the process ignores all signals.
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, KILL_GRACE_PERIOD + RESTART_DELAY);
+          timeout.unref();
+          oldProc.once('close', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
 
       return this.start(command);
     });

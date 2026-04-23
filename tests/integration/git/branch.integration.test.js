@@ -168,11 +168,13 @@ describe('branch.js integration tests', () => {
       assert.ok(Array.isArray(branches));
     });
 
-    it('should return empty array for non-repository directory', async () => {
-      // getAllBranches uses execGitSilent which returns null on error,
-      // so it returns an empty array rather than throwing
-      const branches = await getAllBranches({ fetch: false, cwd: '/tmp' });
-      assert.deepStrictEqual(branches, []);
+    it('should throw for non-repository directory', async () => {
+      // getAllBranches uses execGit (not execGitOptional) so real errors
+      // like "not a git repo" propagate instead of silently returning [].
+      await assert.rejects(
+        () => getAllBranches({ fetch: false, cwd: '/tmp' }),
+        (err) => err.code === 'GIT_BRANCH_LIST_FAILED'
+      );
     });
   });
 

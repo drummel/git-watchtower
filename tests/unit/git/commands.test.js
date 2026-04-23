@@ -10,7 +10,7 @@ const assert = require('node:assert');
 const path = require('path');
 const {
   execGit,
-  execGitSilent,
+  execGitOptional,
   isGitAvailable,
   isGitRepository,
   getRemotes,
@@ -69,14 +69,14 @@ describe('execGit', () => {
   });
 });
 
-describe('execGitSilent', () => {
+describe('execGitOptional', () => {
   it('should return result on success', async () => {
-    const result = await execGitSilent(['--version']);
+    const result = await execGitOptional(['--version']);
     assert.ok(result.stdout.includes('git version'));
   });
 
   it('should return null on error instead of throwing', async () => {
-    const result = await execGitSilent(['invalid-command-xyz']);
+    const result = await execGitOptional(['invalid-command-xyz']);
     assert.strictEqual(result, null);
   });
 });

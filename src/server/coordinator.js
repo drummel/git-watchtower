@@ -83,6 +83,9 @@ function readLock() {
     if (!data || !data.pid) return null;
     return data;
   } catch (e) {
+    // Lock file was unlinked between existsSync and readFileSync, or contains
+    // garbage (crashed mid-write). Treat as "no lock" so tryAcquireLock()
+    // can clean it up and retry.
     return null;
   }
 }

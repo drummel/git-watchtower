@@ -84,7 +84,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
 const { pruneStaleEntries } = require('../src/polling/engine');
-const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitOptional, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
 const sessionStats = require('../src/stats/session');
@@ -506,6 +506,8 @@ async function getRemoteWebUrl(branchName) {
     const parsed = parseRemoteUrl(stdout);
     return buildWebUrl(parsed, branchName);
   } catch (e) {
+    // No remote configured, or URL isn't parseable as github/gitlab —
+    // action modal hides the "view on web" link, nothing else breaks.
     return null;
   }
 }
@@ -513,10 +515,10 @@ async function getRemoteWebUrl(branchName) {
 // Extract Claude Code session URL from the most recent commit on a branch
 async function getSessionUrl(branchName) {
   // Try remote branch first, fall back to local
-  const result = await execGitSilent(
+  const result = await execGitOptional(
     ['log', `${REMOTE_NAME}/${branchName}`, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
-  ) || await execGitSilent(
+  ) || await execGitOptional(
     ['log', branchName, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
   );
@@ -746,42 +748,63 @@ function startServerProcess() {
   }
 }
 
+/**
+ * Stop the user's dev-server child process and its entire process group.
+ *
+ * Returns a Promise that resolves when the process has actually exited (or a
+ * hard cap elapses). Callers on async exit paths — shutdown(), uncaughtException,
+ * unhandledRejection — must await this so the SIGKILL escalation timer fires
+ * before process.exit() drops it. Synchronous callers (startServerProcess's
+ * restart branch, the 'exit' fallback) can fire-and-forget; best effort only.
+ */
 function stopServerProcess() {
-  if (!serverProcess) return;
+  if (!serverProcess) return Promise.resolve();
 
   addLog('Stopping server...', 'update');
 
   // Capture reference before nulling — needed for deferred SIGKILL
   const proc = serverProcess;
+  serverProcess = null;
+  store.setState({ serverRunning: false });
 
-  // Try graceful shutdown first
+  // Resolves when the child actually exits
+  const closedPromise = proc.exitCode !== null
+    ? Promise.resolve()
+    : new Promise((resolve) => { proc.once('close', () => resolve()); });
+
+  // Hard cap so callers can never hang forever if 'close' never fires
+  // (e.g. stdio pipe torn down, handle state corrupted). Grace period plus
+  // a small buffer for SIGKILL delivery + OS reap of the process group.
+  const hardCap = new Promise((resolve) => setTimeout(resolve, FORCE_KILL_GRACE_MS + 500));
+
   if (process.platform === 'win32') {
+    // taskkill /f /t is already forceful and recursive; close should follow shortly
     spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
-  } else {
-    // Kill the entire process group (negative PID) so that
-    // grandchildren (e.g. npm -> node -> vite) are also terminated.
+    return Promise.race([closedPromise, hardCap]);
+  }
+
+  // Kill the entire process group (negative PID) so that grandchildren
+  // (e.g. npm -> node -> vite) are also terminated.
+  try {
+    process.kill(-proc.pid, 'SIGTERM');
+  } catch (e) {
+    // Process group may already be dead
+  }
+  // Force kill after grace period if process hasn't exited
+  const forceKillTimeout = setTimeout(() => {
     try {
-      process.kill(-proc.pid, 'SIGTERM');
+      process.kill(-proc.pid, 'SIGKILL');
     } catch (e) {
       // Process group may already be dead
     }
-    // Force kill after grace period if process hasn't exited
-    const forceKillTimeout = setTimeout(() => {
-      try {
-        process.kill(-proc.pid, 'SIGKILL');
-      } catch (e) {
-        // Process group may already be dead
-      }
-    }, FORCE_KILL_GRACE_MS);
+  }, FORCE_KILL_GRACE_MS);
 
-    // Clear the force-kill timer if the process exits cleanly
-    proc.once('close', () => {
-      clearTimeout(forceKillTimeout);
-    });
-  }
+  // Clear the force-kill timer if the process exits cleanly
+  proc.once('close', () => {
+    clearTimeout(forceKillTimeout);
+  });
 
-  serverProcess = null;
-  store.setState({ serverRunning: false });
+  return Promise.race([closedPromise, hardCap]);
 }
 
 function restartServerProcess() {
@@ -866,7 +889,7 @@ const CLI_TIMEOUT = 30000;
 
 /**
  * Execute a non-git CLI command safely using execFile (no shell interpolation).
- * For git commands, use execGit/execGitSilent from src/git/commands.js instead.
+ * For git commands, use execGit/execGitOptional from src/git/commands.js instead.
  * @param {string} cmd - The executable (e.g. 'gh', 'glab', 'which')
  * @param {string[]} args - Arguments array (no shell interpolation)
  * @param {Object} [options] - Execution options
@@ -922,6 +945,9 @@ async function detectDefaultBranch() {
     const { stdout } = await execGit(['symbolic-ref', `refs/remotes/${REMOTE_NAME}/HEAD`], { cwd: PROJECT_ROOT });
     detectedDefaultBranch = stdout.trim().replace('refs/remotes/', '');
   } catch (e) {
+    // No remote HEAD and none of the common names exist — ahead/behind
+    // is hidden entirely (fetchAheadBehindForBranches short-circuits on
+    // a null detectedDefaultBranch).
     detectedDefaultBranch = null;
   }
 }
@@ -1051,10 +1077,10 @@ async function refreshAllSparklines() {
 
     try {
       // Get commit counts for last 7 days (try remote, fall back to local)
-      const sparkResult = await execGitSilent(
+      const sparkResult = await execGitOptional(
         ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
-      ) || await execGitSilent(
+      ) || await execGitOptional(
         ['log', branch.name, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
       );
@@ -1090,10 +1116,10 @@ async function refreshAllSparklines() {
 async function getPreviewData(branchName) {
   try {
     // Get last 5 commits (try remote, fall back to local)
-    const logResult = await execGitSilent(
+    const logResult = await execGitOptional(
       ['log', `origin/${branchName}`, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['log', branchName, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
     );
@@ -1106,10 +1132,10 @@ async function getPreviewData(branchName) {
 
     // Get files changed (comparing to current branch)
     let filesChanged = [];
-    const diffResult = await execGitSilent(
+    const diffResult = await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...origin/${branchName}`],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...${branchName}`],
       { cwd: PROJECT_ROOT }
     );
@@ -1119,6 +1145,9 @@ async function getPreviewData(branchName) {
 
     return { commits, filesChanged };
   } catch (e) {
+    // Preview pane is best-effort — branch may not exist on the remote yet,
+    // refs may have been pruned mid-fetch. Empty pane is better than an
+    // error toast for a background UI enrichment.
     return { commits: [], filesChanged: [] };
   }
 }
@@ -1585,7 +1614,7 @@ async function pullCurrentBranch() {
 
     // Capture HEAD before pull so we can diff against it when git pull
     // doesn't put a clean "already up to date" message on stdout.
-    const preHead = await execGitSilent(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
+    const preHead = await execGitOptional(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
     const oldCommit = preHead && preHead.stdout ? preHead.stdout.trim() : null;
 
     const result = await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
@@ -3382,9 +3411,34 @@ function restartProcess() {
   restoreTerminalTitle();
   if (process.stdin.isTTY) process.stdin.setRawMode(false);
 
-  // Stop server, watcher, polling
-  if (fileWatcher) fileWatcher.close();
-  if (pollIntervalId) clearTimeout(pollIntervalId);
+  // Silence the parent before the replacement takes over the TTY. The parent
+  // stays alive waiting on child.on('close') to forward the exit code, and
+  // stdio is inherited — so any stray listener here will race with the child
+  // (keystrokes consumed twice, render() drawing frames on top of the child's
+  // UI, Ctrl+C intercepted by both, etc.).
+  try { process.stdin.removeAllListeners('data'); } catch (_) { /* stdin may be detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused */ }
+  try { process.stdout.removeAllListeners('resize'); } catch (_) { /* stdout may be detached */ }
+  try { process.removeAllListeners('SIGWINCH'); } catch (_) { /* no SIGWINCH handler registered */ }
+  try { process.removeAllListeners('SIGINT'); } catch (_) { /* no SIGINT handler registered */ }
+  try { process.removeAllListeners('SIGTERM'); } catch (_) { /* no SIGTERM handler registered */ }
+
+  // Stop every scheduler that can trigger a render while we're waiting on the
+  // child. periodicUpdateCheck in particular will fire render() on completion
+  // and would draw over the replacement's frames.
+  if (pollIntervalId) {
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive */ }
+    pollIntervalId = null;
+  }
+  if (periodicUpdateCheck) {
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval may already be cleared */ }
+  }
+  if (fileWatcher) {
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed */ }
+    fileWatcher = null;
+  }
+
+  // Stop server, SSE clients, web dashboard
   if (SERVER_MODE === 'command') stopServerProcess();
   else if (SERVER_MODE === 'static') {
     clients.forEach(client => client.end());
@@ -3399,6 +3453,12 @@ function restartProcess() {
     try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
     monitorLockFile = null;
   }
+
+  // The parent's 'exit' handler (process.on('exit', cleanupResources)) writes
+  // ANSI escapes — showCursor / restoreScreen — to the shared TTY. Once the
+  // child owns the screen those writes would corrupt its UI on parent exit,
+  // so mark cleanup as already done.
+  _resourcesCleaned = true;
 
   console.log('\n♻ Restarting git-watchtower...\n');
 
@@ -3433,11 +3493,16 @@ let monitorLockFile = null;
  * times and from any exit path (shutdown, uncaughtException, 'exit').
  *
  * Every step is wrapped in try/catch so a failure in one resource does
- * not prevent the rest from being cleaned up. Stays synchronous so it
- * can run inside an 'exit' handler where async callbacks won't execute.
+ * not prevent the rest from being cleaned up. The body is synchronous
+ * so it still runs inside an 'exit' handler where async callbacks won't
+ * execute; the dev-server close promise is bubbled up so async callers
+ * can await it before process.exit().
+ *
+ * @returns {Promise<void>} resolves when the dev-server child has exited
+ *   (or a hard cap elapses). Synchronous callers may ignore it.
  */
 function cleanupResources() {
-  if (_resourcesCleaned) return;
+  if (_resourcesCleaned) return Promise.resolve();
   _resourcesCleaned = true;
 
   // Restore terminal first so the user sees a clean prompt even if a
@@ -3472,9 +3537,14 @@ function cleanupResources() {
     } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
   }
 
-  // User's dev-server process (command mode)
+  // User's dev-server process (command mode). Capture the close promise so
+  // async callers (shutdown/uncaughtException/unhandledRejection) can await
+  // it before process.exit() — otherwise the SIGKILL escalation timer gets
+  // dropped and a dev server that ignored SIGTERM survives as a detached
+  // orphan (it was spawned in its own process group on Unix).
+  let serverStopPromise = Promise.resolve();
   if (SERVER_MODE === 'command') {
-    try { stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
+    try { serverStopPromise = stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
   }
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
@@ -3486,13 +3556,15 @@ function cleanupResources() {
     try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
     monitorLockFile = null;
   }
+
+  return serverStopPromise;
 }
 
 async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   // For the static HTTP server, give in-flight connections a brief
   // grace period to drain. cleanupResources ended the SSE clients; this
@@ -3503,6 +3575,12 @@ async function shutdown() {
     const timeoutPromise = new Promise((resolve) => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
+
+  // Wait for the user's dev-server child to actually exit (SIGTERM +
+  // FORCE_KILL_GRACE_MS SIGKILL escalation inside stopServerProcess).
+  // Without this the escalation timer gets dropped by process.exit() below
+  // and a dev server that ignored SIGTERM survives as a detached orphan.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3530,11 +3608,14 @@ process.on('uncaughtException', async (err) => {
   // Synchronous teardown first — so the coordinator socket, lock file,
   // dev-server child process group, and SSE clients are released even
   // if telemetry shutdown hangs or throws.
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
   try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
   process.exit(1);
 });
 
@@ -3546,12 +3627,15 @@ process.on('uncaughtException', async (err) => {
 process.on('unhandledRejection', async (reason) => {
   isShuttingDown = true;
 
-  cleanupResources();
+  const serverStopPromise = cleanupResources();
 
   const err = reason instanceof Error ? reason : new Error(String(reason));
   try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Unhandled rejection:', reason);
   try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
   process.exit(1);
 });
 

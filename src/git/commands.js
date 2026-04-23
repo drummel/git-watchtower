@@ -62,12 +62,20 @@ async function execGit(args, options = {}) {
 }
 
 /**
- * Execute git command silently (suppress errors)
+ * Execute a git command, collapsing any failure into a null result.
+ *
+ * Callers use this when they want "the output, or nothing": the fallback
+ * pattern `execGitOptional(A) || execGitOptional(B)` relies on this, as does
+ * every caller that treats a missing result as "no data to show." This does
+ * conflate "branch has no commits" (empty stdout, non-null result) with
+ * "git errored" (null result) — if you need to distinguish those, use
+ * execGit() and handle the throw yourself.
+ *
  * @param {string[]} command - Git arguments
  * @param {Object} [options] - Execution options
- * @returns {Promise<{stdout: string, stderr: string}|null>}
+ * @returns {Promise<{stdout: string, stderr: string}|null>} Result, or null if git failed
  */
-async function execGitSilent(command, options = {}) {
+async function execGitOptional(command, options = {}) {
   try {
     return await execGit(command, options);
   } catch (error) {
@@ -112,6 +120,7 @@ async function getRemotes(cwd) {
     const { stdout } = await execGit(['remote'], { cwd, timeout: 5000 });
     return stdout.split('\n').filter(Boolean);
   } catch (error) {
+    // Not a git repo or `git remote` unavailable — treat as "no remotes".
     return [];
   }
 }
@@ -241,7 +250,9 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
       }
     }
   } catch (error) {
-    // Return zeros on error
+    // Sparkline is decorative — a git-log failure (missing branch, network
+    // hiccup) returns all-zeros and renders a flat bar rather than crashing
+    // the caller.
   }
 
   return counts;
@@ -331,6 +342,8 @@ async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
     );
     return stdout.split('\n').filter(Boolean);
   } catch (error) {
+    // Diff fails when branches share no common ancestor, or when either
+    // ref doesn't exist. Caller renders "no changed files" either way.
     return [];
   }
 }
@@ -370,6 +383,8 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
     const { stdout } = await execGit(['diff', '--stat', `${fromCommit}..${toCommit}`], options);
     return parseDiffStats(stdout);
   } catch (e) {
+    // Diff fails when a ref is gone or commits share no ancestor. Zero
+    // added/deleted renders as "no change summary" in the activity log.
     return { added: 0, deleted: 0 };
   }
 }
@@ -418,6 +433,9 @@ async function getAheadBehind(branchRef, baseRef, options = {}) {
       ahead: parseInt(parts[1], 10) || 0,
     };
   } catch (e) {
+    // rev-list fails when baseRef is missing (no remote yet) or when the
+    // branches share no common ancestor. 0/0 hides the ahead/behind column
+    // for that row rather than crashing the background refresher.
     return { ahead: 0, behind: 0 };
   }
 }
@@ -438,13 +456,15 @@ async function getDiffShortstat(baseRef, branchRef, options = {}) {
     );
     return parseDiffStats(stdout);
   } catch (e) {
+    // See getAheadBehind: same background-refresh path, same 0/0 fallback
+    // to hide the +/- column when a ref is missing.
     return { added: 0, deleted: 0 };
   }
 }
 
 module.exports = {
   execGit,
-  execGitSilent,
+  execGitOptional,
   isGitAvailable,
   isGitRepository,
   getRemotes,
