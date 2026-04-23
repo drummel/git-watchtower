@@ -35,6 +35,18 @@ const WATCHTOWER_DIR = path.join(os.homedir(), '.watchtower');
 const MAX_IPC_BUFFER = 1024 * 1024;
 
 /**
+ * How long a worker waits for a `registered` ACK from the coordinator
+ * after the TCP connection completes and the `register` frame is written.
+ *
+ * The coordinator responds synchronously inside _handleWorkerMessage, so
+ * anything past a couple of seconds indicates the coordinator is wedged,
+ * crashed between accept() and the handler, or rejected the registration
+ * (duplicate ID). Callers treat timeout as a connect failure and either
+ * retry or fall back to reclaiming the coordinator role.
+ */
+const REGISTRATION_ACK_TIMEOUT_MS = 2000;
+
+/**
  * Lock file path
  */
 const LOCK_FILE = path.join(WATCHTOWER_DIR, 'web.lock');
@@ -492,24 +504,73 @@ class Worker {
     this.onCommand = null;
     this._connected = false;
     this._buffer = '';
+    /** @type {((msg: Object) => void) | null} */
+    this._onRegistered = null;
   }
 
   /**
-   * Connect to the coordinator.
+   * Connect to the coordinator and complete the register handshake.
+   *
+   * Resolves only once the coordinator has replied with a matching
+   * `registered` ACK. Without this, the worker would start pushing state
+   * the instant the TCP connection opens, even if the coordinator crashed
+   * or rejected the registration (e.g. duplicate ID, stale socket) before
+   * processing the `register` frame. In that scenario the pushes would
+   * silently disappear until something else forced a reconnect.
+   *
+   * Rejects if the socket errors, the peer closes before ACK, or the ACK
+   * doesn't arrive within REGISTRATION_ACK_TIMEOUT_MS.
+   *
    * @returns {Promise<void>}
    */
   connect() {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let ackTimer = null;
+
+      const cleanupHandshake = () => {
+        if (ackTimer) {
+          clearTimeout(ackTimer);
+          ackTimer = null;
+        }
+        this._onRegistered = null;
+      };
+
+      const settleResolve = () => {
+        if (settled) return;
+        settled = true;
+        cleanupHandshake();
+        resolve();
+      };
+
+      const settleReject = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanupHandshake();
+        this._connected = false;
+        try { if (this.socket) this.socket.destroy(); } catch (_) { /* socket may already be torn down */ }
+        reject(err);
+      };
+
+      // Installed before the register frame is sent so an immediate reply
+      // can't race the assignment.
+      this._onRegistered = (msg) => {
+        if (msg && msg.id === this.id) settleResolve();
+      };
+
       this.socket = net.createConnection(this.socketPath, () => {
         this._connected = true;
-        // Register with coordinator
+        // Register with coordinator. Don't resolve yet — wait for the ACK.
         this._send({
           type: 'register',
           id: this.id,
           projectPath: this.projectPath,
           projectName: this.projectName,
         });
-        resolve();
+        ackTimer = setTimeout(() => {
+          settleReject(new Error('coordinator registration ACK timed out'));
+        }, REGISTRATION_ACK_TIMEOUT_MS);
+        if (ackTimer.unref) ackTimer.unref();
       });
 
       this.socket.on('data', (data) => {
@@ -538,11 +599,12 @@ class Worker {
 
       this.socket.on('error', (err) => {
         this._connected = false;
-        reject(err);
+        settleReject(err);
       });
 
       this.socket.on('close', () => {
         this._connected = false;
+        settleReject(new Error('coordinator socket closed before registration'));
       });
     });
   }
@@ -597,6 +659,10 @@ class Worker {
    * @private
    */
   _handleMessage(msg) {
+    if (msg.type === 'registered' && this._onRegistered) {
+      this._onRegistered(msg);
+      return;
+    }
     if (msg.type === 'command' && this.onCommand) {
       this.onCommand(msg.action, msg.payload);
     }
