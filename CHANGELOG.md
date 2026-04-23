@@ -1,3 +1,10 @@
+## [1.14.11](https://github.com/drummel/git-watchtower/compare/v1.14.10...v1.14.11) (2026-04-23)
+
+
+### Bug Fixes
+
+* wait for coordinator ACK before resolving Worker.connect() ([d4ce0f7](https://github.com/drummel/git-watchtower/commit/d4ce0f7f4a29684f3e0d465e0ac6d726c6df4acd))
+
 ## [1.14.10](https://github.com/drummel/git-watchtower/compare/v1.14.9...v1.14.10) (2026-04-23)
 
 
