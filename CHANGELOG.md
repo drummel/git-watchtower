@@ -1,3 +1,10 @@
+## [1.14.15](https://github.com/drummel/git-watchtower/compare/v1.14.14...v1.14.15) (2026-04-23)
+
+
+### Bug Fixes
+
+* stop loss animation when casino mode is disabled ([1503d6b](https://github.com/drummel/git-watchtower/commit/1503d6b276bfee257be12411ff7b04ae43adbebe))
+
 ## [1.14.14](https://github.com/drummel/git-watchtower/compare/v1.14.13...v1.14.14) (2026-04-23)
 
 
