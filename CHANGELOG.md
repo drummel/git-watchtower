@@ -1,3 +1,10 @@
+## [1.14.17](https://github.com/drummel/git-watchtower/compare/v1.14.16...v1.14.17) (2026-04-23)
+
+
+### Bug Fixes
+
+* close static-server TOCTOU between realpath check and file read ([5f6baa0](https://github.com/drummel/git-watchtower/commit/5f6baa04f2b9bae9122da04587ad16639cb5e123))
+
 ## [1.14.16](https://github.com/drummel/git-watchtower/compare/v1.14.15...v1.14.16) (2026-04-23)
 
 
