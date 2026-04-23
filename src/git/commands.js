@@ -16,6 +16,43 @@ const FETCH_TIMEOUT = 60000;
 const SHORT_TIMEOUT = 5000;
 
 /**
+ * Environment overrides applied to every git child process.
+ *
+ * LANG=C / LC_ALL=C force git into the C locale so parseable summary
+ * lines — e.g. "X files changed, Y insertions(+), Z deletions(-)" —
+ * don't get localized into the user's language. Without this,
+ * parseDiffStats() returns (0, 0) on systems with a non-English LANG
+ * and certain git builds, silently zeroing sparklines and hiding
+ * activity from the user.
+ *
+ * GIT_TERMINAL_PROMPT=0 prevents git from blocking on a credential
+ * prompt when auth is needed — we never run interactively, so a prompt
+ * would just hang until the timeout fires.
+ *
+ * Spread `...process.env` first so callers can still override these
+ * per-call if needed, and so the child inherits everything else
+ * (critically PATH so `git` resolves on Windows).
+ */
+const GIT_ENV_OVERRIDES = {
+  LANG: 'C',
+  LC_ALL: 'C',
+  GIT_TERMINAL_PROMPT: '0',
+};
+
+/**
+ * Build the child-process env for a git call.
+ *
+ * Exported for tests. Accepts a base env (defaults to process.env) so
+ * tests can pin behaviour without relying on the runner's shell.
+ *
+ * @param {NodeJS.ProcessEnv} [base] - Base env; defaults to process.env.
+ * @returns {NodeJS.ProcessEnv}
+ */
+function buildGitEnv(base) {
+  return { ...(base || process.env), ...GIT_ENV_OVERRIDES };
+}
+
+/**
  * Execute a git command safely using execFile (no shell).
  * @param {string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
  * @param {Object} [options] - Execution options
@@ -37,6 +74,7 @@ async function execGit(args, options = {}) {
     const result = await new Promise((resolve, reject) => {
       execFile('git', args, {
         cwd,
+        env: buildGitEnv(),
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
         timeout,          // kill child process after timeout ms
         killSignal: 'SIGTERM',
@@ -482,6 +520,8 @@ module.exports = {
   deleteLocalBranch,
   getAheadBehind,
   getDiffShortstat,
+  buildGitEnv,
+  GIT_ENV_OVERRIDES,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 };

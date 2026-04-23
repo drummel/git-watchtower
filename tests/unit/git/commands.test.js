@@ -19,6 +19,8 @@ const {
   stash,
   stashPop,
   parseDiffStats,
+  buildGitEnv,
+  GIT_ENV_OVERRIDES,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 } = require('../../../src/git/commands');
@@ -133,6 +135,78 @@ describe('hasUncommittedChanges', () => {
   it('should return boolean', async () => {
     const result = await hasUncommittedChanges(REPO_ROOT);
     assert.strictEqual(typeof result, 'boolean');
+  });
+});
+
+describe('buildGitEnv', () => {
+  it('sets LC_ALL=C, LANG=C, and GIT_TERMINAL_PROMPT=0', () => {
+    const env = buildGitEnv({ PATH: '/usr/bin' });
+    assert.strictEqual(env.LC_ALL, 'C');
+    assert.strictEqual(env.LANG, 'C');
+    assert.strictEqual(env.GIT_TERMINAL_PROMPT, '0');
+  });
+
+  it('passes through the rest of the base env (e.g. PATH)', () => {
+    // PATH must survive or `git` won't resolve on Windows / minimal shells.
+    const env = buildGitEnv({ PATH: '/tmp/x:/tmp/y', HOME: '/home/test', OTHER: '42' });
+    assert.strictEqual(env.PATH, '/tmp/x:/tmp/y');
+    assert.strictEqual(env.HOME, '/home/test');
+    assert.strictEqual(env.OTHER, '42');
+  });
+
+  it('overrides the base env locale settings rather than letting the user preempt them', () => {
+    // The whole point of this helper: even if the parent shell has a French
+    // locale, the git child runs in C so parseDiffStats sees English.
+    const env = buildGitEnv({ LC_ALL: 'fr_FR.UTF-8', LANG: 'fr_FR.UTF-8' });
+    assert.strictEqual(env.LC_ALL, 'C');
+    assert.strictEqual(env.LANG, 'C');
+  });
+
+  it('falls back to process.env when called with no argument', () => {
+    const env = buildGitEnv();
+    // process.env.PATH is almost always defined; we rely on that here.
+    assert.ok('PATH' in env || 'Path' in env, 'expected PATH to be inherited');
+    assert.strictEqual(env.LC_ALL, 'C');
+  });
+
+  it('GIT_ENV_OVERRIDES is the authoritative constant', () => {
+    assert.deepStrictEqual(GIT_ENV_OVERRIDES, {
+      LANG: 'C',
+      LC_ALL: 'C',
+      GIT_TERMINAL_PROMPT: '0',
+    });
+  });
+});
+
+describe('execGit locale isolation', () => {
+  it('produces English diff --stat output regardless of the parent LANG', async () => {
+    // End-to-end check that buildGitEnv() actually flows through execGit:
+    // run `git diff --stat` on a known commit range and assert the summary
+    // line contains English words parseDiffStats expects. This would fail
+    // on a FR-locale runner without the LC_ALL=C override.
+    //
+    // We use HEAD~1..HEAD against our own repo; that guarantees a
+    // non-empty diff and makes the test self-contained.
+    const originalLang = process.env.LANG;
+    const originalLcAll = process.env.LC_ALL;
+    try {
+      process.env.LANG = 'fr_FR.UTF-8';
+      process.env.LC_ALL = 'fr_FR.UTF-8';
+      const { stdout } = await execGit(['diff', '--stat', 'HEAD~1..HEAD'], { cwd: REPO_ROOT });
+      // At least one of "insertion" / "deletion" / "files changed" must be
+      // present in the English form. Localized git would use e.g.
+      // "fichiers modifiés" / "insertions" is loaned in some locales, so
+      // deletions(-) is the sharpest English-only marker when present.
+      assert.ok(
+        /insertions?\(\+\)|deletions?\(-\)|files? changed/.test(stdout),
+        `expected English diff --stat summary; got: ${stdout}`,
+      );
+    } finally {
+      if (originalLang === undefined) delete process.env.LANG;
+      else process.env.LANG = originalLang;
+      if (originalLcAll === undefined) delete process.env.LC_ALL;
+      else process.env.LC_ALL = originalLcAll;
+    }
   });
 });
 
