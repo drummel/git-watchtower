@@ -3644,6 +3644,20 @@ process.on('unhandledRejection', async (reason) => {
 // ============================================================================
 
 async function start() {
+  // git-watchtower is a full-screen TUI. If stdout isn't a TTY (piped to a
+  // file, `tee`, `head`, or captured by a non-interactive CI runner) every
+  // frame writes hideCursor/clearScreen/moveTo/color escapes into the pipe,
+  // producing an unreadable log and wasting CPU on a render loop no human
+  // will see. Refuse to start and point the user at a sensible alternative.
+  if (!process.stdout.isTTY) {
+    console.error('git-watchtower: stdout is not a TTY.');
+    console.error('');
+    console.error('  This is an interactive terminal UI and cannot render when stdout is');
+    console.error('  piped or redirected. If you only need a CI-friendly status check,');
+    console.error('  use `git fetch` + `git log` directly.');
+    process.exit(1);
+  }
+
   // Check if git is available
   const gitAvailable = await checkGitAvailable();
   if (!gitAvailable) {
