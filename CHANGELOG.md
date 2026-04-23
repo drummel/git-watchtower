@@ -1,3 +1,10 @@
+## [1.14.18](https://github.com/drummel/git-watchtower/compare/v1.14.17...v1.14.18) (2026-04-23)
+
+
+### Bug Fixes
+
+* pin git child processes to the C locale so diff --stat parses ([d895140](https://github.com/drummel/git-watchtower/commit/d8951407d631924f7826270ab46140dae24d720e))
+
 ## [1.14.17](https://github.com/drummel/git-watchtower/compare/v1.14.16...v1.14.17) (2026-04-23)
 
 
