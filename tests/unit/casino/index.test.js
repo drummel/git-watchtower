@@ -338,6 +338,58 @@ describe('disable() slot cleanup', () => {
   });
 });
 
+describe('disable() loss animation cleanup', () => {
+  beforeEach(() => {
+    casino.disable();
+    casino.resetStats();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('stops a loss animation in flight and clears the message', () => {
+    casino.enable();
+    casino.triggerLoss('merge conflict', () => {});
+    assert.strictEqual(casino.isLossAnimating(), true);
+
+    casino.disable();
+
+    assert.strictEqual(casino.isLossAnimating(), false);
+    assert.strictEqual(casino.getLossDisplay(120), '');
+  });
+
+  it('loss interval does not keep firing after disable', async () => {
+    casino.enable();
+
+    let renderCalls = 0;
+    casino.triggerLoss('switch failed', () => { renderCalls++; });
+
+    // Wait a few frames so the interval has definitely started firing.
+    await new Promise((r) => setTimeout(r, 250));
+    assert.ok(renderCalls >= 1,
+      'pre-disable sanity: loss interval should have fired at least once');
+
+    casino.disable();
+    const atDisable = renderCalls;
+
+    // The loss interval fires every 120 ms and self-terminates at frame 15
+    // (~1.8 s). If disable() leaked the interval, we'd see more renderCalls.
+    await new Promise((r) => setTimeout(r, 600));
+    assert.strictEqual(renderCalls, atDisable,
+      'loss interval kept firing after disable() — stopLossAnimation was not called');
+  });
+
+  it('isLossAnimating returns false when disabled even with stale state', () => {
+    casino.enable();
+    casino.triggerLoss('boom', () => {});
+    assert.strictEqual(casino.isLossAnimating(), true);
+
+    casino.disable();
+    assert.strictEqual(casino.isLossAnimating(), false);
+  });
+});
+
 describe('marquee animation', () => {
   beforeEach(() => {
     casino.enable();

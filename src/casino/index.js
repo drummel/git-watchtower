@@ -105,6 +105,11 @@ function disable() {
   // effect on the way out, which the user just asked to stop.
   resetSlotState();
   stopWinAnimation();
+  // resetLossState — stop the loss interval AND clear lossMessage. Without
+  // this, a triggerLoss() in flight kept lossAnimationInterval firing for
+  // up to ~15 frames × 120 ms = 1.8 s after disable, and lossMessage stayed
+  // set so isLossAnimating() reported true into the next session.
+  resetLossState();
 }
 
 /**
@@ -564,6 +569,18 @@ function stopLossAnimation() {
 }
 
 /**
+ * Clear all loss animation state without side effects. Used by disable()
+ * so a loss in flight at the moment casino mode is turned off doesn't
+ * keep its interval running or leave lossMessage set for isLossAnimating().
+ * @private
+ */
+function resetLossState() {
+  stopLossAnimation();
+  lossMessage = null;
+  lossAnimationFrame = 0;
+}
+
+/**
  * Get loss animation display
  * @param {number} width
  * @returns {string}
@@ -586,6 +603,7 @@ function getLossDisplay(width) {
  * @returns {boolean}
  */
 function isLossAnimating() {
+  if (!casinoEnabled) return false;
   return lossMessage !== null;
 }
 
