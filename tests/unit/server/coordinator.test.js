@@ -429,6 +429,113 @@ describe('Worker connection error', () => {
   });
 });
 
+describe('Worker registration handshake', () => {
+  const net = require('net');
+  let fakeServer = null;
+  let fakeSockPath = null;
+
+  afterEach(async () => {
+    if (fakeServer) {
+      await new Promise((r) => fakeServer.close(r));
+      fakeServer = null;
+    }
+    if (fakeSockPath) {
+      try { fs.unlinkSync(fakeSockPath); } catch (_) { /* already cleaned */ }
+      fakeSockPath = null;
+    }
+  });
+
+  it('resolves only after receiving the registered ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-order';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    let registerReceived = false;
+    let ackSentAt = 0;
+    fakeServer = net.createServer((socket) => {
+      let buf = '';
+      socket.on('data', (d) => {
+        buf += d.toString();
+        const idx = buf.indexOf('\n');
+        if (idx === -1) return;
+        const msg = JSON.parse(buf.slice(0, idx));
+        buf = buf.slice(idx + 1);
+        if (msg.type === 'register') {
+          registerReceived = true;
+          // Deliberately delay the ACK so we can verify connect() waits.
+          setTimeout(() => {
+            ackSentAt = Date.now();
+            socket.write(JSON.stringify({ type: 'registered', id: msg.id }) + '\n');
+          }, 80);
+        }
+      });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-order',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    const start = Date.now();
+    await w.connect();
+    const elapsed = Date.now() - start;
+
+    assert.equal(registerReceived, true);
+    assert.ok(ackSentAt > 0, 'ACK should have been sent');
+    assert.ok(elapsed >= 70, `connect() resolved too early (${elapsed}ms) — it did not wait for the ACK`);
+    w.disconnect();
+  });
+
+  it('rejects if the coordinator never sends a registered ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-timeout';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    // Server accepts the connection and reads the register frame but never ACKs.
+    fakeServer = net.createServer((socket) => {
+      socket.on('data', () => { /* swallow register, send nothing back */ });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-timeout',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    await assert.rejects(
+      () => w.connect(),
+      /registration ACK timed out/,
+    );
+    assert.equal(w.isConnected(), false);
+  });
+
+  it('rejects if the coordinator closes the socket before ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-closed';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    fakeServer = net.createServer((socket) => {
+      socket.on('data', () => {
+        // Simulate coordinator crashing/rejecting before the ACK path runs.
+        socket.end();
+      });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-closed',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    await assert.rejects(() => w.connect());
+    assert.equal(w.isConnected(), false);
+  });
+});
+
 describe('Coordinator worker state validation', () => {
   let coord;
   let w;
