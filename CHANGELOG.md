@@ -1,3 +1,10 @@
+## [1.14.16](https://github.com/drummel/git-watchtower/compare/v1.14.15...v1.14.16) (2026-04-23)
+
+
+### Bug Fixes
+
+* warn clearly when fs.watch recursive mode is unreliable ([a42d70b](https://github.com/drummel/git-watchtower/commit/a42d70bee986ac4283f67eb190811b3e08b27424))
+
 ## [1.14.15](https://github.com/drummel/git-watchtower/compare/v1.14.14...v1.14.15) (2026-04-23)
 
 
