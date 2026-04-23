@@ -103,6 +103,7 @@ const store = new Store();
 const { WebDashboardServer } = require('../src/server/web');
 const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket, isProcessAlive } = require('../src/server/coordinator');
 const monitorLock = require('../src/utils/monitor-lock');
+const { createPipeErrorHandler } = require('../src/utils/pipe-error');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -3602,6 +3603,27 @@ process.on('SIGTERM', shutdown);
 process.on('exit', () => {
   cleanupResources();
 });
+
+// Defense-in-depth against a stdio pipe closing mid-run. The #13 TTY guard
+// stops `git-watchtower | head` at startup, but a TTY can still disappear
+// later (SSH drops, terminal window closes, pty tears down). Without this,
+// the next write() emits an async EPIPE which Node promotes to
+// uncaughtException — producing a crash report and telemetry noise for
+// what is a benign pipe-closed condition.
+const stdioPipeErrorHandler = createPipeErrorHandler({
+  onEpipe: () => {
+    isShuttingDown = true;
+    try { cleanupResources(); } catch (_) { /* best-effort during pipe-close */ }
+    process.exit(0);
+  },
+  onOther: (err) => {
+    // Any other stdio error is unexpected — re-raise so the existing
+    // uncaughtException handler can capture telemetry and restore terminal.
+    setImmediate(() => { throw err; });
+  },
+});
+process.stdout.on('error', stdioPipeErrorHandler);
+process.stderr.on('error', stdioPipeErrorHandler);
 process.on('uncaughtException', async (err) => {
   isShuttingDown = true;
 
