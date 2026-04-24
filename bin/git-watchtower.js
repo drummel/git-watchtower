@@ -84,7 +84,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
 const { pruneStaleEntries } = require('../src/polling/engine');
-const { isGitAvailable: checkGitAvailable, execGit, execGitSilent, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
+const { isGitAvailable: checkGitAvailable, execGit, execGitOptional, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
 const sessionStats = require('../src/stats/session');
@@ -101,7 +101,10 @@ const store = new Store();
 
 // Web dashboard server
 const { WebDashboardServer } = require('../src/server/web');
-const { Coordinator, Worker, generateProjectId, getActiveCoordinator, writeLock, removeLock } = require('../src/server/coordinator');
+const { Coordinator, Worker, generateProjectId, getActiveCoordinator, tryAcquireLock, finalizeLock, removeLock, removeSocket, isProcessAlive } = require('../src/server/coordinator');
+const monitorLock = require('../src/utils/monitor-lock');
+const { createPipeErrorHandler } = require('../src/utils/pipe-error');
+const { getRecursiveWatchSupport } = require('../src/utils/fs-watch');
 
 const PROJECT_ROOT = process.cwd();
 
@@ -368,6 +371,14 @@ const cliArgs = parseCliArgs(process.argv.slice(2), {
   onHelp: (v) => { console.log(getHelpText(v)); process.exit(0); },
 });
 
+if (cliArgs.errors.length > 0) {
+  for (const err of cliArgs.errors) {
+    console.error(`Error: ${err}`);
+  }
+  console.error('\nRun git-watchtower --help for usage information.');
+  process.exit(1);
+}
+
 // Configuration - these will be set after config is loaded
 let SERVER_MODE = 'static';      // 'static' | 'command' | 'none'
 let NO_SERVER = false;            // Derived from SERVER_MODE === 'none'
@@ -380,6 +391,20 @@ let REMOTE_NAME = 'origin';
 let AUTO_PULL = true;
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
+
+// Timing constants (ms)
+/** Grace period before SIGKILLing a process after SIGTERM. */
+const FORCE_KILL_GRACE_MS = 3000;
+/** Additional grace period added to a command's timeout before SIGKILL. */
+const SIGKILL_GRACE_AFTER_TIMEOUT_MS = 5000;
+/** Delay between stopping and restarting the dev server. */
+const SERVER_RESTART_DELAY_MS = 500;
+/** How long a transient flash message stays on screen. */
+const FLASH_MESSAGE_DURATION_MS = 3000;
+/** Debounce window for file watcher events before notifying clients. */
+const FILE_WATCHER_DEBOUNCE_MS = 100;
+/** Max time to wait for the static HTTP server to close on shutdown. */
+const SERVER_CLOSE_TIMEOUT_MS = 2000;
 
 // Telemetry session tracking
 let branchSwitchCount = 0;
@@ -396,6 +421,10 @@ let coordinator = null;
 let worker = null;
 let projectId = null;
 let webStateInterval = null;
+
+// Periodic update check controller — hoisted to module scope so the exit
+// handler can clean it up regardless of where in start() we are.
+let periodicUpdateCheck = null;
 
 function applyConfig(config) {
   // Server settings
@@ -440,7 +469,11 @@ function applyConfig(config) {
 // Server log management
 function addServerLog(line, isError = false) {
   const entry = { timestamp: new Date().toLocaleTimeString(), line, isError };
-  const serverLogBuffer = [...store.get('serverLogBuffer'), entry].slice(-MAX_SERVER_LOG_LINES);
+  const prev = store.get('serverLogBuffer');
+  // Drop the oldest entries to stay within MAX_SERVER_LOG_LINES after push
+  const startIdx = Math.max(0, prev.length + 1 - MAX_SERVER_LOG_LINES);
+  const serverLogBuffer = prev.slice(startIdx);
+  serverLogBuffer.push(entry);
   store.setState({ serverLogBuffer });
 }
 
@@ -455,6 +488,17 @@ function openInBrowser(url) {
   });
 }
 
+/**
+ * Build a localhost URL for the given port.
+ * Centralizes the `http://localhost:${port}` pattern so it's easy to adjust
+ * (e.g. switch protocol or host) in one place.
+ * @param {number} port
+ * @returns {string}
+ */
+function localhostUrl(port) {
+  return `http://localhost:${port}`;
+}
+
 // parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl
 // imported from src/git/remote.js
 
@@ -464,6 +508,8 @@ async function getRemoteWebUrl(branchName) {
     const parsed = parseRemoteUrl(stdout);
     return buildWebUrl(parsed, branchName);
   } catch (e) {
+    // No remote configured, or URL isn't parseable as github/gitlab —
+    // action modal hides the "view on web" link, nothing else breaks.
     return null;
   }
 }
@@ -471,10 +517,10 @@ async function getRemoteWebUrl(branchName) {
 // Extract Claude Code session URL from the most recent commit on a branch
 async function getSessionUrl(branchName) {
   // Try remote branch first, fall back to local
-  const result = await execGitSilent(
+  const result = await execGitOptional(
     ['log', `${REMOTE_NAME}/${branchName}`, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
-  ) || await execGitSilent(
+  ) || await execGitOptional(
     ['log', branchName, '-1', '--format=%B'],
     { cwd: PROJECT_ROOT }
   );
@@ -612,7 +658,7 @@ async function loadAsyncActionData(branch, currentData) {
     try {
       const host = new URL(env.webUrlBase).hostname;
       webUrl = buildBranchUrl(env.webUrlBase, host, branch.name);
-    } catch (e) { /* ignore */ }
+    } catch (e) { /* invalid webUrlBase — leave webUrl null, modal hides the link */ }
   }
 
   // Fetch session URL (local git, fast but async)
@@ -656,6 +702,9 @@ function startServerProcess() {
     env: { ...process.env, FORCE_COLOR: '1' },
     shell: isWindows,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // On Unix, create a new process group so we can kill the entire tree
+    // (e.g. npm -> node -> next). On Windows, taskkill /t handles this.
+    detached: !isWindows,
   };
 
   try {
@@ -701,36 +750,63 @@ function startServerProcess() {
   }
 }
 
+/**
+ * Stop the user's dev-server child process and its entire process group.
+ *
+ * Returns a Promise that resolves when the process has actually exited (or a
+ * hard cap elapses). Callers on async exit paths — shutdown(), uncaughtException,
+ * unhandledRejection — must await this so the SIGKILL escalation timer fires
+ * before process.exit() drops it. Synchronous callers (startServerProcess's
+ * restart branch, the 'exit' fallback) can fire-and-forget; best effort only.
+ */
 function stopServerProcess() {
-  if (!serverProcess) return;
+  if (!serverProcess) return Promise.resolve();
 
   addLog('Stopping server...', 'update');
 
   // Capture reference before nulling — needed for deferred SIGKILL
   const proc = serverProcess;
-
-  // Try graceful shutdown first
-  if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
-  } else {
-    proc.kill('SIGTERM');
-    // Force kill after grace period if process hasn't exited
-    const forceKillTimeout = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL');
-      } catch (e) {
-        // Process may already be dead
-      }
-    }, 3000);
-
-    // Clear the force-kill timer if the process exits cleanly
-    proc.once('close', () => {
-      clearTimeout(forceKillTimeout);
-    });
-  }
-
   serverProcess = null;
   store.setState({ serverRunning: false });
+
+  // Resolves when the child actually exits
+  const closedPromise = proc.exitCode !== null
+    ? Promise.resolve()
+    : new Promise((resolve) => { proc.once('close', () => resolve()); });
+
+  // Hard cap so callers can never hang forever if 'close' never fires
+  // (e.g. stdio pipe torn down, handle state corrupted). Grace period plus
+  // a small buffer for SIGKILL delivery + OS reap of the process group.
+  const hardCap = new Promise((resolve) => setTimeout(resolve, FORCE_KILL_GRACE_MS + 500));
+
+  if (process.platform === 'win32') {
+    // taskkill /f /t is already forceful and recursive; close should follow shortly
+    spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
+    return Promise.race([closedPromise, hardCap]);
+  }
+
+  // Kill the entire process group (negative PID) so that grandchildren
+  // (e.g. npm -> node -> vite) are also terminated.
+  try {
+    process.kill(-proc.pid, 'SIGTERM');
+  } catch (e) {
+    // Process group may already be dead
+  }
+  // Force kill after grace period if process hasn't exited
+  const forceKillTimeout = setTimeout(() => {
+    try {
+      process.kill(-proc.pid, 'SIGKILL');
+    } catch (e) {
+      // Process group may already be dead
+    }
+  }, FORCE_KILL_GRACE_MS);
+
+  // Clear the force-kill timer if the process exits cleanly
+  proc.once('close', () => {
+    clearTimeout(forceKillTimeout);
+  });
+
+  return Promise.race([closedPromise, hardCap]);
 }
 
 function restartServerProcess() {
@@ -739,7 +815,7 @@ function restartServerProcess() {
   setTimeout(() => {
     startServerProcess();
     render();
-  }, 500);
+  }, SERVER_RESTART_DELAY_MS);
 }
 
 // Network and polling state
@@ -752,7 +828,7 @@ const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, p
 
 // Error detection utilities imported from src/utils/errors.js
 const { ErrorHandler, isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
-const { Mutex } = require('../src/utils/async');
+const { Mutex, sleep } = require('../src/utils/async');
 
 // Keyboard handling utilities imported from src/ui/keybindings.js
 const { filterBranches } = require('../src/ui/keybindings');
@@ -766,7 +842,7 @@ const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../s
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
-const { getMimeType, injectLiveReload } = require('../src/server/static');
+const { getMimeType, injectLiveReload, resolveStaticPath } = require('../src/server/static');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
@@ -815,7 +891,7 @@ const CLI_TIMEOUT = 30000;
 
 /**
  * Execute a non-git CLI command safely using execFile (no shell interpolation).
- * For git commands, use execGit/execGitSilent from src/git/commands.js instead.
+ * For git commands, use execGit/execGitOptional from src/git/commands.js instead.
  * @param {string} cmd - The executable (e.g. 'gh', 'glab', 'which')
  * @param {string[]} args - Arguments array (no shell interpolation)
  * @param {Object} [options] - Execution options
@@ -836,7 +912,7 @@ function execCli(cmd, args = [], options = {}) {
     if (timeout > 0) {
       const killTimer = setTimeout(() => {
         try { child.kill('SIGKILL'); } catch (e) { /* already dead */ }
-      }, timeout + 5000);
+      }, timeout + SIGKILL_GRACE_AFTER_TIMEOUT_MS);
       child.on('close', () => clearTimeout(killTimer));
     }
   });
@@ -871,6 +947,9 @@ async function detectDefaultBranch() {
     const { stdout } = await execGit(['symbolic-ref', `refs/remotes/${REMOTE_NAME}/HEAD`], { cwd: PROJECT_ROOT });
     detectedDefaultBranch = stdout.trim().replace('refs/remotes/', '');
   } catch (e) {
+    // No remote HEAD and none of the common names exist — ahead/behind
+    // is hidden entirely (fetchAheadBehindForBranches short-circuits on
+    // a null detectedDefaultBranch).
     detectedDefaultBranch = null;
   }
 }
@@ -953,13 +1032,22 @@ function getCasinoMessage(type) {
 function addLog(message, type = 'info') {
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
+  // Collapse any whitespace (newlines, tabs, CRs) into a single space so that
+  // multi-line content (e.g. git stderr from a failed auto-pull) cannot leak
+  // cursor movement into the rendered box and corrupt the surrounding UI.
+  const safeMessage = String(message == null ? '' : message).replace(/\s+/g, ' ').trim();
   const entry = {
-    message, type,
+    message: safeMessage, type,
     timestamp: new Date().toLocaleTimeString(),
     icon: icons[type] || '○',
     color: colors[type] || 'white',
   };
-  const activityLog = [entry, ...store.get('activityLog')].slice(0, MAX_LOG_ENTRIES);
+  const prev = store.get('activityLog');
+  // Drop the oldest entries to stay within MAX_LOG_ENTRIES after prepend
+  const keepCount = Math.min(prev.length, MAX_LOG_ENTRIES - 1);
+  const activityLog = new Array(keepCount + 1);
+  activityLog[0] = entry;
+  for (let i = 0; i < keepCount; i++) activityLog[i + 1] = prev[i];
   store.setState({ activityLog });
 }
 
@@ -991,10 +1079,10 @@ async function refreshAllSparklines() {
 
     try {
       // Get commit counts for last 7 days (try remote, fall back to local)
-      const sparkResult = await execGitSilent(
+      const sparkResult = await execGitOptional(
         ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
-      ) || await execGitSilent(
+      ) || await execGitOptional(
         ['log', branch.name, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
       );
@@ -1030,10 +1118,10 @@ async function refreshAllSparklines() {
 async function getPreviewData(branchName) {
   try {
     // Get last 5 commits (try remote, fall back to local)
-    const logResult = await execGitSilent(
+    const logResult = await execGitOptional(
       ['log', `origin/${branchName}`, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['log', branchName, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
     );
@@ -1046,10 +1134,10 @@ async function getPreviewData(branchName) {
 
     // Get files changed (comparing to current branch)
     let filesChanged = [];
-    const diffResult = await execGitSilent(
+    const diffResult = await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...origin/${branchName}`],
       { cwd: PROJECT_ROOT }
-    ) || await execGitSilent(
+    ) || await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...${branchName}`],
       { cwd: PROJECT_ROOT }
     );
@@ -1059,6 +1147,9 @@ async function getPreviewData(branchName) {
 
     return { commits, filesChanged };
   } catch (e) {
+    // Preview pane is best-effort — branch may not exist on the remote yet,
+    // refs may have been pruned mid-fetch. Empty pane is better than an
+    // error toast for a background UI enrichment.
     return { commits: [], filesChanged: [] };
   }
 }
@@ -1080,7 +1171,9 @@ function write(str) {
 function setTerminalTitle(title) {
   // Set terminal tab/window title using ANSI escape sequence
   // \x1b]0;title\x07 sets both window and tab title (most compatible)
-  process.stdout.write(`\x1b]0;${title}\x07`);
+  // Strip control characters to prevent escape sequence injection
+  const safe = String(title).replace(/[\x00-\x1f\x7f]/g, '');
+  process.stdout.write(`\x1b]0;${safe}\x07`);
 }
 
 function restoreTerminalTitle() {
@@ -1308,7 +1401,7 @@ function showFlash(message) {
   flashTimeout = setTimeout(() => {
     store.setState({ flashMessage: null });
     render();
-  }, 3000);
+  }, FLASH_MESSAGE_DURATION_MS);
 }
 
 function hideFlash() {
@@ -1521,8 +1614,33 @@ async function pullCurrentBranch() {
     addLog(`Pulling from ${REMOTE_NAME}/${branch}...`, 'update');
     render();
 
-    await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
-    addLog('Pulled successfully', 'success');
+    // Capture HEAD before pull so we can diff against it when git pull
+    // doesn't put a clean "already up to date" message on stdout.
+    const preHead = await execGitOptional(['rev-parse', 'HEAD'], { cwd: PROJECT_ROOT });
+    const oldCommit = preHead && preHead.stdout ? preHead.stdout.trim() : null;
+
+    const result = await execGit(['pull', REMOTE_NAME, branch], { cwd: PROJECT_ROOT, timeout: 60000 });
+    const pullOutput = `${result.stdout || ''}\n${result.stderr || ''}`;
+
+    if (/already up[- ]to[- ]date/i.test(pullOutput)) {
+      addLog(`Already up to date with ${REMOTE_NAME}/${branch}`, 'success');
+    } else {
+      // Prefer the summary line from git's own output (it's locale-sensitive
+      // but matches how git reports its work). Fall back to a diff against
+      // the old HEAD when git's summary line is missing (e.g. merge commit
+      // without --stat).
+      let summary = '';
+      const diffStats = parseDiffStats(pullOutput);
+      if (diffStats.added || diffStats.deleted) {
+        summary = ` (+${diffStats.added}/-${diffStats.deleted})`;
+      } else if (oldCommit) {
+        const fallback = await getDiffStats(oldCommit, 'HEAD');
+        if (fallback.added || fallback.deleted) {
+          summary = ` (+${fallback.added}/-${fallback.deleted})`;
+        }
+      }
+      addLog(`Pulled ${REMOTE_NAME}/${branch}${summary}`, 'success');
+    }
     pendingDirtyOperation = null;
     notifyClients();
     return { success: true };
@@ -1871,12 +1989,14 @@ async function pollGitChanges() {
         lastPrStatusFetch = Date.now();
         prStatusFetchInFlight = false;
       }).catch(() => {
+        // gh/glab errored (unauthed, rate-limited, network). PR indicators
+        // keep their last-known state; the next poll tick will retry.
         prStatusFetchInFlight = false;
       });
     }
 
     // Background ahead/behind fetch for visible branches
-    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => {});
+    fetchAheadBehindForBranches(pollFilteredBranches).catch(() => { /* transient git/network error — next poll will retry */ });
 
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
     const autoPullBranchName = store.get('currentBranch');
@@ -1890,7 +2010,6 @@ async function pollGitChanges() {
 
       try {
         await execGit(['pull', REMOTE_NAME, autoPullBranchName], { cwd: PROJECT_ROOT, timeout: 60000 });
-        addLog(`Pulled successfully from ${autoPullBranchName}`, 'success');
         currentInfo.hasUpdates = false;
         // Update the stored commit to the new one
         const newCommit = await execGit(['rev-parse', '--short', 'HEAD'], { cwd: PROJECT_ROOT });
@@ -1900,9 +2019,10 @@ async function pollGitChanges() {
         // Reload browsers
         notifyClients();
 
-        // Calculate actual diff for stats tracking
+        // Calculate actual diff for stats tracking + status message
+        let diffStats = { added: 0, deleted: 0 };
         if (oldCommit) {
-          const diffStats = await getDiffStats(oldCommit, 'HEAD');
+          diffStats = await getDiffStats(oldCommit, 'HEAD');
           const totalLines = diffStats.added + diffStats.deleted;
           // Always track session churn
           sessionStats.recordChurn(diffStats.added, diffStats.deleted);
@@ -1916,6 +2036,12 @@ async function pollGitChanges() {
             }
           }
         }
+
+        // Indicate what was updated so the log isn't just a generic "success"
+        const summary = (diffStats.added || diffStats.deleted)
+          ? ` (+${diffStats.added}/-${diffStats.deleted})`
+          : '';
+        addLog(`Auto-pulled ${autoPullBranchName}${summary}`, 'success');
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
         if (isMergeConflict(errMsg)) {
@@ -2002,13 +2128,21 @@ async function pollGitChanges() {
 }
 
 function schedulePoll() {
+  // Bail out if shutdown has started: both here (no new timer) and again
+  // inside the timer callback after each await (the in-flight poll may
+  // have started before shutdown() cleared pollIntervalId, and clearTimeout
+  // on a timer whose callback is already executing is a no-op).
+  if (isShuttingDown) return;
   pollIntervalId = setTimeout(async () => {
+    if (isShuttingDown) return;
     await pollGitChanges();
+    if (isShuttingDown) return;
     schedulePoll();
   }, store.get('adaptivePollInterval'));
 }
 
 function restartPolling() {
+  if (isShuttingDown) return;
   if (pollIntervalId) {
     clearTimeout(pollIntervalId);
   }
@@ -2073,7 +2207,15 @@ let server = null;
 
 function createStaticServer() {
   return http.createServer((req, res) => {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  // DNS-rebinding protection: reject requests with non-loopback Host headers
+  const host = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+  if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
+    res.writeHead(403, { 'Content-Type': 'text/plain' });
+    res.end('Forbidden: invalid Host header');
+    return;
+  }
+
+  const url = new URL(req.url, localhostUrl(PORT));
   let pathname = url.pathname;
   const logPath = pathname; // Keep original for logging
 
@@ -2083,34 +2225,67 @@ function createStaticServer() {
   }
 
   pathname = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
-  let filePath = path.join(STATIC_DIR, pathname);
+  const candidate = path.join(STATIC_DIR, pathname);
 
-  // Security: ensure resolved path stays within STATIC_DIR to prevent path traversal
-  const resolvedPath = path.resolve(filePath);
-  const resolvedStaticDir = path.resolve(STATIC_DIR);
-  if (!resolvedPath.startsWith(resolvedStaticDir + path.sep) && resolvedPath !== resolvedStaticDir) {
+  // Realpath the static root once per request. A failure here means the
+  // install is broken (missing dir, bad permissions) — fall back to the
+  // resolved-but-not-realpath'd form so the request still gets a 403
+  // from resolveStaticPath rather than crashing.
+  let realStaticDir;
+  try {
+    realStaticDir = fs.realpathSync(path.resolve(STATIC_DIR));
+  } catch (e) {
+    telemetry.captureError(e);
+    realStaticDir = path.resolve(STATIC_DIR);
+  }
+
+  const send403 = () => {
     res.writeHead(403, { 'Content-Type': 'text/html' });
     res.end('<h1>403 Forbidden</h1>');
     addServerLog(`GET ${logPath} → 403 (path traversal blocked)`, true);
-    return;
-  }
+  };
 
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(filePath, 'index.html');
-  }
+  const send404 = () => {
+    res.writeHead(404, { 'Content-Type': 'text/html' });
+    res.end('<h1>404 Not Found</h1>');
+    addServerLog(`GET ${logPath} → 404`, true);
+  };
 
-  if (!fs.existsSync(filePath)) {
-    if (fs.existsSync(filePath + '.html')) {
-      filePath = filePath + '.html';
+  // All downstream reads go through `finalPath` — the realpath-resolved
+  // target from resolveStaticPath(). Using the pre-realpath candidate
+  // opens a TOCTOU window where a symlink inside STATIC_DIR could be
+  // swapped between the containment check and the fs.readFile to point
+  // outside the root.
+  let finalPath = null;
+
+  const initial = resolveStaticPath(candidate, realStaticDir);
+  if (initial.status === 'forbidden') { send403(); return; }
+  if (initial.status === 'ok') {
+    // Directory requests resolve the index.html *inside the realpath'd*
+    // directory. Without this second realpath+check, a symlinked dir
+    // whose target pointed outside would serve its attacker-controlled
+    // index.html through our root check.
+    if (fs.statSync(initial.path).isDirectory()) {
+      const indexResult = resolveStaticPath(
+        path.join(initial.path, 'index.html'),
+        realStaticDir,
+      );
+      if (indexResult.status === 'forbidden') { send403(); return; }
+      if (indexResult.status === 'ok') finalPath = indexResult.path;
+      // 'missing' → fall through to 404 (no .html fallback for dirs)
     } else {
-      res.writeHead(404, { 'Content-Type': 'text/html' });
-      res.end('<h1>404 Not Found</h1>');
-      addServerLog(`GET ${logPath} → 404`, true);
-      return;
+      finalPath = initial.path;
     }
+  } else {
+    // 'missing' — try the `foo` → `foo.html` convenience fallback.
+    const htmlFallback = resolveStaticPath(candidate + '.html', realStaticDir);
+    if (htmlFallback.status === 'forbidden') { send403(); return; }
+    if (htmlFallback.status === 'ok') finalPath = htmlFallback.path;
   }
 
-  serveFile(res, filePath, logPath);
+  if (!finalPath) { send404(); return; }
+
+  serveFile(res, finalPath, logPath);
   });
 }
 
@@ -2131,6 +2306,21 @@ function setupFileWatcher() {
     addLog(`Loaded ${ignorePatterns.length} ignore patterns from .gitignore`, 'info');
   }
 
+  // Before calling fs.watch, surface any known incompatibility explicitly —
+  // the generic catch below would otherwise report a confusing
+  // "Could not set up file watcher: ..." for the well-known case of a
+  // forced install on Node <20 Linux, where recursive watching is
+  // unreliable. A clear message points the user at the real fix
+  // (upgrade Node) instead of making them debug a live-reload that
+  // appears to work but silently ignores subdirectory edits.
+  const support = getRecursiveWatchSupport();
+  if (!support.supported) {
+    addLog(
+      `Live reload may miss nested file changes: ${support.reason}`,
+      'error',
+    );
+  }
+
   try {
     fileWatcher = fs.watch(STATIC_DIR, { recursive: true }, (eventType, filename) => {
       if (!filename) return;
@@ -2145,7 +2335,7 @@ function setupFileWatcher() {
         addLog(`File changed: ${filename}`, 'info');
         notifyClients();
         render();
-      }, 100);
+      }, FILE_WATCHER_DEBOUNCE_MS);
     });
 
     fileWatcher.on('error', (err) => {
@@ -2180,6 +2370,9 @@ function setupKeyboardInput() {
   }
   process.stdin.resume();
   process.stdin.setEncoding('utf8');
+
+  // Suppress EIO errors that occur when the PTY is torn down during exit
+  process.stdin.on('error', () => {});
 
   process.stdin.on('data', async (key) => {
     // Handle search mode input via actions module
@@ -2322,7 +2515,7 @@ function setupKeyboardInput() {
                 store.setState({ actionData: fullData, actionLoading: false });
                 render();
               }
-            }).catch(() => {});
+            }).catch(() => { /* PR was created; modal refresh is a nice-to-have, user can reopen */ });
           } catch (e) {
             const msg = (e && e.stderr) || (e && e.message) || String(e);
             addLog(`Failed to create ${prLabel}: ${msg.split('\n')[0]}`, 'error');
@@ -2506,20 +2699,21 @@ function setupKeyboardInput() {
       if (key === '\r' || key === '\n') {
         const selectedIdx = store.get('updateModalSelectedIndex') || 0;
         if (selectedIdx === 0) {
-          // Update now — run npm i -g git-watchtower
+          // Update & restart — run npm i -g git-watchtower, then re-exec
           store.setState({ updateInProgress: true });
           render();
           const { spawn } = require('child_process');
           const child = spawn('npm', ['i', '-g', 'git-watchtower'], {
             stdio: 'ignore',
             detached: false,
+            shell: process.platform === 'win32',
           });
           child.on('close', (code) => {
             store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
             if (code === 0) {
               store.setState({ updateAvailable: null });
-              addLog('Successfully updated git-watchtower! Restart to use new version.', 'update');
-              showFlash('Updated! Restart to use new version.');
+              addLog('Successfully updated git-watchtower! Restarting...', 'update');
+              restartProcess();
             } else {
               addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
               showFlash('Update failed. Try manually: npm i -g git-watchtower');
@@ -2706,7 +2900,7 @@ function setupKeyboardInput() {
 
       case 'o': // Open live server in browser
         if (!NO_SERVER) {
-          const serverUrl = `http://localhost:${PORT}`;
+          const serverUrl = localhostUrl(PORT);
           addLog(`Opening ${serverUrl} in browser...`, 'info');
           openInBrowser(serverUrl);
           render();
@@ -2731,6 +2925,8 @@ function setupKeyboardInput() {
               render();
             }
           }).catch(() => {
+            // Async enrichment failed (no remote, gh/glab errored, etc.).
+            // Drop the spinner so the modal shows what we have from phase 1.
             if (store.get('actionMode') && store.get('actionData') && store.get('actionData').branch.name === branch.name) {
               store.setState({ actionLoading: false });
               render();
@@ -2804,7 +3000,7 @@ function setupKeyboardInput() {
         } else {
           startWebDashboard(true).then(() => {
             showFlash(`Web dashboard on :${WEB_PORT}`);
-          }).catch(() => {});
+          }).catch(() => { /* startWebDashboard surfaces its own errors via addLog/showErrorToast */ });
         }
         break;
       }
@@ -2949,7 +3145,7 @@ async function handleWebAction(action, payload) {
         break;
       case 'openBrowser':
         if (!NO_SERVER) {
-          openInBrowser(`http://localhost:${PORT}`);
+          openInBrowser(localhostUrl(PORT));
           sendResult(true, 'Opened in browser');
         }
         break;
@@ -2961,12 +3157,86 @@ async function handleWebAction(action, payload) {
           }
         }
         break;
+      case 'checkUpdate':
+        if (payload && payload.install) {
+          store.setState({ updateInProgress: true });
+          render();
+          const { spawn: spawnUpdate } = require('child_process');
+          const updateChild = spawnUpdate('npm', ['i', '-g', 'git-watchtower'], {
+            stdio: 'ignore',
+            detached: false,
+          });
+          updateChild.on('close', (code) => {
+            store.setState({ updateInProgress: false });
+            if (code === 0) {
+              store.setState({ updateAvailable: null });
+              sendResult(true, 'Updated! Restarting...');
+              addLog('Successfully updated git-watchtower! Restarting...', 'update');
+              restartProcess();
+            } else {
+              sendResult(false, `Update failed (exit code ${code})`);
+              addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
+              render();
+            }
+          });
+          updateChild.on('error', (err2) => {
+            store.setState({ updateInProgress: false });
+            sendResult(false, err2.message);
+            addLog(`Update failed: ${err2.message}`, 'error');
+            render();
+          });
+        }
+        break;
     }
   } catch (err) {
     addLog(`Web action error: ${err.message}`, 'error');
     sendResult(false, err.message);
     render();
   }
+}
+
+/**
+ * Maximum attempts to connect to an existing coordinator as a worker
+ * before giving up (or reclaiming the lock if the coordinator is dead).
+ */
+const WORKER_CONNECT_MAX_ATTEMPTS = 3;
+
+/**
+ * Base delay for exponential backoff between worker-connect attempts (ms).
+ * Delays are 200ms, 400ms — total added latency ~600ms in the worst case.
+ */
+const WORKER_CONNECT_BASE_DELAY_MS = 200;
+
+/**
+ * Attempt to connect to an existing coordinator as a worker, with bounded
+ * exponential backoff. Returns the connected Worker on success, or null if
+ * every attempt failed. Between attempts, if the coordinator's process is
+ * no longer alive, we stop retrying so the caller can reclaim the lock.
+ *
+ * @param {{pid: number, port: number, socketPath: string}} existing - Coordinator lock info
+ * @param {string} projectIdArg - Project ID for worker registration
+ * @returns {Promise<Worker|null>}
+ */
+async function connectWorkerWithRetry(existing, projectIdArg) {
+  for (let attempt = 1; attempt <= WORKER_CONNECT_MAX_ATTEMPTS; attempt++) {
+    try {
+      const w = new Worker({
+        id: projectIdArg,
+        projectPath: PROJECT_ROOT,
+        projectName: path.basename(PROJECT_ROOT),
+        socketPath: existing.socketPath,
+      });
+      w.onCommand = (action, payload) => handleWebAction(action, payload);
+      await w.connect();
+      return w;
+    } catch (err) {
+      if (attempt >= WORKER_CONNECT_MAX_ATTEMPTS) return null;
+      // Stop early if the coordinator has exited — caller will reclaim.
+      if (!isProcessAlive(existing.pid)) return null;
+      await sleep(WORKER_CONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1));
+    }
+  }
+  return null;
 }
 
 /**
@@ -2990,23 +3260,45 @@ async function startWebDashboard(openBrowser) {
   // Resolve and cache the repo web URL for link building in the web UI
   getRemoteWebUrl(null).then((url) => {
     if (url) webDashboard.setRepoWebUrl(url);
-  }).catch(() => {});
+  }).catch(() => { /* no remote or unreachable — web UI falls back to branch names without links */ });
 
-  // Check if a coordinator is already running
-  const existing = getActiveCoordinator();
+  // Atomically try to claim the coordinator role. If another live instance
+  // already owns the lock, connect as a worker instead. This prevents a
+  // TOCTOU race where two instances both pass a "no coordinator" check and
+  // then clobber each other's socket in Coordinator.start().
+  //
+  // The outer loop runs at most twice so we can reclaim the coordinator
+  // role if the existing coordinator dies while we're retrying the worker
+  // handshake (e.g. it crashed just before we attached). Without this, a
+  // transient connect failure (peer not yet accepting, EPIPE, slow fork)
+  // against a coordinator that later crashes would leave us with no web
+  // dashboard even though we could safely take over.
+  let acquired = false;
+  let existing = null;
+  for (let outer = 0; outer < 2 && !acquired; outer++) {
+    const lockResult = tryAcquireLock(process.pid);
+    if (lockResult.acquired) {
+      acquired = true;
+      break;
+    }
 
-  if (existing) {
-    // Connect as a worker to the existing coordinator
-    try {
-      worker = new Worker({
-        id: projectId,
-        projectPath: PROJECT_ROOT,
-        projectName: path.basename(PROJECT_ROOT),
-        socketPath: existing.socketPath,
-      });
-      worker.onCommand = (action, payload) => handleWebAction(action, payload);
-      await worker.connect();
-      addLog(`Joined web dashboard at http://localhost:${existing.port} (tab)`, 'success');
+    existing = lockResult.existing || getActiveCoordinator();
+    if (!existing) {
+      // Lock exists but we couldn't claim it and couldn't read the owner.
+      // Bail out rather than race a concurrent startup.
+      addLog('Web dashboard unavailable: could not acquire coordinator lock', 'error');
+      webDashboard = null;
+      render();
+      return;
+    }
+
+    // Try to connect as a worker with bounded retry + exponential backoff.
+    // The coordinator may still be finishing its bind after finalizeLock()
+    // writes the real socket path, or temporarily unresponsive.
+    const connectedWorker = await connectWorkerWithRetry(existing, projectId);
+    if (connectedWorker) {
+      worker = connectedWorker;
+      addLog(`Joined web dashboard at ${localhostUrl(existing.port)} (tab)`, 'success');
 
       // Push state periodically
       webStateInterval = setInterval(() => {
@@ -3023,13 +3315,35 @@ async function startWebDashboard(openBrowser) {
       WEB_PORT = existing.port;
       render();
       return;
-    } catch (err) {
-      // Couldn't connect — become coordinator instead
-      worker = null;
     }
+
+    // Every connect attempt failed. If the coordinator process died while
+    // we were retrying, clean up the stale lock/socket and loop once to
+    // claim the coordinator role ourselves. Otherwise abort — do NOT take
+    // over a live coordinator's socket.
+    if (!isProcessAlive(existing.pid)) {
+      removeLock();
+      removeSocket();
+      continue;
+    }
+
+    addLog(`Could not join web dashboard at ${localhostUrl(existing.port)}: coordinator unreachable`, 'error');
+    webDashboard = null;
+    render();
+    return;
   }
 
-  // We are the coordinator
+  if (!acquired) {
+    addLog('Web dashboard unavailable: could not acquire coordinator lock after retry', 'error');
+    webDashboard = null;
+    render();
+    return;
+  }
+
+  // We hold the lock — it is now safe to remove any leftover socket and
+  // start listening. The lock file contains a placeholder pid-only entry
+  // until finalizeLock() writes the real port/socketPath after a successful
+  // bind.
   try {
     coordinator = new Coordinator();
     coordinator.onProjectsChanged = (projects) => {
@@ -3043,7 +3357,12 @@ async function startWebDashboard(openBrowser) {
     await coordinator.start();
     coordinator.registerLocal(projectId, PROJECT_ROOT, path.basename(PROJECT_ROOT), webDashboard.getSerializableState());
 
-    // Update coordinator with our latest state periodically
+    const { port } = await webDashboard.start();
+    WEB_PORT = port;
+    finalizeLock(process.pid, port, coordinator.socketPath);
+
+    // Update coordinator with our latest state periodically. Started only
+    // after a successful bind so a failed start doesn't leak an interval.
     webStateInterval = setInterval(() => {
       if (coordinator && webDashboard) {
         coordinator.updateLocal(projectId, webDashboard.getSerializableState());
@@ -3053,15 +3372,28 @@ async function startWebDashboard(openBrowser) {
       }
     }, 500);
 
-    const { port } = await webDashboard.start();
-    WEB_PORT = port;
-    writeLock(process.pid, port, coordinator.socketPath);
-
-    addLog(`Web dashboard: http://localhost:${port}`, 'success');
-    if (openBrowser) openInBrowser(`http://localhost:${port}`);
+    addLog(`Web dashboard: ${localhostUrl(port)}`, 'success');
+    if (openBrowser) openInBrowser(localhostUrl(port));
     render();
   } catch (err) {
     addLog(`Web dashboard failed: ${err.message}`, 'error');
+    // Defensive: if we got far enough to arm the state-push interval,
+    // clear it. The current ordering starts the interval only after
+    // webDashboard.start() resolves, but this keeps cleanup robust
+    // against future reordering and against failures in the
+    // post-bind statements (e.g. openInBrowser, addLog).
+    if (webStateInterval) {
+      clearInterval(webStateInterval);
+      webStateInterval = null;
+    }
+    if (webDashboard) {
+      try { webDashboard.stop(); } catch (_) { /* web server may not have bound yet — nothing to stop */ }
+    }
+    if (coordinator) {
+      try { coordinator.stop(); } catch (_) { /* coordinator may not have started its IPC server */ }
+    }
+    removeLock();
+    removeSocket();
     webDashboard = null;
     coordinator = null;
     render();
@@ -3096,41 +3428,191 @@ function stopWebDashboard() {
 }
 
 // ============================================================================
+// Restart after update
+// ============================================================================
+
+/**
+ * Restart the process after a successful update by re-execing with the same
+ * arguments. Cleans up terminal state and spawns a replacement process,
+ * then exits the current one.
+ */
+function restartProcess() {
+  // Restore terminal state
+  write(ansi.showCursor);
+  write(ansi.restoreScreen);
+  restoreTerminalTitle();
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+
+  // Silence the parent before the replacement takes over the TTY. The parent
+  // stays alive waiting on child.on('close') to forward the exit code, and
+  // stdio is inherited — so any stray listener here will race with the child
+  // (keystrokes consumed twice, render() drawing frames on top of the child's
+  // UI, Ctrl+C intercepted by both, etc.).
+  try { process.stdin.removeAllListeners('data'); } catch (_) { /* stdin may be detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused */ }
+  try { process.stdout.removeAllListeners('resize'); } catch (_) { /* stdout may be detached */ }
+  try { process.removeAllListeners('SIGWINCH'); } catch (_) { /* no SIGWINCH handler registered */ }
+  try { process.removeAllListeners('SIGINT'); } catch (_) { /* no SIGINT handler registered */ }
+  try { process.removeAllListeners('SIGTERM'); } catch (_) { /* no SIGTERM handler registered */ }
+
+  // Stop every scheduler that can trigger a render while we're waiting on the
+  // child. periodicUpdateCheck in particular will fire render() on completion
+  // and would draw over the replacement's frames.
+  if (pollIntervalId) {
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive */ }
+    pollIntervalId = null;
+  }
+  if (periodicUpdateCheck) {
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval may already be cleared */ }
+  }
+  if (fileWatcher) {
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed */ }
+    fileWatcher = null;
+  }
+
+  // Stop server, SSE clients, web dashboard
+  if (SERVER_MODE === 'command') stopServerProcess();
+  else if (SERVER_MODE === 'static') {
+    clients.forEach(client => client.end());
+    clients.clear();
+  }
+  stopWebDashboard();
+
+  // Release the per-repo monitor lock before spawning the replacement, so the
+  // child can acquire it. The parent stays alive waiting on child.on('close'),
+  // so without this the child sees the parent as an active owner and refuses.
+  if (monitorLockFile) {
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
+    monitorLockFile = null;
+  }
+
+  // The parent's 'exit' handler (process.on('exit', cleanupResources)) writes
+  // ANSI escapes — showCursor / restoreScreen — to the shared TTY. Once the
+  // child owns the screen those writes would corrupt its UI on parent exit,
+  // so mark cleanup as already done.
+  _resourcesCleaned = true;
+
+  console.log('\n♻ Restarting git-watchtower...\n');
+
+  const { spawn: spawnChild } = require('child_process');
+  const child = spawnChild(process.argv[0], process.argv.slice(1), {
+    stdio: 'inherit',
+    detached: false,
+  });
+  child.on('error', () => {
+    console.error('Failed to restart. Please run git-watchtower manually.');
+    process.exit(1);
+  });
+  // Forward the child's exit code when it finishes
+  child.on('close', (code) => process.exit(code || 0));
+}
+
+// ============================================================================
 // Shutdown
 // ============================================================================
 
 let isShuttingDown = false;
+let _resourcesCleaned = false;
+// Path of the per-repo monitor lock we own, if any. Set during start() and
+// cleared in cleanupResources() after release.
+let monitorLockFile = null;
+
+/**
+ * Idempotent, best-effort cleanup of every long-lived resource we own:
+ * terminal state, timers, file watcher, live-reload SSE clients, the
+ * user's dev-server child process, and the web-dashboard / coordinator
+ * (which unlinks the lock file and IPC socket). Safe to call multiple
+ * times and from any exit path (shutdown, uncaughtException, 'exit').
+ *
+ * Every step is wrapped in try/catch so a failure in one resource does
+ * not prevent the rest from being cleaned up. The body is synchronous
+ * so it still runs inside an 'exit' handler where async callbacks won't
+ * execute; the dev-server close promise is bubbled up so async callers
+ * can await it before process.exit().
+ *
+ * @returns {Promise<void>} resolves when the dev-server child has exited
+ *   (or a hard cap elapses). Synchronous callers may ignore it.
+ */
+function cleanupResources() {
+  if (_resourcesCleaned) return Promise.resolve();
+  _resourcesCleaned = true;
+
+  // Restore terminal first so the user sees a clean prompt even if a
+  // later step throws.
+  try { write(ansi.showCursor); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { write(ansi.restoreScreen); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { restoreTerminalTitle(); } catch (_) { /* stdout may be closed during crash cleanup */ }
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* stdin may already be unraw or detached */ }
+  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused or destroyed */ }
+
+  if (pollIntervalId) {
+    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive — clearTimeout normally won't throw */ }
+    pollIntervalId = null;
+  }
+
+  if (periodicUpdateCheck) {
+    try { periodicUpdateCheck.stop(); } catch (_) { /* interval handle may already be cleared */ }
+  }
+
+  if (fileWatcher) {
+    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed by OS or previous cleanup */ }
+    fileWatcher = null;
+  }
+
+  // Live-reload SSE clients (static mode)
+  if (SERVER_MODE === 'static') {
+    try {
+      clients.forEach((client) => {
+        try { client.end(); } catch (_) { /* SSE client socket already closed */ }
+      });
+      clients.clear();
+    } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
+  }
+
+  // User's dev-server process (command mode). Capture the close promise so
+  // async callers (shutdown/uncaughtException/unhandledRejection) can await
+  // it before process.exit() — otherwise the SIGKILL escalation timer gets
+  // dropped and a dev server that ignored SIGTERM survives as a detached
+  // orphan (it was spawned in its own process group on Unix).
+  let serverStopPromise = Promise.resolve();
+  if (SERVER_MODE === 'command') {
+    try { serverStopPromise = stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
+  }
+
+  // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
+  try { stopWebDashboard(); } catch (_) { /* web dashboard may never have been started */ }
+
+  // Per-repo monitor lock — release last so the slot stays reserved for the
+  // entire lifetime of this process, including any errors in the steps above.
+  if (monitorLockFile) {
+    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
+    monitorLockFile = null;
+  }
+
+  return serverStopPromise;
+}
 
 async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
 
-  // Restore terminal
-  write(ansi.showCursor);
-  write(ansi.restoreScreen);
-  restoreTerminalTitle();
+  const serverStopPromise = cleanupResources();
 
-  if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false);
-  }
-
-  if (fileWatcher) fileWatcher.close();
-  if (pollIntervalId) clearTimeout(pollIntervalId);
-
-  // Stop server based on mode
-  if (SERVER_MODE === 'command') {
-    stopServerProcess();
-  } else if (SERVER_MODE === 'static') {
-    clients.forEach(client => client.end());
-    clients.clear();
-
-    const serverClosePromise = new Promise(resolve => server.close(resolve));
-    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
+  // For the static HTTP server, give in-flight connections a brief
+  // grace period to drain. cleanupResources ended the SSE clients; this
+  // races server.close against SERVER_CLOSE_TIMEOUT_MS so we never hang
+  // forever on a stuck browser.
+  if (SERVER_MODE === 'static' && server) {
+    const serverClosePromise = new Promise((resolve) => server.close(resolve));
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS));
     await Promise.race([serverClosePromise, timeoutPromise]);
   }
 
-  // Stop web dashboard and coordinator
-  stopWebDashboard();
+  // Wait for the user's dev-server child to actually exit (SIGTERM +
+  // FORCE_KILL_GRACE_MS SIGKILL escalation inside stopServerProcess).
+  // Without this the escalation timer gets dropped by process.exit() below
+  // and a dev server that ignored SIGTERM survives as a detached orphan.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3146,14 +3628,67 @@ async function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+// Belt-and-suspenders: if we exit via a path that didn't call
+// cleanupResources (e.g. a hard crash in startup before handlers were
+// registered), still do synchronous best-effort cleanup.
+process.on('exit', () => {
+  cleanupResources();
+});
+
+// Defense-in-depth against a stdio pipe closing mid-run. The #13 TTY guard
+// stops `git-watchtower | head` at startup, but a TTY can still disappear
+// later (SSH drops, terminal window closes, pty tears down). Without this,
+// the next write() emits an async EPIPE which Node promotes to
+// uncaughtException — producing a crash report and telemetry noise for
+// what is a benign pipe-closed condition.
+const stdioPipeErrorHandler = createPipeErrorHandler({
+  onEpipe: () => {
+    isShuttingDown = true;
+    try { cleanupResources(); } catch (_) { /* best-effort during pipe-close */ }
+    process.exit(0);
+  },
+  onOther: (err) => {
+    // Any other stdio error is unexpected — re-raise so the existing
+    // uncaughtException handler can capture telemetry and restore terminal.
+    setImmediate(() => { throw err; });
+  },
+});
+process.stdout.on('error', stdioPipeErrorHandler);
+process.stderr.on('error', stdioPipeErrorHandler);
 process.on('uncaughtException', async (err) => {
-  telemetry.captureError(err);
-  write(ansi.showCursor);
-  write(ansi.restoreScreen);
-  restoreTerminalTitle();
-  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  isShuttingDown = true;
+
+  // Synchronous teardown first — so the coordinator socket, lock file,
+  // dev-server child process group, and SSE clients are released even
+  // if telemetry shutdown hangs or throws.
+  const serverStopPromise = cleanupResources();
+
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
   console.error('Uncaught exception:', err);
-  await telemetry.shutdown();
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
+  process.exit(1);
+});
+
+// Mirror of uncaughtException for unhandled promise rejections. Without this,
+// Node 15+ crashes the process on a missed .catch() tail with no telemetry
+// and no terminal restore — leaving the TUI user in a broken terminal. Also
+// high-signal: an unhandled rejection reaching here means we missed a .catch()
+// somewhere and telemetry will tell us where.
+process.on('unhandledRejection', async (reason) => {
+  isShuttingDown = true;
+
+  const serverStopPromise = cleanupResources();
+
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  console.error('Unhandled rejection:', reason);
+  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  // Wait for the dev-server SIGKILL escalation before exiting — otherwise
+  // process.exit() drops the pending timer and a stuck server orphans.
+  try { await serverStopPromise; } catch (_) { /* best-effort */ }
   process.exit(1);
 });
 
@@ -3162,6 +3697,20 @@ process.on('uncaughtException', async (err) => {
 // ============================================================================
 
 async function start() {
+  // git-watchtower is a full-screen TUI. If stdout isn't a TTY (piped to a
+  // file, `tee`, `head`, or captured by a non-interactive CI runner) every
+  // frame writes hideCursor/clearScreen/moveTo/color escapes into the pipe,
+  // producing an unreadable log and wasting CPU on a render loop no human
+  // will see. Refuse to start and point the user at a sensible alternative.
+  if (!process.stdout.isTTY) {
+    console.error('git-watchtower: stdout is not a TTY.');
+    console.error('');
+    console.error('  This is an interactive terminal UI and cannot render when stdout is');
+    console.error('  piped or redirected. If you only need a CI-friendly status check,');
+    console.error('  use `git fetch` + `git log` directly.');
+    process.exit(1);
+  }
+
   // Check if git is available
   const gitAvailable = await checkGitAvailable();
   if (!gitAvailable) {
@@ -3169,6 +3718,44 @@ async function start() {
     console.error('\n  Git Watchtower requires Git to be installed.');
     console.error('  Install Git from: https://git-scm.com/downloads\n');
     process.exit(1);
+  }
+
+  // Single-instance guard (per repo). Two TUIs rendering to the same terminal
+  // stomp on each other's frames — selection cursor bounces between their
+  // independent selectedIndex values, the activity log flips between two
+  // buffers, and each sees the other's `git checkout` as an "external" switch.
+  // Acquire before any TTY writes so a refusal leaves the user's prompt clean.
+  const lockResult = monitorLock.acquire(PROJECT_ROOT);
+  if (!lockResult.acquired) {
+    if (cliArgs.force) {
+      console.error(
+        ansi.yellow + '⚠ Warning: another git-watchtower (PID ' +
+        lockResult.existing.pid + ') is already running against this repo. ' +
+        'Continuing due to --force.' + ansi.reset
+      );
+    } else {
+      const existing = lockResult.existing || {};
+      console.error('\n' + ansi.red + ansi.bold +
+        '✗ Error: git-watchtower is already running against this repository' + ansi.reset);
+      console.error('\n  Existing PID: ' + ansi.bold + (existing.pid || 'unknown') + ansi.reset);
+      if (existing.startedAt) {
+        const ageMs = Date.now() - existing.startedAt;
+        const ageStr = ageMs < 60000
+          ? Math.round(ageMs / 1000) + 's'
+          : Math.round(ageMs / 60000) + 'm';
+        console.error('  Started:      ' + ageStr + ' ago');
+      }
+      console.error('  Repo:         ' + PROJECT_ROOT);
+      console.error('  Lock file:    ' + lockResult.file);
+      console.error('\n  Running two instances against the same repo makes the TUI');
+      console.error('  unusable (selection bouncing, flipping logs, CURRENT label');
+      console.error('  snap-back). Stop the other instance first:');
+      console.error('\n    ' + ansi.bold + 'kill ' + (existing.pid || '<pid>') + ansi.reset);
+      console.error('\n  Or pass --force to override (not recommended).\n');
+      process.exit(1);
+    }
+  } else {
+    monitorLockFile = lockResult.file;
   }
 
   // Load or create configuration
@@ -3242,11 +3829,11 @@ async function start() {
 
   // Detect default branch for ahead/behind counts, then fetch initial data
   detectDefaultBranch().then(() => {
-    fetchAheadBehindForBranches(initBranches).catch(() => {});
-  }).catch(() => {});
+    fetchAheadBehindForBranches(initBranches).catch(() => { /* ahead/behind is background-only — stale counts are better than a noisy startup */ });
+  }).catch(() => { /* no default branch detectable (no remote refs yet) — ahead/behind stays hidden */ });
 
   // Load sparklines and action cache in background
-  refreshAllSparklines().catch(() => {});
+  refreshAllSparklines().catch(() => { /* sparkline cache stays empty — activity column just renders blank */ });
   initActionCache().then(() => {
     // Once env is known, kick off initial PR status fetch
     fetchAllPrStatuses().then(map => {
@@ -3255,8 +3842,8 @@ async function start() {
         lastPrStatusFetch = Date.now();
         render();
       }
-    }).catch(() => {});
-  }).catch(() => {});
+    }).catch(() => { /* gh/glab unreachable — inline PR indicators stay hidden, poller will retry */ });
+  }).catch(() => { /* cliEnv detection failed — PR actions fall back to web links where possible */ });
 
   // Start server based on mode
   const startBranchName = store.get('currentBranch');
@@ -3273,12 +3860,12 @@ async function start() {
   } else {
     // Static mode
     server = createStaticServer();
-    server.listen(PORT, () => {
-      addLog(`Server started on http://localhost:${PORT}`, 'success');
+    server.listen(PORT, '127.0.0.1', () => {
+      addLog(`Server started on ${localhostUrl(PORT)}`, 'success');
       addLog(`Serving ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`, 'info');
       addLog(`Current branch: ${store.get('currentBranch')}`, 'info');
       // Add server log entries for static server
-      addServerLog(`Static server started on http://localhost:${PORT}`);
+      addServerLog(`Static server started on ${localhostUrl(PORT)}`);
       addServerLog(`Serving files from: ${STATIC_DIR.replace(PROJECT_ROOT, '.')}`);
       addServerLog(`Live reload enabled - waiting for browser connections...`);
       render();
@@ -3327,10 +3914,11 @@ async function start() {
       addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
       render();
     }
-  }).catch(() => {});
+  }).catch(() => { /* npm registry unreachable — periodic check will try again in 4h */ });
 
-  // Re-check for updates periodically (every 4 hours) while running
-  const periodicCheck = startPeriodicUpdateCheck((latestVersion) => {
+  // Re-check for updates periodically (every 4 hours) while running.
+  // Assigned to module scope so the top-level exit handler can stop it.
+  periodicUpdateCheck = startPeriodicUpdateCheck((latestVersion) => {
     const alreadyKnown = store.get('updateAvailable');
     store.setState({ updateAvailable: latestVersion });
     if (!alreadyKnown) {
@@ -3340,9 +3928,6 @@ async function start() {
     }
     render();
   });
-
-  // Clean up periodic check on exit
-  process.on('exit', () => periodicCheck.stop());
 }
 
 start().catch(err => {

@@ -5,6 +5,7 @@
 
 const { spawn } = require('child_process');
 const { ServerError } = require('../utils/errors');
+const { Mutex } = require('../utils/async');
 
 /**
  * @typedef {Object} ServerProcessState
@@ -30,8 +31,17 @@ const KILL_GRACE_PERIOD = 3000;
 const RESTART_DELAY = 500;
 
 /**
- * Parse a command string into command and arguments
- * Handles quoted strings properly
+ * Parse a command string into command and arguments.
+ * Handles quoted strings, backslash escapes (e.g. `\"`, `\\`, `\ `),
+ * and empty quoted arguments (`""`).
+ *
+ * Rules (POSIX-ish):
+ * - Inside single quotes, characters are literal — backslashes do NOT escape.
+ * - Inside double quotes or outside any quotes, a backslash causes the next
+ *   character to be treated literally (so `\"` yields `"`, `\\` yields `\`,
+ *   and `\ ` yields a literal space that doesn't split the argument).
+ * - A trailing backslash with no following character is left literal.
+ *
  * @param {string} commandString - Command string to parse
  * @returns {{command: string, args: string[]}}
  */
@@ -40,27 +50,43 @@ function parseCommand(commandString) {
   let current = '';
   let inQuotes = false;
   let quoteChar = '';
+  // Tracks whether we've started accumulating an argument — distinguishes
+  // `""` (empty argument) from whitespace between arguments.
+  let hasCurrent = false;
 
   for (let i = 0; i < commandString.length; i++) {
     const char = commandString[i];
 
+    // Backslash escapes: unless we're inside single quotes, a backslash
+    // causes the next character to be treated literally. A trailing
+    // backslash (no following character) falls through and is kept literal.
+    if (char === '\\' && quoteChar !== "'" && i + 1 < commandString.length) {
+      current += commandString[i + 1];
+      hasCurrent = true;
+      i++;
+      continue;
+    }
+
     if ((char === '"' || char === "'") && !inQuotes) {
       inQuotes = true;
       quoteChar = char;
+      hasCurrent = true;
     } else if (char === quoteChar && inQuotes) {
       inQuotes = false;
       quoteChar = '';
     } else if (char === ' ' && !inQuotes) {
-      if (current) {
+      if (hasCurrent) {
         args.push(current);
         current = '';
+        hasCurrent = false;
       }
     } else {
       current += char;
+      hasCurrent = true;
     }
   }
 
-  if (current) {
+  if (hasCurrent) {
     args.push(current);
   }
 
@@ -90,6 +116,7 @@ class ProcessManager {
     this.crashed = false;
     this.logs = [];
     this.command = '';
+    this._restartMutex = new Mutex();
   }
 
   /**
@@ -174,6 +201,9 @@ class ProcessManager {
       env: { ...process.env, FORCE_COLOR: '1' },
       shell: isWindows,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // On Unix, create a new process group so we can kill the entire tree
+      // (e.g. npm -> node -> next). On Windows, taskkill /t handles this.
+      detached: !isWindows,
     };
 
     try {
@@ -235,36 +265,13 @@ class ProcessManager {
       return false;
     }
 
-    // Capture reference before nulling — needed for deferred SIGKILL
+    // Capture reference before nulling — needed for deferred force-kill
     const proc = this.process;
 
-    // Try graceful shutdown first
     if (process.platform === 'win32') {
-      try {
-        spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
-      } catch (e) {
-        // Ignore taskkill errors
-      }
+      this._stopWindows(proc);
     } else {
-      try {
-        proc.kill('SIGTERM');
-
-        // Force kill after grace period
-        const forceKillTimeout = setTimeout(() => {
-          try {
-            proc.kill('SIGKILL');
-          } catch (e) {
-            // Process may already be dead
-          }
-        }, KILL_GRACE_PERIOD);
-
-        // Clear timeout if process exits cleanly
-        proc.once('close', () => {
-          clearTimeout(forceKillTimeout);
-        });
-      } catch (e) {
-        // Process may already be dead
-      }
+      this._stopUnix(proc);
     }
 
     this.process = null;
@@ -274,17 +281,109 @@ class ProcessManager {
   }
 
   /**
-   * Restart the server process
+   * Unix stop: SIGTERM the process group, then SIGKILL after a grace period.
+   * The grace timer is unref'd so it doesn't keep the event loop alive when
+   * the main process wants to exit.
+   * @param {import('child_process').ChildProcess} proc
+   * @private
+   */
+  _stopUnix(proc) {
+    // If the process has already exited, there's nothing to signal.
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+    try {
+      process.kill(-proc.pid, 'SIGTERM');
+    } catch (e) {
+      // Process group may already be dead
+      return;
+    }
+
+    const forceKillTimeout = setTimeout(() => {
+      // Re-check: process may have exited during the grace period.
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      try {
+        process.kill(-proc.pid, 'SIGKILL');
+      } catch (e) {
+        // Process group may already be dead
+      }
+    }, KILL_GRACE_PERIOD);
+
+    // Don't let this timer keep the event loop alive on shutdown.
+    forceKillTimeout.unref();
+
+    // Clear early if the process exits before the grace period.
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
+  }
+
+  /**
+   * Windows stop: taskkill /t (tree kill). If the process doesn't exit
+   * within the grace period, retry with /f (force).
+   * @param {import('child_process').ChildProcess} proc
+   * @private
+   */
+  _stopWindows(proc) {
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+    try {
+      spawn('taskkill', ['/pid', proc.pid.toString(), '/t']);
+    } catch (e) {
+      // Ignore spawn errors (PID already gone, etc.)
+      return;
+    }
+
+    // Fallback: force-kill if the process is still alive after the
+    // grace period. This mirrors the Unix SIGTERM → SIGKILL pattern.
+    const forceKillTimeout = setTimeout(() => {
+      if (proc.exitCode !== null || proc.signalCode !== null) return;
+      try {
+        spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t']);
+      } catch (e) {
+        // Ignore — process may already be dead
+      }
+    }, KILL_GRACE_PERIOD);
+
+    forceKillTimeout.unref();
+
+    proc.once('close', () => {
+      clearTimeout(forceKillTimeout);
+    });
+  }
+
+  /**
+   * Restart the server process.
+   *
+   * Waits for the old process to fully exit (so it releases its port)
+   * rather than sleeping a static RESTART_DELAY that is shorter than
+   * the SIGKILL grace period. Bounded by KILL_GRACE_PERIOD + a small
+   * margin so we never hang indefinitely if 'close' doesn't fire.
+   *
    * @returns {Promise<{success: boolean, error?: Error, pid?: number}>}
    */
   async restart() {
-    const command = this.command;
-    this.stop();
+    return this._restartMutex.withLock(async () => {
+      const command = this.command;
+      // Capture before stop() nulls this.process.
+      const oldProc = this.process;
 
-    // Wait before restarting
-    await new Promise((resolve) => setTimeout(resolve, RESTART_DELAY));
+      this.stop();
 
-    return this.start(command);
+      if (oldProc && oldProc.exitCode === null && oldProc.signalCode === null) {
+        // Old process hasn't exited yet — wait for 'close' with a bounded
+        // timeout so we don't hang if the process ignores all signals.
+        await new Promise((resolve) => {
+          const timeout = setTimeout(resolve, KILL_GRACE_PERIOD + RESTART_DELAY);
+          timeout.unref();
+          oldProc.once('close', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
+
+      return this.start(command);
+    });
   }
 
   /**

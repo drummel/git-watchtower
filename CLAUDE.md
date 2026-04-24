@@ -7,7 +7,7 @@ git-watchtower is a terminal-based Git branch monitor with activity sparklines a
 ## Development
 
 - **Entry point:** `bin/git-watchtower.js`
-- **Node.js:** Requires >= 18.0.0
+- **Node.js:** Requires >= 20.0.0 (recursive `fs.watch` for live-reload relies on Node 20+)
 - **Dependencies:** None (zero runtime dependencies)
 - **Run:** `npm start`
 - **Tests:** `npm test`

@@ -41,6 +41,7 @@ let slotResultFlashFrame = 0;    // Flash animation frame
 let slotResultInterval = null;   // Interval for result display/flash
 let slotResultRenderCallback = null; // Callback for re-rendering
 let slotResultLabel = null;      // "NOTHING", "WIN", "BIG WIN", "JACKPOT" etc
+let slotResultClearTimeout = null; // No-win 2s auto-clear timer handle
 
 // Win animation state
 let winAnimationFrame = 0;
@@ -98,8 +99,45 @@ function enable() {
 function disable() {
   casinoEnabled = false;
   stopMarquee();
-  stopSlotReels();
+  // resetSlotState — not stopSlotReels — because stopSlotReels() runs the
+  // end-of-poll result animation (labels a "NOTHING" panel and schedules a
+  // 2s auto-clear). Calling that during disable paints a brand-new casino
+  // effect on the way out, which the user just asked to stop.
+  resetSlotState();
   stopWinAnimation();
+  // resetLossState — stop the loss interval AND clear lossMessage. Without
+  // this, a triggerLoss() in flight kept lossAnimationInterval firing for
+  // up to ~15 frames × 120 ms = 1.8 s after disable, and lossMessage stayed
+  // set so isLossAnimating() reported true into the next session.
+  resetLossState();
+}
+
+/**
+ * Clear all slot reel state and timers without scheduling any new effects.
+ * Safe to call from disable() — unlike stopSlotReels(), it does not kick
+ * off a result display or a delayed clear timer.
+ * @private
+ */
+function resetSlotState() {
+  if (slotReelInterval) {
+    clearInterval(slotReelInterval);
+    slotReelInterval = null;
+  }
+  if (slotResultInterval) {
+    clearInterval(slotResultInterval);
+    slotResultInterval = null;
+  }
+  if (slotResultClearTimeout) {
+    clearTimeout(slotResultClearTimeout);
+    slotResultClearTimeout = null;
+  }
+  isSpinning = false;
+  slotReelFrame = 0;
+  slotResult = null;
+  slotResultIsWin = false;
+  slotResultFlashFrame = 0;
+  slotResultLabel = null;
+  slotResultRenderCallback = null;
 }
 
 /**
@@ -312,8 +350,11 @@ function stopSlotReels(hadUpdates = false, renderCallback = null, winLevel = nul
       slotResult.push(SLOT_SYMBOLS[idx]);
     }
 
-    // Display for 2 seconds then fade
-    setTimeout(() => {
+    // Display for 2 seconds then fade. Store the handle so disable() /
+    // resetSlotState() can cancel it — otherwise a delayed clear fires
+    // mid-way through the next enabled session and nulls live state.
+    slotResultClearTimeout = setTimeout(() => {
+      slotResultClearTimeout = null;
       slotResult = null;
       slotResultLabel = null;
       if (slotResultRenderCallback) slotResultRenderCallback();
@@ -326,6 +367,7 @@ function stopSlotReels(hadUpdates = false, renderCallback = null, winLevel = nul
  * @returns {Object|null}
  */
 function getSlotResultLabel() {
+  if (!casinoEnabled) return null;
   return slotResultLabel;
 }
 
@@ -334,6 +376,7 @@ function getSlotResultLabel() {
  * @returns {boolean}
  */
 function isSlotSpinning() {
+  if (!casinoEnabled) return false;
   return isSpinning;
 }
 
@@ -342,6 +385,7 @@ function isSlotSpinning() {
  * @returns {boolean}
  */
 function hasSlotResult() {
+  if (!casinoEnabled) return false;
   return slotResult !== null;
 }
 
@@ -350,6 +394,7 @@ function hasSlotResult() {
  * @returns {boolean}
  */
 function isSlotsActive() {
+  if (!casinoEnabled) return false;
   return isSpinning || slotResult !== null;
 }
 
@@ -358,6 +403,10 @@ function isSlotsActive() {
  * @returns {string}
  */
 function getSlotReelDisplay() {
+  // Defense-in-depth: even if stale state survived a disable/enable cycle,
+  // don't paint casino UI when the mode is off.
+  if (!casinoEnabled) return '';
+
   // Show result if we have one
   if (slotResult) {
     const reels = [];
@@ -520,6 +569,18 @@ function stopLossAnimation() {
 }
 
 /**
+ * Clear all loss animation state without side effects. Used by disable()
+ * so a loss in flight at the moment casino mode is turned off doesn't
+ * keep its interval running or leave lossMessage set for isLossAnimating().
+ * @private
+ */
+function resetLossState() {
+  stopLossAnimation();
+  lossMessage = null;
+  lossAnimationFrame = 0;
+}
+
+/**
  * Get loss animation display
  * @param {number} width
  * @returns {string}
@@ -542,6 +603,7 @@ function getLossDisplay(width) {
  * @returns {boolean}
  */
 function isLossAnimating() {
+  if (!casinoEnabled) return false;
   return lossMessage !== null;
 }
 

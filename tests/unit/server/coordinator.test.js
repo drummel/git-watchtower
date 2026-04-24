@@ -14,6 +14,8 @@ const {
   getActiveCoordinator,
   readLock,
   writeLock,
+  tryAcquireLock,
+  finalizeLock,
   removeLock,
   removeSocket,
   isProcessAlive,
@@ -80,6 +82,71 @@ describe('lock file operations', () => {
     writeLock(12345, 4000, '/tmp/test.sock');
     removeLock();
     assert.equal(readLock(), null);
+  });
+});
+
+describe('tryAcquireLock / finalizeLock', () => {
+  afterEach(() => {
+    removeLock();
+  });
+
+  it('should acquire when no lock exists', () => {
+    removeLock();
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    // Placeholder lock should exist and name the acquiring pid
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+  });
+
+  it('should refuse to acquire when a live owner holds the lock', () => {
+    ensureDir();
+    // First acquisition succeeds
+    const first = tryAcquireLock(process.pid);
+    assert.equal(first.acquired, true);
+    // Second acquisition from the same process (which is still alive) must fail
+    const second = tryAcquireLock(process.pid);
+    assert.equal(second.acquired, false);
+    assert.ok(second.existing);
+    assert.equal(second.existing.pid, process.pid);
+  });
+
+  it('should clean up a stale lock and acquire', () => {
+    ensureDir();
+    // Write a lock for a pid that will never exist
+    writeLock(999999999, 4000, '/tmp/stale.sock');
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+  });
+
+  it('finalizeLock should replace the placeholder with full info', () => {
+    removeLock();
+    const result = tryAcquireLock(process.pid);
+    assert.equal(result.acquired, true);
+    // Placeholder has no port
+    assert.equal(readLock().port, undefined);
+
+    finalizeLock(process.pid, 4242, '/tmp/final.sock');
+    const lock = readLock();
+    assert.ok(lock);
+    assert.equal(lock.pid, process.pid);
+    assert.equal(lock.port, 4242);
+    assert.equal(lock.socketPath, '/tmp/final.sock');
+  });
+
+  it('should prevent two concurrent acquirers from both succeeding', () => {
+    removeLock();
+    // Simulate a race by attempting to acquire twice in sequence without
+    // releasing. Even in the fastest possible interleaving on a single
+    // process, the exclusive-create semantic ensures only one wins.
+    const a = tryAcquireLock(process.pid);
+    const b = tryAcquireLock(process.pid);
+    assert.equal(a.acquired, true);
+    assert.equal(b.acquired, false);
   });
 });
 
@@ -357,6 +424,113 @@ describe('Worker connection error', () => {
       projectName: 'p',
       socketPath: '/tmp/nonexistent-watchtower-socket-test.sock',
     });
+    await assert.rejects(() => w.connect());
+    assert.equal(w.isConnected(), false);
+  });
+});
+
+describe('Worker registration handshake', () => {
+  const net = require('net');
+  let fakeServer = null;
+  let fakeSockPath = null;
+
+  afterEach(async () => {
+    if (fakeServer) {
+      await new Promise((r) => fakeServer.close(r));
+      fakeServer = null;
+    }
+    if (fakeSockPath) {
+      try { fs.unlinkSync(fakeSockPath); } catch (_) { /* already cleaned */ }
+      fakeSockPath = null;
+    }
+  });
+
+  it('resolves only after receiving the registered ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-order';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    let registerReceived = false;
+    let ackSentAt = 0;
+    fakeServer = net.createServer((socket) => {
+      let buf = '';
+      socket.on('data', (d) => {
+        buf += d.toString();
+        const idx = buf.indexOf('\n');
+        if (idx === -1) return;
+        const msg = JSON.parse(buf.slice(0, idx));
+        buf = buf.slice(idx + 1);
+        if (msg.type === 'register') {
+          registerReceived = true;
+          // Deliberately delay the ACK so we can verify connect() waits.
+          setTimeout(() => {
+            ackSentAt = Date.now();
+            socket.write(JSON.stringify({ type: 'registered', id: msg.id }) + '\n');
+          }, 80);
+        }
+      });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-order',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    const start = Date.now();
+    await w.connect();
+    const elapsed = Date.now() - start;
+
+    assert.equal(registerReceived, true);
+    assert.ok(ackSentAt > 0, 'ACK should have been sent');
+    assert.ok(elapsed >= 70, `connect() resolved too early (${elapsed}ms) — it did not wait for the ACK`);
+    w.disconnect();
+  });
+
+  it('rejects if the coordinator never sends a registered ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-timeout';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    // Server accepts the connection and reads the register frame but never ACKs.
+    fakeServer = net.createServer((socket) => {
+      socket.on('data', () => { /* swallow register, send nothing back */ });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-timeout',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    await assert.rejects(
+      () => w.connect(),
+      /registration ACK timed out/,
+    );
+    assert.equal(w.isConnected(), false);
+  });
+
+  it('rejects if the coordinator closes the socket before ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.ack-closed';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    fakeServer = net.createServer((socket) => {
+      socket.on('data', () => {
+        // Simulate coordinator crashing/rejecting before the ACK path runs.
+        socket.end();
+      });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'handshake-closed',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
     await assert.rejects(() => w.connect());
     assert.equal(w.isConnected(), false);
   });

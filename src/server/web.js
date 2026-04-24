@@ -63,6 +63,9 @@ class WebDashboardServer {
     this.pushInterval = null;
     this.lastPushedJson = '';
 
+    /** @type {Set<import('net').Socket>} Raw TCP sockets, tracked so stop() can force-close them */
+    this._sockets = new Set();
+
     // Multi-project support (populated by coordinator)
     /** @type {Map<string, Object>} */
     this.projects = new Map();
@@ -239,6 +242,14 @@ class WebDashboardServer {
         this._handleRequest(req, res);
       });
 
+      // Track raw TCP sockets so stop() can force-destroy lingering
+      // connections (long-lived SSE, paused browsers, proxied clients)
+      // instead of waiting for a full TCP FIN_WAIT2 timeout.
+      this.server.on('connection', (/** @type {import('net').Socket} */ socket) => {
+        this._sockets.add(socket);
+        socket.once('close', () => this._sockets.delete(socket));
+      });
+
       this.server.on('error', (/** @type {Error & {code?: string}} */ err) => {
         if (err.code === 'EADDRINUSE' && retries < MAX_PORT_RETRIES) {
           retries++;
@@ -270,14 +281,24 @@ class WebDashboardServer {
       this.pushInterval = null;
     }
 
-    // Close all SSE connections
+    // End SSE response streams gracefully (sends FIN).
     for (const client of this.clients) {
-      try { client.end(); } catch (e) { /* ignore */ }
+      try { client.end(); } catch (e) { /* SSE client may already be disconnected */ }
     }
     this.clients.clear();
 
     if (this.server) {
       this.server.close();
+
+      // Force-destroy any TCP sockets that didn't close after the
+      // graceful end() above. Without this, a paused browser, a
+      // suspended tab, or a slow proxy can pin server.close() for the
+      // full TCP FIN_WAIT2 timeout (typically 60 s), delaying shutdown.
+      for (const socket of this._sockets) {
+        try { socket.destroy(); } catch (e) { /* ignore */ }
+      }
+      this._sockets.clear();
+
       this.server = null;
     }
   }
@@ -293,7 +314,7 @@ class WebDashboardServer {
       try {
         client.write('event: flash\n');
         client.write('data: ' + data + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 
@@ -307,7 +328,7 @@ class WebDashboardServer {
       try {
         client.write('event: preview\n');
         client.write('data: ' + json + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 
@@ -321,7 +342,7 @@ class WebDashboardServer {
       try {
         client.write('event: actionResult\n');
         client.write('data: ' + json + '\n\n');
-      } catch (e) { /* ignore dead clients */ }
+      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
     }
   }
 
@@ -342,6 +363,17 @@ class WebDashboardServer {
    * @private
    */
   _handleRequest(req, res) {
+    // DNS-rebinding protection: only allow requests whose Host header
+    // matches a known loopback address.  Without this, a malicious page
+    // could resolve an attacker-controlled hostname to 127.0.0.1 and
+    // POST to /api/action to trigger destructive actions.
+    const host = (req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+    if (host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]') {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden: invalid Host header');
+      return;
+    }
+
     const url = new URL(req.url, `http://localhost:${this.port}`);
     const pathname = url.pathname;
 

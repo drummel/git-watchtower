@@ -64,6 +64,9 @@ function gitignorePatternToRegex(pattern) {
   try {
     return new RegExp(regexStr);
   } catch (e) {
+    // A malformed pattern in .gitignore shouldn't disable the file watcher
+    // entirely — signal "skip this line" via null, caller drops it from
+    // the pattern list. Extremely rare in practice.
     return null;
   }
 }
@@ -97,7 +100,10 @@ function parseGitignoreFile(gitignorePath) {
       }
     }
   } catch (err) {
-    // Silently continue if we can't read .gitignore
+    // .gitignore exists but we can't read it (permissions, mid-edit truncation,
+    // encoding). The file watcher still runs — it just won't honor gitignore
+    // rules this session. Surfacing the error would be noise; the user will
+    // notice when they see changes to ignored files trigger reloads.
   }
 
   return patterns;
@@ -125,19 +131,12 @@ function loadGitignorePatterns(searchPaths) {
  * @returns {boolean} - True if the file is in the .git directory
  */
 function isGitDirectory(filename) {
-  if (filename === '.git' || filename.startsWith('.git/') || filename.startsWith('.git\\')) {
-    return true;
-  }
-
   // Normalize path separators for cross-platform support
-  const normalizedPath = filename.replace(/\\/g, '/');
+  const p = filename.replace(/\\/g, '/');
 
-  // Check if path contains .git directory anywhere
-  if (normalizedPath.includes('/.git/') || normalizedPath.includes('/.git')) {
-    return true;
-  }
-
-  return false;
+  // Match exactly ".git" as a path segment, not ".github", ".gitignore", etc.
+  // Valid matches: ".git", ".git/hooks/pre-commit", "src/.git/config"
+  return /^\.git(\/|$)/.test(p) || /\/\.git(\/|$)/.test(p);
 }
 
 /**

@@ -53,15 +53,30 @@ describe('commands.js integration tests', () => {
       assert.strictEqual(result.success, true);
     });
 
-    it('should succeed silently when no remotes exist', async () => {
-      // git fetch with no remotes configured does nothing but succeeds
+    it('should fail when the requested remote does not exist', async () => {
+      // When `all: false`, the remoteName is passed to git, so fetching from
+      // a nonexistent remote should fail.
       const noRemoteFixture = require('./git-fixture').createGitFixture();
       try {
         const result = await fetch('origin', {
           all: false,
           cwd: noRemoteFixture.path,
         });
-        // Git fetch succeeds even with no remotes (it just does nothing)
+        assert.strictEqual(result.success, false);
+        assert.ok(result.error);
+      } finally {
+        noRemoteFixture.cleanup();
+      }
+    });
+
+    it('should succeed with all:true even when no remotes exist', async () => {
+      // `git fetch --all` with no remotes does nothing but succeeds.
+      const noRemoteFixture = require('./git-fixture').createGitFixture();
+      try {
+        const result = await fetch('origin', {
+          all: true,
+          cwd: noRemoteFixture.path,
+        });
         assert.strictEqual(result.success, true);
       } finally {
         noRemoteFixture.cleanup();
@@ -270,7 +285,7 @@ describe('commands.js integration tests', () => {
 
   describe('execGit timeout handling', () => {
     it('should accept timeout parameter without error', async () => {
-      const result = await execGit('git status', {
+      const result = await execGit(['status'], {
         cwd: fixture.path,
         timeout: 5000,
       });
@@ -286,7 +301,7 @@ describe('commands.js integration tests', () => {
       assert.strictEqual(result.success, true);
 
       // Verify branch is gone
-      const { stdout } = await execGit('git branch --list', { cwd: fixture.path });
+      const { stdout } = await execGit(['branch', '--list'], { cwd: fixture.path });
       assert.ok(!stdout.includes('to-delete'));
     });
 

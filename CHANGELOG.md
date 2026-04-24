@@ -1,3 +1,402 @@
+## [1.14.18](https://github.com/drummel/git-watchtower/compare/v1.14.17...v1.14.18) (2026-04-23)
+
+
+### Bug Fixes
+
+* pin git child processes to the C locale so diff --stat parses ([d895140](https://github.com/drummel/git-watchtower/commit/d8951407d631924f7826270ab46140dae24d720e))
+
+## [1.14.17](https://github.com/drummel/git-watchtower/compare/v1.14.16...v1.14.17) (2026-04-23)
+
+
+### Bug Fixes
+
+* close static-server TOCTOU between realpath check and file read ([5f6baa0](https://github.com/drummel/git-watchtower/commit/5f6baa04f2b9bae9122da04587ad16639cb5e123))
+
+## [1.14.16](https://github.com/drummel/git-watchtower/compare/v1.14.15...v1.14.16) (2026-04-23)
+
+
+### Bug Fixes
+
+* warn clearly when fs.watch recursive mode is unreliable ([a42d70b](https://github.com/drummel/git-watchtower/commit/a42d70bee986ac4283f67eb190811b3e08b27424))
+
+## [1.14.15](https://github.com/drummel/git-watchtower/compare/v1.14.14...v1.14.15) (2026-04-23)
+
+
+### Bug Fixes
+
+* stop loss animation when casino mode is disabled ([1503d6b](https://github.com/drummel/git-watchtower/commit/1503d6b276bfee257be12411ff7b04ae43adbebe))
+
+## [1.14.14](https://github.com/drummel/git-watchtower/compare/v1.14.13...v1.14.14) (2026-04-23)
+
+
+### Bug Fixes
+
+* stop painting a "NOTHING" casino panel after disable() ([c7f31ef](https://github.com/drummel/git-watchtower/commit/c7f31eff16de8b06d84d9455928089a0827445db))
+
+## [1.14.13](https://github.com/drummel/git-watchtower/compare/v1.14.12...v1.14.13) (2026-04-23)
+
+
+### Bug Fixes
+
+* exit cleanly on stdout/stderr EPIPE instead of crashing ([d17595f](https://github.com/drummel/git-watchtower/commit/d17595f5959323d3c54942f001cc2aab6324fbb4))
+
+## [1.14.12](https://github.com/drummel/git-watchtower/compare/v1.14.11...v1.14.12) (2026-04-23)
+
+
+### Bug Fixes
+
+* refuse to start when stdout is not a TTY ([b4c4555](https://github.com/drummel/git-watchtower/commit/b4c45557edf46aa7cf00656a2c5f13aa63660eb8))
+
+## [1.14.11](https://github.com/drummel/git-watchtower/compare/v1.14.10...v1.14.11) (2026-04-23)
+
+
+### Bug Fixes
+
+* wait for coordinator ACK before resolving Worker.connect() ([d4ce0f7](https://github.com/drummel/git-watchtower/commit/d4ce0f7f4a29684f3e0d465e0ac6d726c6df4acd))
+
+## [1.14.10](https://github.com/drummel/git-watchtower/compare/v1.14.9...v1.14.10) (2026-04-23)
+
+
+### Bug Fixes
+
+* force-destroy lingering TCP sockets in WebDashboardServer.stop() ([e1909c0](https://github.com/drummel/git-watchtower/commit/e1909c022c420fcd9f3a595c67efe88e690c11a1))
+
+## [1.14.9](https://github.com/drummel/git-watchtower/compare/v1.14.8...v1.14.9) (2026-04-22)
+
+
+### Bug Fixes
+
+* wait for dev-server SIGKILL escalation before process.exit ([41435dc](https://github.com/drummel/git-watchtower/commit/41435dca685242296c97274d83869cc3ec71779b))
+
+## [1.14.8](https://github.com/drummel/git-watchtower/compare/v1.14.7...v1.14.8) (2026-04-22)
+
+
+### Bug Fixes
+
+* silence parent process during self-restart to avoid TTY races ([4a933b7](https://github.com/drummel/git-watchtower/commit/4a933b785234da39743df4d1cabac2b8afd5d3a2))
+
+## [1.14.7](https://github.com/drummel/git-watchtower/compare/v1.14.6...v1.14.7) (2026-04-22)
+
+
+### Bug Fixes
+
+* propagate real git errors from getAllBranches instead of silencing ([14a9557](https://github.com/drummel/git-watchtower/commit/14a95577c9ebfec6c0bb2f902859a7cbf6180c95))
+
+## [1.14.6](https://github.com/drummel/git-watchtower/compare/v1.14.5...v1.14.6) (2026-04-22)
+
+
+### Bug Fixes
+
+* await old process exit in restart() instead of a static 500ms sleep ([067792f](https://github.com/drummel/git-watchtower/commit/067792fbed0e1f2b1655fa599db185fadfe8af14))
+
+## [1.14.5](https://github.com/drummel/git-watchtower/compare/v1.14.4...v1.14.5) (2026-04-22)
+
+
+### Bug Fixes
+
+* handle unhandledRejection so missed .catch() tails don't wreck the TUI ([bc4ebe3](https://github.com/drummel/git-watchtower/commit/bc4ebe347599b122ddd49f3263d1518e8ff56938)), closes [hi#signal](https://github.com/hi/issues/signal)
+
+## [1.14.4](https://github.com/drummel/git-watchtower/compare/v1.14.3...v1.14.4) (2026-04-22)
+
+
+### Bug Fixes
+
+* surface coordinator IPC and static-dir anomalies via telemetry ([0b4bcfb](https://github.com/drummel/git-watchtower/commit/0b4bcfbd8523944d06ea575ac997302a020ddfa6))
+
+## [1.14.3](https://github.com/drummel/git-watchtower/compare/v1.14.2...v1.14.3) (2026-04-21)
+
+
+### Bug Fixes
+
+* parse branch-action data from dataset instead of silently dropping it ([bcba481](https://github.com/drummel/git-watchtower/commit/bcba4817e54a55725415871db9ed9546e783f80a))
+
+## [1.14.2](https://github.com/drummel/git-watchtower/compare/v1.14.1...v1.14.2) (2026-04-21)
+
+
+### Bug Fixes
+
+* unref SIGKILL grace timer and add Windows force-kill fallback ([efa07d9](https://github.com/drummel/git-watchtower/commit/efa07d97cbf4fc15a2079778bd1f54d37400fee9))
+
+## [1.14.1](https://github.com/drummel/git-watchtower/compare/v1.14.0...v1.14.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* use calendar-date bucketing in getCommitsByDay to avoid DST errors ([4f88227](https://github.com/drummel/git-watchtower/commit/4f88227d8f05ec0f844cddec197d70203681ecdf))
+
+# [1.14.0](https://github.com/drummel/git-watchtower/compare/v1.13.1...v1.14.0) (2026-04-18)
+
+
+### Features
+
+* report "already up to date" and +/- diff summary on successful pulls ([5c21fc7](https://github.com/drummel/git-watchtower/commit/5c21fc76228428e709d1aeecf9eb59e1ea63f7b9))
+
+## [1.13.1](https://github.com/drummel/git-watchtower/compare/v1.13.0...v1.13.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* release monitor lock before self-upgrade restart ([3fae71d](https://github.com/drummel/git-watchtower/commit/3fae71de6923b3faa9144a1238c8f3510db740d1))
+
+# [1.13.0](https://github.com/drummel/git-watchtower/compare/v1.12.7...v1.13.0) (2026-04-14)
+
+
+### Bug Fixes
+
+* sanitize multi-line activity log messages ([4700e4a](https://github.com/drummel/git-watchtower/commit/4700e4a3bc5be6a6748de85406abc8e0484f0103))
+
+
+### Features
+
+* prevent concurrent monitors against the same repo ([f507b28](https://github.com/drummel/git-watchtower/commit/f507b284ff533350ba78c5d4e35eb5907fe25f74))
+
+## [1.12.7](https://github.com/drummel/git-watchtower/compare/v1.12.6...v1.12.7) (2026-04-14)
+
+
+### Bug Fixes
+
+* clear webStateInterval and stop webDashboard in startWebDashboard catch ([9b0c61e](https://github.com/drummel/git-watchtower/commit/9b0c61ea9d9332f7012281dd91582d990322e1b8))
+
+## [1.12.6](https://github.com/drummel/git-watchtower/compare/v1.12.5...v1.12.6) (2026-04-14)
+
+
+### Bug Fixes
+
+* route uncaughtException through shared idempotent cleanup ([8acbbfa](https://github.com/drummel/git-watchtower/commit/8acbbfa0817e6c940a394758c2eaace1471ef50b))
+
+## [1.12.5](https://github.com/drummel/git-watchtower/compare/v1.12.4...v1.12.5) (2026-04-14)
+
+
+### Bug Fixes
+
+* guard schedulePoll against running after shutdown() has started ([2e864e7](https://github.com/drummel/git-watchtower/commit/2e864e716b2b1205c1b8b3cda048fb36b327f9dd))
+
+## [1.12.4](https://github.com/drummel/git-watchtower/compare/v1.12.3...v1.12.4) (2026-04-13)
+
+
+### Bug Fixes
+
+* retry worker connect with backoff, never take over a live coordinator ([ca39640](https://github.com/drummel/git-watchtower/commit/ca396408fddacc7cdbe6ec90609459ebd740ee32)), closes [#1](https://github.com/drummel/git-watchtower/issues/1)
+
+## [1.12.3](https://github.com/drummel/git-watchtower/compare/v1.12.2...v1.12.3) (2026-04-13)
+
+
+### Bug Fixes
+
+* atomically claim coordinator lock to prevent socket clobbering race ([519d902](https://github.com/drummel/git-watchtower/commit/519d9022b35db7fa35749bf611a2fe8e6081db92))
+* broaden tryAcquireLock JSDoc return type to match readLock ([1189891](https://github.com/drummel/git-watchtower/commit/11898919c58098c973ba697754497fb41aa334c1))
+
+## [1.12.2](https://github.com/drummel/git-watchtower/compare/v1.12.1...v1.12.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* register exit handler at module scope for periodic update check (L10) ([9b96246](https://github.com/drummel/git-watchtower/commit/9b962461aed407f28cbbf4a5c86fcc86b1c67513))
+
+## [1.12.1](https://github.com/drummel/git-watchtower/compare/v1.12.0...v1.12.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* handle escaped quotes and backslashes in parseCommand (L7) ([9c4f3c8](https://github.com/drummel/git-watchtower/commit/9c4f3c81ef55001aecbe8dd2770fe26dd415d38c))
+
+# [1.12.0](https://github.com/drummel/git-watchtower/compare/v1.11.10...v1.12.0) (2026-04-12)
+
+
+### Features
+
+* honor NO_COLOR and TERM=dumb in ANSI module ([c4a4ba7](https://github.com/drummel/git-watchtower/commit/c4a4ba723dd8b511c57c0e39621dddb4a0056fc0))
+
+## [1.11.10](https://github.com/drummel/git-watchtower/compare/v1.11.9...v1.11.10) (2026-04-11)
+
+
+### Performance Improvements
+
+* avoid double-copy in addLog and addServerLog ([10262d2](https://github.com/drummel/git-watchtower/commit/10262d21c4b9cb09b362f8156e0e09adbfd99047))
+
+## [1.11.9](https://github.com/drummel/git-watchtower/compare/v1.11.8...v1.11.9) (2026-04-09)
+
+
+### Bug Fixes
+
+* suppress EIO error on stdin during shutdown ([a3b4224](https://github.com/drummel/git-watchtower/commit/a3b42249a90e12f6eeaed1b5431b0707481fdd88))
+
+## [1.11.8](https://github.com/drummel/git-watchtower/compare/v1.11.7...v1.11.8) (2026-04-09)
+
+
+### Bug Fixes
+
+* sanitize terminal title to prevent escape sequence injection ([0d4fd1b](https://github.com/drummel/git-watchtower/commit/0d4fd1b05166a5501704aed2980a23b28315ede2))
+* use segment-based hostname matching in detectPlatform ([bbfab31](https://github.com/drummel/git-watchtower/commit/bbfab3198c441648522a31f4199184efadbdb0b4))
+
+## [1.11.7](https://github.com/drummel/git-watchtower/compare/v1.11.6...v1.11.7) (2026-04-09)
+
+
+### Bug Fixes
+
+* handle missing dates in sortBranches to prevent NaN comparisons ([8fd19c7](https://github.com/drummel/git-watchtower/commit/8fd19c7b44eb372714d95677d6c4a363328b8a72))
+
+## [1.11.6](https://github.com/drummel/git-watchtower/compare/v1.11.5...v1.11.6) (2026-04-09)
+
+
+### Bug Fixes
+
+* cap npm registry response size in checkForUpdate ([4fbc3f0](https://github.com/drummel/git-watchtower/commit/4fbc3f03a6ae07372b01100e85c53ebba33c3090))
+
+## [1.11.5](https://github.com/drummel/git-watchtower/compare/v1.11.4...v1.11.5) (2026-04-08)
+
+
+### Bug Fixes
+
+* run validateConfig on loaded config files ([482dd5f](https://github.com/drummel/git-watchtower/commit/482dd5fc8d7e8f12d6915c6775279d7e83918304))
+
+## [1.11.4](https://github.com/drummel/git-watchtower/compare/v1.11.3...v1.11.4) (2026-04-08)
+
+
+### Bug Fixes
+
+* prevent coordinator register message spoofing ([d750fce](https://github.com/drummel/git-watchtower/commit/d750fceebdfd87916d3d2a0de5734ba4d2cace81))
+
+## [1.11.3](https://github.com/drummel/git-watchtower/compare/v1.11.2...v1.11.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* use realpath in static server path traversal guard to block symlink escape ([ee26e3f](https://github.com/drummel/git-watchtower/commit/ee26e3f492230b879ab11fa96d6db87145a37ee2))
+
+## [1.11.2](https://github.com/drummel/git-watchtower/compare/v1.11.1...v1.11.2) (2026-04-07)
+
+
+### Bug Fixes
+
+* handle prereleases and variable-length versions in compareVersions ([4acfd28](https://github.com/drummel/git-watchtower/commit/4acfd28adbfbe7a00047790f5d082e075e6f9636))
+
+## [1.11.1](https://github.com/drummel/git-watchtower/compare/v1.11.0...v1.11.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* validate URLs before passing to OS open command ([feb098e](https://github.com/drummel/git-watchtower/commit/feb098e076261b4b45fb8d6530ff945396c8ecb5))
+
+# [1.11.0](https://github.com/drummel/git-watchtower/compare/v1.10.20...v1.11.0) (2026-04-07)
+
+
+### Features
+
+* auto-restart after successful update instead of requiring manual restart ([504ad7c](https://github.com/drummel/git-watchtower/commit/504ad7c0a73df0c09f77ca525f459bd0a5888b6b))
+
+## [1.10.20](https://github.com/drummel/git-watchtower/compare/v1.10.19...v1.10.20) (2026-04-07)
+
+
+### Bug Fixes
+
+* serialize ProcessManager.restart() with mutex to prevent race condition ([1e44743](https://github.com/drummel/git-watchtower/commit/1e447435c0d439503d6429567a315faa3d45611d))
+
+## [1.10.19](https://github.com/drummel/git-watchtower/compare/v1.10.18...v1.10.19) (2026-04-07)
+
+
+### Bug Fixes
+
+* report errors for unknown flags and malformed CLI values ([bbb6bdb](https://github.com/drummel/git-watchtower/commit/bbb6bdb39282433944e61a6a003f716c58f78ce8))
+
+## [1.10.18](https://github.com/drummel/git-watchtower/compare/v1.10.17...v1.10.18) (2026-04-06)
+
+
+### Bug Fixes
+
+* cap IPC receive buffers to prevent unbounded memory growth ([f9128b9](https://github.com/drummel/git-watchtower/commit/f9128b934e95d50a7893fa3b1c90aebba94d65e1))
+
+## [1.10.17](https://github.com/drummel/git-watchtower/compare/v1.10.16...v1.10.17) (2026-04-06)
+
+
+### Bug Fixes
+
+* use shell mode for npm spawn on Windows to resolve .cmd shims ([c2d4db6](https://github.com/drummel/git-watchtower/commit/c2d4db6fba395a013ab9fcf550636506d8f64778))
+
+## [1.10.16](https://github.com/drummel/git-watchtower/compare/v1.10.15...v1.10.16) (2026-04-06)
+
+
+### Bug Fixes
+
+* add Host-header validation to prevent DNS-rebinding attacks ([ca9bd70](https://github.com/drummel/git-watchtower/commit/ca9bd70fef536d8f0ee84dc6639e1807bcaff1fc))
+
+## [1.10.15](https://github.com/drummel/git-watchtower/compare/v1.10.14...v1.10.15) (2026-04-06)
+
+
+### Bug Fixes
+
+* bind static server to localhost instead of all interfaces ([166690c](https://github.com/drummel/git-watchtower/commit/166690cda9a9001a3872d7148d666de393f00009))
+
+## [1.10.14](https://github.com/drummel/git-watchtower/compare/v1.10.13...v1.10.14) (2026-04-06)
+
+
+### Bug Fixes
+
+* kill entire process group on dev-server stop to prevent orphans ([ac50c10](https://github.com/drummel/git-watchtower/commit/ac50c1076890309f1e50de17cd548a71d118d41c))
+
+## [1.10.13](https://github.com/drummel/git-watchtower/compare/v1.10.12...v1.10.13) (2026-04-06)
+
+
+### Bug Fixes
+
+* use execFile native timeout to kill hung git processes ([1ecbfa1](https://github.com/drummel/git-watchtower/commit/1ecbfa17554079f1cf98aa475cb8adbfed335f50))
+
+## [1.10.12](https://github.com/drummel/git-watchtower/compare/v1.10.11...v1.10.12) (2026-04-05)
+
+
+### Bug Fixes
+
+* isGitDirectory false-positive on .github, .gitignore, etc. ([b46941a](https://github.com/drummel/git-watchtower/commit/b46941a7d967e52d4fa883474467e6101f652019))
+
+## [1.10.11](https://github.com/drummel/git-watchtower/compare/v1.10.10...v1.10.11) (2026-04-05)
+
+
+### Bug Fixes
+
+* honor remoteName in fetch() when all:false ([e3cc20d](https://github.com/drummel/git-watchtower/commit/e3cc20d6c558dacb003d1bff253fd8d1ca99bc95))
+
+## [1.10.10](https://github.com/drummel/git-watchtower/compare/v1.10.9...v1.10.10) (2026-04-05)
+
+
+### Bug Fixes
+
+* deduplicate sidebar toggle logic into a single function ([8f81574](https://github.com/drummel/git-watchtower/commit/8f81574b455d1035a3e5c09d5987aa67db6e25dd))
+
+## [1.10.9](https://github.com/drummel/git-watchtower/compare/v1.10.8...v1.10.9) (2026-04-05)
+
+
+### Bug Fixes
+
+* escape single quotes in escHtml to prevent attribute breakout ([46cd857](https://github.com/drummel/git-watchtower/commit/46cd857b60c752511ff703b19854ea4336be309d)), closes [#39](https://github.com/drummel/git-watchtower/issues/39)
+
+## [1.10.8](https://github.com/drummel/git-watchtower/compare/v1.10.7...v1.10.8) (2026-04-04)
+
+
+### Bug Fixes
+
+* debounce search input to avoid excessive DOM rebuilds ([9730b55](https://github.com/drummel/git-watchtower/commit/9730b55731a607c7b81075bd09f2537246afc9b7))
+
+## [1.10.7](https://github.com/drummel/git-watchtower/compare/v1.10.6...v1.10.7) (2026-04-04)
+
+
+### Bug Fixes
+
+* extract keyboard mapping from handler into declarative KEY_MAP ([a2c91bf](https://github.com/drummel/git-watchtower/commit/a2c91bfe1ddfbaf22fdcec256446eafd544a7cd5))
+
+## [1.10.6](https://github.com/drummel/git-watchtower/compare/v1.10.5...v1.10.6) (2026-04-03)
+
+
+### Bug Fixes
+
+* consolidate 19 UI state variables into single ui object ([d471fb2](https://github.com/drummel/git-watchtower/commit/d471fb292b9e87ef6e8f16ea6983981b8718ebc0))
+
+## [1.10.5](https://github.com/drummel/git-watchtower/compare/v1.10.4...v1.10.5) (2026-04-03)
+
+
+### Bug Fixes
+
+* modernize web UI client JS to const/let and arrow functions ([799e9dc](https://github.com/drummel/git-watchtower/commit/799e9dc754795f266373394a2e7ff63072a5f9a3))
+
 ## [1.10.4](https://github.com/drummel/git-watchtower/compare/v1.10.3...v1.10.4) (2026-04-03)
 
 

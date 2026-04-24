@@ -20,11 +20,31 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const telemetry = require('../telemetry');
 
 /**
  * Directory for watchtower runtime files
  */
 const WATCHTOWER_DIR = path.join(os.homedir(), '.watchtower');
+
+/**
+ * Maximum IPC receive buffer size (1 MiB). Connections that exceed
+ * this without a complete newline-delimited message are dropped to
+ * prevent unbounded memory growth from malformed or malicious peers.
+ */
+const MAX_IPC_BUFFER = 1024 * 1024;
+
+/**
+ * How long a worker waits for a `registered` ACK from the coordinator
+ * after the TCP connection completes and the `register` frame is written.
+ *
+ * The coordinator responds synchronously inside _handleWorkerMessage, so
+ * anything past a couple of seconds indicates the coordinator is wedged,
+ * crashed between accept() and the handler, or rejected the registration
+ * (duplicate ID). Callers treat timeout as a connect failure and either
+ * retry or fall back to reclaiming the coordinator role.
+ */
+const REGISTRATION_ACK_TIMEOUT_MS = 2000;
 
 /**
  * Lock file path
@@ -61,15 +81,23 @@ function isProcessAlive(pid) {
 
 /**
  * Read the lock file.
- * @returns {{ pid: number, port: number, socketPath: string } | null}
+ *
+ * A lock may be a placeholder (pid only, no port/socketPath) while a new
+ * coordinator is still binding its socket. Callers that need a connectable
+ * coordinator should use getActiveCoordinator(), which rejects placeholders.
+ *
+ * @returns {{ pid: number, port?: number, socketPath?: string, pending?: boolean } | null}
  */
 function readLock() {
   try {
     if (!fs.existsSync(LOCK_FILE)) return null;
     const data = JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8'));
-    if (!data || !data.pid || !data.port) return null;
+    if (!data || !data.pid) return null;
     return data;
   } catch (e) {
+    // Lock file was unlinked between existsSync and readFileSync, or contains
+    // garbage (crashed mid-write). Treat as "no lock" so tryAcquireLock()
+    // can clean it up and retry.
     return null;
   }
 }
@@ -86,32 +114,99 @@ function writeLock(pid, port, socketPath) {
 }
 
 /**
+ * Atomically reserve the coordinator lock.
+ *
+ * Uses `fs.openSync(..., 'wx')` to create the lock file exclusively, so two
+ * instances racing to become coordinator cannot both succeed. A placeholder
+ * entry ({ pid, pending: true }) is written immediately so that any process
+ * reading the lock while we bind our socket still sees a valid owning PID.
+ *
+ * If the lock already exists but the owning process is dead, the stale lock
+ * (and socket) are cleaned up and the acquisition is retried once.
+ *
+ * @param {number} pid - PID of the acquiring process
+ * @returns {{acquired: true} | {acquired: false, existing: {pid: number, port?: number, socketPath?: string, pending?: boolean} | null}}
+ */
+function tryAcquireLock(pid) {
+  ensureDir();
+
+  // One retry after stale-lock cleanup; avoids looping if another process
+  // keeps recreating the lock faster than we can clean it up.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(LOCK_FILE, 'wx');
+      try {
+        fs.writeSync(fd, JSON.stringify({ pid, pending: true }) + '\n');
+      } finally {
+        fs.closeSync(fd);
+      }
+      return { acquired: true };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+
+      // Lock file exists — check if the owner is alive.
+      const existing = readLock();
+      if (existing && isProcessAlive(existing.pid)) {
+        return { acquired: false, existing };
+      }
+      // Stale or unreadable — clean up and retry the exclusive create.
+      removeLock();
+      removeSocket();
+    }
+  }
+
+  // Another process raced us to re-create the lock. Treat it as active.
+  const existing = readLock();
+  return { acquired: false, existing: existing || null };
+}
+
+/**
+ * Replace the placeholder lock with the final port/socket details after the
+ * coordinator has successfully bound its IPC socket and the web server has
+ * started listening. Caller must already own the lock via tryAcquireLock().
+ *
+ * @param {number} pid
+ * @param {number} port
+ * @param {string} socketPath
+ */
+function finalizeLock(pid, port, socketPath) {
+  writeLock(pid, port, socketPath);
+}
+
+/**
  * Remove the lock file.
  */
 function removeLock() {
-  try { fs.unlinkSync(LOCK_FILE); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(LOCK_FILE); } catch (e) { /* lock file may not exist */ }
 }
 
 /**
  * Remove stale socket file.
  */
 function removeSocket() {
-  try { fs.unlinkSync(SOCKET_PATH); } catch (e) { /* ignore */ }
+  try { fs.unlinkSync(SOCKET_PATH); } catch (e) { /* socket file may not exist */ }
 }
 
 /**
- * Check if a coordinator is already running.
- * Cleans up stale lock if the process is dead.
+ * Check if a coordinator is already running and reachable.
+ *
+ * Returns null for stale locks (cleans them up) and for placeholder locks
+ * that haven't finished binding yet — callers shouldn't try to connect to
+ * a coordinator that isn't listening.
+ *
  * @returns {{ pid: number, port: number, socketPath: string } | null}
  */
 function getActiveCoordinator() {
   const lock = readLock();
   if (!lock) return null;
-  if (isProcessAlive(lock.pid)) return lock;
-  // Stale lock — clean up
-  removeLock();
-  removeSocket();
-  return null;
+  if (!isProcessAlive(lock.pid)) {
+    removeLock();
+    removeSocket();
+    return null;
+  }
+  // Placeholder (pending) — coordinator is still binding.
+  if (!lock.port || !lock.socketPath) return null;
+  return /** @type {{pid:number,port:number,socketPath:string}} */ (lock);
 }
 
 // ─── Coordinator (first instance) ────────────────────────────────
@@ -176,7 +271,7 @@ class Coordinator {
   stop() {
     // Close all worker sockets
     for (const socket of this.workerSockets.values()) {
-      try { socket.destroy(); } catch (e) { /* ignore */ }
+      try { socket.destroy(); } catch (e) { /* socket may already be destroyed */ }
     }
     this.workerSockets.clear();
     this.projects.clear();
@@ -268,6 +363,10 @@ class Coordinator {
 
     socket.on('data', (data) => {
       buffer += data.toString();
+      if (buffer.length > MAX_IPC_BUFFER) {
+        socket.destroy();
+        return;
+      }
       let newlineIdx;
       while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, newlineIdx);
@@ -276,7 +375,12 @@ class Coordinator {
           try {
             const msg = JSON.parse(line);
             this._handleWorkerMessage(socket, msg, (id) => { workerId = id; }, () => workerId);
-          } catch (e) { /* ignore bad JSON */ }
+          } catch (e) {
+            // Both sides of this socket are our own code, so a JSON-parse
+            // failure indicates a protocol/version bug worth diagnosing.
+            telemetry.captureError(e);
+            /* skip malformed frame and keep reading */
+          }
         }
       }
     });
@@ -307,7 +411,15 @@ class Coordinator {
    */
   _handleWorkerMessage(socket, msg, setWorkerId, getWorkerId) {
     switch (msg.type) {
-      case 'register':
+      case 'register': {
+        // Prevent re-registration: a socket that already registered cannot change its ID
+        const currentId = getWorkerId();
+        if (currentId) break;
+
+        // Reject if this ID is already claimed by a different socket
+        const existingSocket = this.workerSockets.get(msg.id);
+        if (existingSocket && existingSocket !== socket) break;
+
         setWorkerId(msg.id);
         this.workerSockets.set(msg.id, socket);
         this.projects.set(msg.id, {
@@ -320,6 +432,7 @@ class Coordinator {
         this._sendMessage(socket, { type: 'registered', id: msg.id });
         this._notifyProjectsChanged();
         break;
+      }
 
       case 'state': {
         // Validate sender — only accept state for the worker's own registered ID
@@ -353,7 +466,7 @@ class Coordinator {
   _sendMessage(socket, msg) {
     try {
       socket.write(JSON.stringify(msg) + '\n');
-    } catch (e) { /* ignore write errors on dead sockets */ }
+    } catch (e) { /* peer socket closed between iteration and write — peer will reconnect if it recovers */ }
   }
 
   /**
@@ -391,28 +504,81 @@ class Worker {
     this.onCommand = null;
     this._connected = false;
     this._buffer = '';
+    /** @type {((msg: Object) => void) | null} */
+    this._onRegistered = null;
   }
 
   /**
-   * Connect to the coordinator.
+   * Connect to the coordinator and complete the register handshake.
+   *
+   * Resolves only once the coordinator has replied with a matching
+   * `registered` ACK. Without this, the worker would start pushing state
+   * the instant the TCP connection opens, even if the coordinator crashed
+   * or rejected the registration (e.g. duplicate ID, stale socket) before
+   * processing the `register` frame. In that scenario the pushes would
+   * silently disappear until something else forced a reconnect.
+   *
+   * Rejects if the socket errors, the peer closes before ACK, or the ACK
+   * doesn't arrive within REGISTRATION_ACK_TIMEOUT_MS.
+   *
    * @returns {Promise<void>}
    */
   connect() {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let ackTimer = null;
+
+      const cleanupHandshake = () => {
+        if (ackTimer) {
+          clearTimeout(ackTimer);
+          ackTimer = null;
+        }
+        this._onRegistered = null;
+      };
+
+      const settleResolve = () => {
+        if (settled) return;
+        settled = true;
+        cleanupHandshake();
+        resolve();
+      };
+
+      const settleReject = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanupHandshake();
+        this._connected = false;
+        try { if (this.socket) this.socket.destroy(); } catch (_) { /* socket may already be torn down */ }
+        reject(err);
+      };
+
+      // Installed before the register frame is sent so an immediate reply
+      // can't race the assignment.
+      this._onRegistered = (msg) => {
+        if (msg && msg.id === this.id) settleResolve();
+      };
+
       this.socket = net.createConnection(this.socketPath, () => {
         this._connected = true;
-        // Register with coordinator
+        // Register with coordinator. Don't resolve yet — wait for the ACK.
         this._send({
           type: 'register',
           id: this.id,
           projectPath: this.projectPath,
           projectName: this.projectName,
         });
-        resolve();
+        ackTimer = setTimeout(() => {
+          settleReject(new Error('coordinator registration ACK timed out'));
+        }, REGISTRATION_ACK_TIMEOUT_MS);
+        if (ackTimer.unref) ackTimer.unref();
       });
 
       this.socket.on('data', (data) => {
         this._buffer += data.toString();
+        if (this._buffer.length > MAX_IPC_BUFFER) {
+          this.socket.destroy();
+          return;
+        }
         let idx;
         while ((idx = this._buffer.indexOf('\n')) !== -1) {
           const line = this._buffer.slice(0, idx);
@@ -421,18 +587,24 @@ class Worker {
             try {
               const msg = JSON.parse(line);
               this._handleMessage(msg);
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+              // Both sides of this socket are our own code, so a JSON-parse
+              // failure indicates a protocol/version bug worth diagnosing.
+              telemetry.captureError(e);
+              /* skip malformed frame and keep reading */
+            }
           }
         }
       });
 
       this.socket.on('error', (err) => {
         this._connected = false;
-        reject(err);
+        settleReject(err);
       });
 
       this.socket.on('close', () => {
         this._connected = false;
+        settleReject(new Error('coordinator socket closed before registration'));
       });
     });
   }
@@ -478,7 +650,7 @@ class Worker {
     if (this.socket && this._connected) {
       try {
         this.socket.write(JSON.stringify(msg) + '\n');
-      } catch (e) { /* ignore */ }
+      } catch (e) { /* coordinator socket closed between isConnected() check and write */ }
     }
   }
 
@@ -487,6 +659,10 @@ class Worker {
    * @private
    */
   _handleMessage(msg) {
+    if (msg.type === 'registered' && this._onRegistered) {
+      this._onRegistered(msg);
+      return;
+    }
     if (msg.type === 'command' && this.onCommand) {
       this.onCommand(msg.action, msg.payload);
     }
@@ -509,6 +685,8 @@ module.exports = {
   getActiveCoordinator,
   readLock,
   writeLock,
+  tryAcquireLock,
+  finalizeLock,
   removeLock,
   removeSocket,
   isProcessAlive,

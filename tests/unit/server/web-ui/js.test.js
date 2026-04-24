@@ -33,9 +33,10 @@ describe('getDashboardJs', () => {
 
   it('should contain state management', () => {
     const js = getDashboardJs();
-    assert.ok(js.includes('var state = null'), 'Should initialize state');
-    assert.ok(js.includes('var selectedIndex = 0'), 'Should track selected branch index');
-    assert.ok(js.includes('var connected = false'), 'Should track connection state');
+    assert.ok(js.includes('let state = null'), 'Should initialize server state');
+    assert.ok(js.includes('const ui = {'), 'Should have consolidated UI state object');
+    assert.ok(js.includes('ui.selectedIndex'), 'Should access selectedIndex via ui');
+    assert.ok(js.includes('ui.connected'), 'Should access connected via ui');
   });
 
   it('should contain render functions', () => {
@@ -68,10 +69,46 @@ describe('getDashboardJs', () => {
     assert.ok(js.includes('function hideConfirm()'), 'Should have hideConfirm');
   });
 
+  it('should contain Modal helper with registry', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('function Modal('), 'Should have Modal constructor');
+    assert.ok(js.includes('Modal.prototype.show'), 'Should have Modal.show method');
+    assert.ok(js.includes('Modal.prototype.hide'), 'Should have Modal.hide method');
+    assert.ok(js.includes('_openModals'), 'Should have _openModals registry');
+    assert.ok(js.includes('logViewerModal'), 'Should create logViewerModal instance');
+    assert.ok(js.includes('branchActionModal'), 'Should create branchActionModal instance');
+    assert.ok(js.includes('infoModal'), 'Should create infoModal instance');
+    assert.ok(js.includes('stashModal'), 'Should create stashModal instance');
+    assert.ok(js.includes('cleanupModal'), 'Should create cleanupModal instance');
+    assert.ok(js.includes('updateModal'), 'Should create updateModal instance');
+  });
+
   it('should contain keyboard event handling', () => {
     const js = getDashboardJs();
     assert.ok(js.includes("addEventListener('keydown'"), 'Should listen for keydown');
     assert.ok(js.includes('function moveSelection('), 'Should have moveSelection');
+  });
+
+  it('should contain KEY_MAP and KEY_ACTIONS for normal mode', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('const KEY_MAP = {'), 'Should have KEY_MAP object');
+    assert.ok(js.includes('const KEY_ACTIONS = {'), 'Should have KEY_ACTIONS object');
+    // Verify key bindings are present
+    const expectedKeys = ['j', 'k', 'ArrowDown', 'ArrowUp', 'Enter', '/', 'p', 'f', 'b', 'i', 'l', 's', 'S', 'd', 'h', 'u', 'o', 'c', 'r', 'R', 'Escape'];
+    for (const key of expectedKeys) {
+      assert.ok(js.includes("'" + key + "'"), 'KEY_MAP should include ' + key);
+    }
+    // Verify action names
+    const expectedActions = ['moveDown', 'moveUp', 'selectBranch', 'search', 'pull', 'fetch', 'branchActions', 'info', 'logViewer', 'stash', 'cleanup'];
+    for (const action of expectedActions) {
+      assert.ok(js.includes(action), 'KEY_ACTIONS should include ' + action);
+    }
+  });
+
+  it('should dispatch normal mode keys via KEY_MAP + KEY_ACTIONS', () => {
+    const js = getDashboardJs();
+    assert.ok(js.includes('KEY_MAP[e.key]'), 'Should look up action from KEY_MAP');
+    assert.ok(js.includes('KEY_ACTIONS[action]'), 'Should dispatch to KEY_ACTIONS');
   });
 
   it('should contain action dispatch', () => {

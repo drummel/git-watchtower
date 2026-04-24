@@ -280,6 +280,116 @@ describe('slot reels', () => {
   });
 });
 
+describe('disable() slot cleanup', () => {
+  beforeEach(() => {
+    casino.disable();
+    casino.resetStats();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('does not leave a "NOTHING" result on screen after disable mid-spin', () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    assert.strictEqual(casino.isSlotSpinning(), true);
+
+    casino.disable();
+
+    // Pre-fix: disable() called stopSlotReels() which set slotResultLabel
+    // to "NOTHING" and scheduled a 2s setTimeout to null it. During those
+    // 2s, getSlotReelDisplay() would paint a casino panel even though
+    // casino mode is off.
+    assert.strictEqual(casino.getSlotResultLabel(), null);
+    assert.strictEqual(casino.hasSlotResult(), false);
+    assert.strictEqual(casino.isSlotsActive(), false);
+    assert.strictEqual(casino.getSlotReelDisplay(), '');
+  });
+
+  it('getSlotReelDisplay returns empty when disabled even if state is stale', () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    // Sanity: display is non-empty while spinning + enabled
+    assert.ok(casino.getSlotReelDisplay().length > 0);
+
+    casino.disable();
+    assert.strictEqual(casino.getSlotReelDisplay(), '');
+  });
+
+  it('cancels the pending no-win 2s clear timeout so it does not fire into the next session', async () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    // Simulate an end-of-poll with no updates — schedules the 2s clear.
+    casino.stopSlotReels(false, () => {});
+    // The no-win branch sets slotResult; this confirms we're in that state.
+    assert.strictEqual(casino.hasSlotResult(), true);
+
+    casino.disable();
+    // Re-enable and start a new spin immediately. If the old 2s timeout
+    // weren't cancelled, it would fire 2s into this fresh session and
+    // null the live spin state. Verify the spin survives past 2s.
+    casino.enable();
+    casino.startSlotReels(() => {});
+    await new Promise((r) => setTimeout(r, 2050));
+    assert.strictEqual(casino.isSlotSpinning(), true,
+      'the old disable()ed session\'s 2s timeout fired and clobbered the new spin');
+    casino.disable();
+  });
+});
+
+describe('disable() loss animation cleanup', () => {
+  beforeEach(() => {
+    casino.disable();
+    casino.resetStats();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('stops a loss animation in flight and clears the message', () => {
+    casino.enable();
+    casino.triggerLoss('merge conflict', () => {});
+    assert.strictEqual(casino.isLossAnimating(), true);
+
+    casino.disable();
+
+    assert.strictEqual(casino.isLossAnimating(), false);
+    assert.strictEqual(casino.getLossDisplay(120), '');
+  });
+
+  it('loss interval does not keep firing after disable', async () => {
+    casino.enable();
+
+    let renderCalls = 0;
+    casino.triggerLoss('switch failed', () => { renderCalls++; });
+
+    // Wait a few frames so the interval has definitely started firing.
+    await new Promise((r) => setTimeout(r, 250));
+    assert.ok(renderCalls >= 1,
+      'pre-disable sanity: loss interval should have fired at least once');
+
+    casino.disable();
+    const atDisable = renderCalls;
+
+    // The loss interval fires every 120 ms and self-terminates at frame 15
+    // (~1.8 s). If disable() leaked the interval, we'd see more renderCalls.
+    await new Promise((r) => setTimeout(r, 600));
+    assert.strictEqual(renderCalls, atDisable,
+      'loss interval kept firing after disable() — stopLossAnimation was not called');
+  });
+
+  it('isLossAnimating returns false when disabled even with stale state', () => {
+    casino.enable();
+    casino.triggerLoss('boom', () => {});
+    assert.strictEqual(casino.isLossAnimating(), true);
+
+    casino.disable();
+    assert.strictEqual(casino.isLossAnimating(), false);
+  });
+});
+
 describe('marquee animation', () => {
   beforeEach(() => {
     casino.enable();

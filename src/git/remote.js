@@ -71,12 +71,13 @@ function buildBranchUrl(baseUrl, host, branchName) {
 function detectPlatform(webUrl) {
   if (!webUrl) return null;
   try {
-    const host = new URL(webUrl).hostname;
-    if (host === 'github.com' || host.includes('github')) return 'github';
-    if (host === 'gitlab.com' || host.includes('gitlab')) return 'gitlab';
-    if (host === 'bitbucket.org' || host.includes('bitbucket')) return 'bitbucket';
-    if (host === 'dev.azure.com' || host.includes('visualstudio.com')) return 'azure';
-  } catch (e) { /* ignore */ }
+    const host = new URL(webUrl).hostname.toLowerCase();
+    const parts = host.split('.');
+    if (host === 'github.com' || parts.includes('github')) return 'github';
+    if (host === 'gitlab.com' || parts.includes('gitlab')) return 'gitlab';
+    if (host === 'bitbucket.org' || parts.includes('bitbucket')) return 'bitbucket';
+    if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) return 'azure';
+  } catch (e) { /* webUrl isn't a valid URL — fall through to the self-hosted default */ }
   return 'github'; // default assumption for self-hosted
 }
 

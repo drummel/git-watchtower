@@ -3,6 +3,9 @@
  * @module server/static
  */
 
+const fs = require('fs');
+const path = require('path');
+
 /**
  * MIME type mapping by file extension.
  */
@@ -64,26 +67,54 @@ function injectLiveReload(html) {
 }
 
 /**
- * Parse git diff --stat output into { added, deleted } counts.
- * @param {string} diffOutput - Output from `git diff --stat`
- * @returns {{ added: number, deleted: number }}
+ * Resolve a static-server request candidate to a safe, realpath'd path
+ * inside the static root.
+ *
+ * The critical property: the returned `path` is the realpath-resolved
+ * target, so all downstream file reads operate on the same bytes the
+ * containment check approved. Previously the server would realpath the
+ * candidate for the 403 check but then read the pre-realpath path — a
+ * TOCTOU window where a symlink inside the static dir could be swapped
+ * between check and read to point outside the root.
+ *
+ * Contract:
+ * - 'ok'        → the candidate exists inside `realStaticDir`; serve `path`.
+ * - 'missing'   → the candidate resolves (or would resolve) inside the
+ *                 root but doesn't exist. Callers can try an extension
+ *                 fallback (e.g. `.html`) or return 404.
+ * - 'forbidden' → the candidate resolves outside the root, via symlink
+ *                 or via path traversal like `../../etc/passwd`. Return
+ *                 403; do not attempt fallbacks, since the attacker
+ *                 controls the request.
+ *
+ * @param {string} candidate - Unresolved absolute path (e.g.
+ *   `path.join(STATIC_DIR, pathname)`).
+ * @param {string} realStaticDir - The realpath'd absolute path of the
+ *   static root. Callers should cache this per-request.
+ * @returns {{ status: 'ok', path: string } | { status: 'missing' } | { status: 'forbidden' }}
  */
-function parseDiffStats(diffOutput) {
-  if (!diffOutput) return { added: 0, deleted: 0 };
-
-  // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
-  const match = diffOutput.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
-  if (match) {
-    return { added: parseInt(match[1], 10), deleted: parseInt(match[2], 10) };
+function resolveStaticPath(candidate, realStaticDir) {
+  const resolvedCandidate = path.resolve(candidate);
+  let realPath;
+  let exists;
+  try {
+    realPath = fs.realpathSync(resolvedCandidate);
+    exists = true;
+  } catch (_) {
+    // Doesn't exist. Fall back to the normalized form so path-traversal
+    // attempts against non-existent files (`../../etc/passwd`) still get
+    // rejected with 403 instead of silently 404'ing.
+    realPath = resolvedCandidate;
+    exists = false;
   }
 
-  // Try to match just insertions or just deletions
-  const insertMatch = diffOutput.match(/(\d+) insertions?\(\+\)/);
-  const deleteMatch = diffOutput.match(/(\d+) deletions?\(-\)/);
-  return {
-    added: insertMatch ? parseInt(insertMatch[1], 10) : 0,
-    deleted: deleteMatch ? parseInt(deleteMatch[1], 10) : 0,
-  };
+  if (realPath !== realStaticDir && !realPath.startsWith(realStaticDir + path.sep)) {
+    return { status: 'forbidden' };
+  }
+  if (!exists) {
+    return { status: 'missing' };
+  }
+  return { status: 'ok', path: realPath };
 }
 
 module.exports = {
@@ -91,5 +122,5 @@ module.exports = {
   getMimeType,
   LIVE_RELOAD_SCRIPT,
   injectLiveReload,
-  parseDiffStats,
+  resolveStaticPath,
 };

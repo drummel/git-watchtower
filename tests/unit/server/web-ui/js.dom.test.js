@@ -186,6 +186,18 @@ ${getDashboardHtml()}
     dom.window.close();
   }
 
+  /** Check if a modal overlay is visible (has 'active' class). */
+  function isModalOpen(overlayId) {
+    const el = document.getElementById(overlayId);
+    return el && el.className.includes('active');
+  }
+
+  /** Simulate pressing a key. */
+  function pressKey(key) {
+    const event = new window.KeyboardEvent('keydown', { key: key, bubbles: true });
+    document.dispatchEvent(event);
+  }
+
   return {
     dom,
     window,
@@ -196,6 +208,8 @@ ${getDashboardHtml()}
     clickTab,
     getRenderedBranchNames,
     getBranchListText,
+    isModalOpen,
+    pressKey,
     xhrRequests,
     cleanup,
   };
@@ -481,6 +495,154 @@ describe('dashboard JS — DOM behavior', () => {
       const names = env.getRenderedBranchNames();
       assert.ok(names.includes('main'));
       assert.ok(names.includes('develop'));
+    });
+  });
+
+  describe('Modal helper', () => {
+    it('should open and close the info modal via keyboard shortcut', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      assert.ok(!env.isModalOpen('info-overlay'), 'Info modal should start closed');
+      env.pressKey('i');
+      assert.ok(env.isModalOpen('info-overlay'), 'Info modal should open on "i" key');
+      env.pressKey('Escape');
+      assert.ok(!env.isModalOpen('info-overlay'), 'Info modal should close on Escape');
+    });
+
+    it('should open and close the log viewer modal', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      env.pressKey('l');
+      assert.ok(env.isModalOpen('log-viewer-overlay'), 'Log viewer should open on "l" key');
+      env.pressKey('Escape');
+      assert.ok(!env.isModalOpen('log-viewer-overlay'), 'Log viewer should close on Escape');
+    });
+
+    it('should open and close the cleanup modal', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      env.pressKey('d');
+      assert.ok(env.isModalOpen('cleanup-overlay'), 'Cleanup modal should open on "d" key');
+      env.pressKey('Escape');
+      assert.ok(!env.isModalOpen('cleanup-overlay'), 'Cleanup modal should close on Escape');
+    });
+
+    it('should close modal when clicking the overlay background', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      env.pressKey('i');
+      assert.ok(env.isModalOpen('info-overlay'), 'Info modal should be open');
+
+      // Click the overlay itself (not the modal box)
+      const overlay = env.document.getElementById('info-overlay');
+      const clickEvent = new env.window.MouseEvent('click', { bubbles: true });
+      Object.defineProperty(clickEvent, 'target', { value: overlay });
+      overlay.dispatchEvent(clickEvent);
+      assert.ok(!env.isModalOpen('info-overlay'), 'Info modal should close on overlay click');
+    });
+
+    it('should close modal when clicking the close button', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      env.pressKey('l');
+      assert.ok(env.isModalOpen('log-viewer-overlay'), 'Log viewer should be open');
+
+      env.document.getElementById('log-viewer-close').click();
+      assert.ok(!env.isModalOpen('log-viewer-overlay'), 'Log viewer should close on close button click');
+    });
+
+    it('should block normal keys while a modal is open', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        branches: [
+          { name: 'main', lastCommitDate: '2025-01-01' },
+          { name: 'feature', lastCommitDate: '2025-01-02' },
+        ],
+      }));
+
+      env.pressKey('i');
+      assert.ok(env.isModalOpen('info-overlay'), 'Info modal should be open');
+
+      // Try pressing "l" to open log viewer — should be blocked
+      env.pressKey('l');
+      assert.ok(!env.isModalOpen('log-viewer-overlay'), 'Log viewer should NOT open while info is open');
+      assert.ok(env.isModalOpen('info-overlay'), 'Info modal should still be open');
+    });
+
+    it('should track open modals via anyModalOpen logic', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      // No modals open — the update modal auto-show check relies on anyModalOpen
+      // Open info modal and verify it blocks the update modal auto-show
+      env.pressKey('i');
+      assert.ok(env.isModalOpen('info-overlay'), 'Info modal should be open');
+
+      // Push state with updateAvailable — update modal should NOT auto-show
+      env.pushSSE(makeState({ branches: [], updateAvailable: '2.0.0' }));
+      assert.ok(!env.isModalOpen('update-overlay'), 'Update modal should NOT open while info modal is open');
+    });
+  });
+
+  describe('KEY_MAP dispatch', () => {
+    it('should navigate branches with j/k keys', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        branches: [
+          { name: 'alpha', lastCommitDate: '2025-01-01' },
+          { name: 'beta', lastCommitDate: '2025-01-02' },
+          { name: 'gamma', lastCommitDate: '2025-01-03' },
+        ],
+      }));
+
+      // Initially first branch is selected
+      let selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.ok(selected, 'A branch should be selected');
+      assert.equal(selected.textContent.trim(), 'alpha');
+
+      // Press j to move down
+      env.pressKey('j');
+      selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.equal(selected.textContent.trim(), 'beta', 'j should move selection down');
+
+      // Press k to move back up
+      env.pressKey('k');
+      selected = env.document.querySelector('.branch-item.selected .branch-name');
+      assert.equal(selected.textContent.trim(), 'alpha', 'k should move selection up');
+    });
+
+    it('should open search with / key', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      const searchBar = env.document.getElementById('search-bar');
+      assert.ok(!searchBar.className.includes('active'), 'Search should start inactive');
+
+      env.pressKey('/');
+      assert.ok(searchBar.className.includes('active'), '/ should activate search bar');
+    });
+
+    it('should open modals via their shortcut keys', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ branches: [] }));
+
+      const shortcuts = [
+        { key: 'i', overlay: 'info-overlay' },
+        { key: 'l', overlay: 'log-viewer-overlay' },
+        { key: 'd', overlay: 'cleanup-overlay' },
+      ];
+
+      for (const { key, overlay } of shortcuts) {
+        env.pressKey(key);
+        assert.ok(env.isModalOpen(overlay), key + ' should open ' + overlay);
+        env.pressKey('Escape');
+        assert.ok(!env.isModalOpen(overlay), 'Escape should close ' + overlay);
+      }
     });
   });
 });

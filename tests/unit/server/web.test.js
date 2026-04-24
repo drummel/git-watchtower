@@ -652,6 +652,52 @@ describe('WebDashboardServer', () => {
     });
   });
 
+  describe('Host header validation (DNS-rebinding protection)', () => {
+    beforeEach(async () => {
+      server = new WebDashboardServer({ store, port: 19884 });
+      await server.start();
+    });
+
+    function httpGetWithHost(urlPath, hostHeader) {
+      return new Promise((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${server.port}${urlPath}`, {
+          headers: { 'Connection': 'close', 'Host': hostHeader },
+        }, (res) => {
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, body }));
+        });
+        req.on('error', reject);
+      });
+    }
+
+    it('should allow requests with Host: localhost', async () => {
+      const res = await httpGetWithHost('/', `localhost:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should allow requests with Host: 127.0.0.1', async () => {
+      const res = await httpGetWithHost('/', `127.0.0.1:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should allow requests with Host: [::1]', async () => {
+      const res = await httpGetWithHost('/', `[::1]:${server.port}`);
+      assert.equal(res.status, 200);
+    });
+
+    it('should reject requests with attacker-controlled Host header', async () => {
+      const res = await httpGetWithHost('/', 'evil.example.com');
+      assert.equal(res.status, 403);
+      assert.ok(res.body.includes('Forbidden'));
+    });
+
+    it('should reject requests with Host header containing subdomain of localhost', async () => {
+      const res = await httpGetWithHost('/', `attacker.localhost:${server.port}`);
+      assert.equal(res.status, 403);
+    });
+  });
+
   describe('multi-project support', () => {
     it('should set and get local project ID', () => {
       server = new WebDashboardServer({ store });
@@ -976,7 +1022,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support l key to open log viewer', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'l':"));
+      assert.ok(html.includes("'l':") && html.includes("'logViewer'"));
       assert.ok(html.includes('showLogViewer'));
     });
 
@@ -1030,7 +1076,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support b key to open branch actions', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'b':"));
+      assert.ok(html.includes("'b':") && html.includes("'branchActions'"));
       assert.ok(html.includes('showBranchActions'));
     });
 
@@ -1104,7 +1150,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support i key to open info panel', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'i':"));
+      assert.ok(html.includes("'i':") && html.includes("'info'"));
       assert.ok(html.includes('showInfo'));
     });
 
@@ -1192,7 +1238,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support S key to open stash dialog', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'S':"));
+      assert.ok(html.includes("'S':") && html.includes("'stash'"));
       assert.ok(html.includes('showStashDialog'));
     });
 
@@ -1324,7 +1370,7 @@ describe('getWebDashboardHtml', () => {
     it('should include update install button', () => {
       const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('update-install'));
-      assert.ok(html.includes('Update Now'));
+      assert.ok(html.includes('Update &amp; Restart'));
     });
 
     it('should include update dismiss button', () => {
@@ -1387,7 +1433,7 @@ describe('getWebDashboardHtml', () => {
 
     it('should support d key to open cleanup', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes("case 'd':"));
+      assert.ok(html.includes("'d':") && html.includes("'cleanup'"));
       assert.ok(html.includes('showCleanup'));
     });
 
@@ -1447,7 +1493,7 @@ describe('getWebDashboardHtml', () => {
     it('should show all branches without visible count limit', () => {
       const html = getWebDashboardHtml(4000);
       // Web UI iterates all branches without a count limit
-      assert.ok(html.includes('for (var i = 0; i < branches.length; i++)'));
+      assert.ok(html.includes('for (let i = 0; i < branches.length; i++)'));
       // No visibleBranchCount limiter in web render
       assert.ok(!html.includes('visibleBranchCount'));
     });
@@ -1511,19 +1557,15 @@ describe('getWebDashboardHtml', () => {
       assert.ok(html.includes('stashMode'));
     });
 
-    it('should handle Escape key for all modals', () => {
+    it('should handle Escape key for open modals via _openModals registry', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('logViewerMode && e.key === \'Escape\''));
-      assert.ok(html.includes('branchActionMode && e.key === \'Escape\''));
-      assert.ok(html.includes('infoMode && e.key === \'Escape\''));
-      assert.ok(html.includes('cleanupMode && e.key === \'Escape\''));
-      assert.ok(html.includes('updateMode && e.key === \'Escape\''));
-      assert.ok(html.includes('stashMode && e.key === \'Escape\''));
+      assert.ok(html.includes('_openModals.length > 0 && e.key === \'Escape\''));
+      assert.ok(html.includes('.hide()'), 'Escape should call hide() on the topmost modal');
     });
 
     it('should block keys when modals are open', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('branchActionMode || infoMode || cleanupMode || updateMode || stashMode'));
+      assert.ok(html.includes('_openModals.length > 0'));
     });
 
     it('should include modal overlay CSS', () => {
@@ -1534,15 +1576,15 @@ describe('getWebDashboardHtml', () => {
       assert.ok(html.includes('.modal-close'));
     });
 
-    it('should include overlay click-to-close for all modals', () => {
+    it('should include overlay click-to-close via Modal constructor', () => {
       const html = getWebDashboardHtml(4000);
-      // Each overlay has click handler to close on backdrop click
-      assert.ok(html.includes("'log-viewer-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'branch-action-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'info-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'cleanup-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'update-overlay').addEventListener('click'"));
-      assert.ok(html.includes("'stash-overlay').addEventListener('click'"));
+      // The Modal constructor registers click handlers for all overlay IDs
+      assert.ok(html.includes("new Modal('log-viewer-overlay'"), 'Should create logViewerModal');
+      assert.ok(html.includes("new Modal('branch-action-overlay'"), 'Should create branchActionModal');
+      assert.ok(html.includes("new Modal('info-overlay'"), 'Should create infoModal');
+      assert.ok(html.includes("new Modal('cleanup-overlay'"), 'Should create cleanupModal');
+      assert.ok(html.includes("new Modal('update-overlay'"), 'Should create updateModal');
+      assert.ok(html.includes("new Modal('stash-overlay'"), 'Should create stashModal');
     });
   });
 

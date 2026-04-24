@@ -5,7 +5,6 @@
 
 const { execFile } = require('child_process');
 const { GitError } = require('../utils/errors');
-const { withTimeout } = require('../utils/async');
 
 // Default timeout for git operations (30 seconds)
 const DEFAULT_TIMEOUT = 30000;
@@ -17,9 +16,45 @@ const FETCH_TIMEOUT = 60000;
 const SHORT_TIMEOUT = 5000;
 
 /**
+ * Environment overrides applied to every git child process.
+ *
+ * LANG=C / LC_ALL=C force git into the C locale so parseable summary
+ * lines — e.g. "X files changed, Y insertions(+), Z deletions(-)" —
+ * don't get localized into the user's language. Without this,
+ * parseDiffStats() returns (0, 0) on systems with a non-English LANG
+ * and certain git builds, silently zeroing sparklines and hiding
+ * activity from the user.
+ *
+ * GIT_TERMINAL_PROMPT=0 prevents git from blocking on a credential
+ * prompt when auth is needed — we never run interactively, so a prompt
+ * would just hang until the timeout fires.
+ *
+ * Spread `...process.env` first so callers can still override these
+ * per-call if needed, and so the child inherits everything else
+ * (critically PATH so `git` resolves on Windows).
+ */
+const GIT_ENV_OVERRIDES = {
+  LANG: 'C',
+  LC_ALL: 'C',
+  GIT_TERMINAL_PROMPT: '0',
+};
+
+/**
+ * Build the child-process env for a git call.
+ *
+ * Exported for tests. Accepts a base env (defaults to process.env) so
+ * tests can pin behaviour without relying on the runner's shell.
+ *
+ * @param {NodeJS.ProcessEnv} [base] - Base env; defaults to process.env.
+ * @returns {NodeJS.ProcessEnv}
+ */
+function buildGitEnv(base) {
+  return { ...(base || process.env), ...GIT_ENV_OVERRIDES };
+}
+
+/**
  * Execute a git command safely using execFile (no shell).
- * @param {string | string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
- *   or a legacy command string (e.g. 'git --version') for backwards compatibility
+ * @param {string[]} args - Git arguments as an array (e.g. ['log', '--oneline'])
  * @param {Object} [options] - Execution options
  * @param {number} [options.timeout] - Command timeout in ms
  * @param {string} [options.cwd] - Working directory
@@ -29,25 +64,20 @@ const SHORT_TIMEOUT = 5000;
 async function execGit(args, options = {}) {
   const { timeout = DEFAULT_TIMEOUT, cwd = process.cwd() } = options;
 
-  // Backwards compatibility: accept a full command string for
-  // simple constant commands (no user-controlled data).
-  if (typeof args === 'string') {
-    const parts = /** @type {string} */ (args).split(/\s+/);
-    // Strip leading 'git' if present so callers can pass 'git --version'
-    if (parts[0] === 'git') {
-      args = parts.slice(1);
-    } else {
-      args = parts;
-    }
+  if (!Array.isArray(args)) {
+    throw new TypeError('execGit: args must be an array of strings');
   }
 
   const command = `git ${args.join(' ')}`;
 
   try {
-    const promise = new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
       execFile('git', args, {
         cwd,
+        env: buildGitEnv(),
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large outputs
+        timeout,          // kill child process after timeout ms
+        killSignal: 'SIGTERM',
       }, (error, stdout, stderr) => {
         if (error) {
           error.stderr = stderr;
@@ -58,34 +88,32 @@ async function execGit(args, options = {}) {
       });
     });
 
-    const result = await withTimeout(
-      promise,
-      timeout,
-      `Git command timed out after ${timeout}ms: ${command}`
-    );
-
     return {
       stdout: result.stdout.trim(),
       stderr: result.stderr.trim(),
     };
   } catch (error) {
-    // Handle timeout error
-    if (error.message && error.message.includes('timed out')) {
-      throw new GitError(error.message, 'GIT_TIMEOUT', { command });
-    }
-
-    // Handle exec error
+    // execFile sets error.killed = true when the process is killed due to
+    // timeout.  GitError.fromExecError already maps killed → GIT_TIMEOUT.
     throw GitError.fromExecError(error, command, error.stderr);
   }
 }
 
 /**
- * Execute git command silently (suppress errors)
- * @param {string | string[]} command - Git arguments (array or legacy string)
+ * Execute a git command, collapsing any failure into a null result.
+ *
+ * Callers use this when they want "the output, or nothing": the fallback
+ * pattern `execGitOptional(A) || execGitOptional(B)` relies on this, as does
+ * every caller that treats a missing result as "no data to show." This does
+ * conflate "branch has no commits" (empty stdout, non-null result) with
+ * "git errored" (null result) — if you need to distinguish those, use
+ * execGit() and handle the throw yourself.
+ *
+ * @param {string[]} command - Git arguments
  * @param {Object} [options] - Execution options
- * @returns {Promise<{stdout: string, stderr: string}|null>}
+ * @returns {Promise<{stdout: string, stderr: string}|null>} Result, or null if git failed
  */
-async function execGitSilent(command, options = {}) {
+async function execGitOptional(command, options = {}) {
   try {
     return await execGit(command, options);
   } catch (error) {
@@ -130,6 +158,7 @@ async function getRemotes(cwd) {
     const { stdout } = await execGit(['remote'], { cwd, timeout: 5000 });
     return stdout.split('\n').filter(Boolean);
   } catch (error) {
+    // Not a git repo or `git remote` unavailable — treat as "no remotes".
     return [];
   }
 }
@@ -160,6 +189,9 @@ async function fetch(remoteName = 'origin', options = {}) {
   const args = ['fetch'];
   if (all) args.push('--all');
   if (prune) args.push('--prune');
+  // When not fetching all remotes, target the specified remote.
+  // (`git fetch --all <remote>` is redundant and can confuse older git versions.)
+  if (!all && remoteName) args.push(remoteName);
 
   try {
     await execGit(args, { cwd, timeout: FETCH_TIMEOUT });
@@ -213,7 +245,13 @@ async function log(branchName, options = {}) {
 }
 
 /**
- * Get commit count by day for sparkline
+ * Get commit count by day for sparkline.
+ *
+ * Buckets commits by local calendar date rather than by dividing a ms
+ * difference by 86 400 000, which breaks on DST transitions (a
+ * spring-forward day is only 23 h, causing Math.floor(23/24) = 0 and
+ * merging yesterday's commits into today's bucket).
+ *
  * @param {string} branchName - Branch name
  * @param {number} [days=7] - Number of days
  * @param {string} [cwd] - Working directory
@@ -230,19 +268,29 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
 
     if (!stdout) return counts;
 
+    // Build a map from "YYYY-MM-DD" → bucket index. Using setDate()
+    // to step backwards is DST-safe because it adjusts the calendar
+    // day without relying on a fixed ms offset.
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const dayBuckets = new Map();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dayBuckets.set(key, days - 1 - i);
+    }
 
     for (const line of stdout.split('\n').filter(Boolean)) {
       const commitDate = new Date(line);
-      commitDate.setHours(0, 0, 0, 0);
-      const daysDiff = Math.floor((today.getTime() - commitDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysDiff >= 0 && daysDiff < days) {
-        counts[days - 1 - daysDiff]++;
+      const key = `${commitDate.getFullYear()}-${String(commitDate.getMonth() + 1).padStart(2, '0')}-${String(commitDate.getDate()).padStart(2, '0')}`;
+      const idx = dayBuckets.get(key);
+      if (idx !== undefined) {
+        counts[idx]++;
       }
     }
   } catch (error) {
-    // Return zeros on error
+    // Sparkline is decorative — a git-log failure (missing branch, network
+    // hiccup) returns all-zeros and renders a flat bar rather than crashing
+    // the caller.
   }
 
   return counts;
@@ -332,6 +380,8 @@ async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
     );
     return stdout.split('\n').filter(Boolean);
   } catch (error) {
+    // Diff fails when branches share no common ancestor, or when either
+    // ref doesn't exist. Caller renders "no changed files" either way.
     return [];
   }
 }
@@ -342,6 +392,8 @@ async function getChangedFiles(branchName, baseBranch = 'HEAD', cwd) {
  * @returns {{added: number, deleted: number}}
  */
 function parseDiffStats(diffStatOutput) {
+  if (!diffStatOutput) return { added: 0, deleted: 0 };
+
   // Parse the summary line: "X files changed, Y insertions(+), Z deletions(-)"
   const match = diffStatOutput.match(/(\d+) insertions?\(\+\).*?(\d+) deletions?\(-\)/);
   if (match) {
@@ -369,6 +421,8 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
     const { stdout } = await execGit(['diff', '--stat', `${fromCommit}..${toCommit}`], options);
     return parseDiffStats(stdout);
   } catch (e) {
+    // Diff fails when a ref is gone or commits share no ancestor. Zero
+    // added/deleted renders as "no change summary" in the activity log.
     return { added: 0, deleted: 0 };
   }
 }
@@ -417,6 +471,9 @@ async function getAheadBehind(branchRef, baseRef, options = {}) {
       ahead: parseInt(parts[1], 10) || 0,
     };
   } catch (e) {
+    // rev-list fails when baseRef is missing (no remote yet) or when the
+    // branches share no common ancestor. 0/0 hides the ahead/behind column
+    // for that row rather than crashing the background refresher.
     return { ahead: 0, behind: 0 };
   }
 }
@@ -437,13 +494,15 @@ async function getDiffShortstat(baseRef, branchRef, options = {}) {
     );
     return parseDiffStats(stdout);
   } catch (e) {
+    // See getAheadBehind: same background-refresh path, same 0/0 fallback
+    // to hide the +/- column when a ref is missing.
     return { added: 0, deleted: 0 };
   }
 }
 
 module.exports = {
   execGit,
-  execGitSilent,
+  execGitOptional,
   isGitAvailable,
   isGitRepository,
   getRemotes,
@@ -461,6 +520,8 @@ module.exports = {
   deleteLocalBranch,
   getAheadBehind,
   getDiffShortstat,
+  buildGitEnv,
+  GIT_ENV_OVERRIDES,
   DEFAULT_TIMEOUT,
   FETCH_TIMEOUT,
 };
