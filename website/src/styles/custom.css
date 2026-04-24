@@ -108,14 +108,13 @@ body::after {
    Hero Section
    ============================================ */
 
-/* Splash pages: widen the content container and always center it.
-   Starlight's .sl-container only auto-centers above 72rem viewport and
-   is capped at --sl-content-width (~45rem), which leaves the hero
-   left-biased on medium/large screens. Breaking out by targeting the
-   container that holds the hero. */
+/* Splash pages: let the hero span the full content area. Starlight's
+   .sl-container caps width at --sl-content-width (~45rem); remove that
+   cap on pages containing a hero so the two-column layout has room. */
 .sl-container:has(> .hero) {
-  max-width: 1080px;
-  margin-inline: auto;
+  max-width: none;
+  width: 100%;
+  margin-inline: 0;
 }
 
 .hero {
@@ -128,17 +127,18 @@ body::after {
   z-index: 1;
 }
 
-/* On desktop: split copy (left) and actions stack (right), centered
-   within a comfortable reading width. */
+/* Desktop: copy (left) + actions (right) as two columns, inner content
+   centered at a comfortable reading width. */
 @media (min-width: 50rem) {
   .hero .stack {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 3rem;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+    gap: 4rem;
     align-items: center;
     width: 100%;
-    max-width: 960px;
+    max-width: 1100px;
     margin-inline: auto;
+    padding-inline: 1.5rem;
   }
 
   .hero .copy {
@@ -151,7 +151,7 @@ body::after {
     flex-direction: column;
     align-items: stretch;
     gap: 0.65rem;
-    width: 220px;
+    width: 100%;
   }
 }
 
