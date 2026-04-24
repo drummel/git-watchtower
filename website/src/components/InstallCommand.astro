@@ -7,12 +7,13 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
     type="button"
     class="install-command-inner"
     data-install-command={command}
-    aria-label={`Copy install command: ${command}`}
+    data-copy-state="idle"
+    aria-label={`Copy command: ${command}`}
   >
     <span class="install-prompt" aria-hidden="true">$</span>
     <code class="install-text">{command}</code>
     <span class="install-copy" aria-hidden="true">
-      <svg class="install-copy-default" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg class="install-icon install-icon--copy" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
         <path
           d="M5 15V5a2 2 0 0 1 2-2h10"
@@ -21,9 +22,9 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
           stroke-linecap="round"
         />
       </svg>
-      <svg class="install-copy-done" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg class="install-icon install-icon--check" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
-          d="M5 11.5l4 4 10-10"
+          d="M5 12l4.5 4.5L19 7"
           stroke="currentColor"
           stroke-width="2.2"
           stroke-linecap="round"
@@ -31,37 +32,60 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
         />
       </svg>
     </span>
+    <span class="sr-only" data-copy-announce aria-live="polite"></span>
   </button>
 </div>
 
 <script>
+  const RESET_MS = 1800;
+
+  async function copyText(text: string): Promise<boolean> {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      /* fall through to fallback */
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
   function setupCopyButtons() {
     const buttons = document.querySelectorAll<HTMLButtonElement>('[data-install-command]');
     buttons.forEach((btn) => {
       if (btn.dataset.copyBound === 'true') return;
       btn.dataset.copyBound = 'true';
+
+      const announce = btn.querySelector<HTMLElement>('[data-copy-announce]');
+      let resetTimer: number | undefined;
+
       btn.addEventListener('click', async () => {
         const text = btn.dataset.installCommand ?? '';
         if (!text) return;
-        try {
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-          } else {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-          }
-          btn.classList.add('is-copied');
-          window.setTimeout(() => btn.classList.remove('is-copied'), 1600);
-        } catch {
-          btn.classList.add('is-error');
-          window.setTimeout(() => btn.classList.remove('is-error'), 1600);
-        }
+        const ok = await copyText(text);
+        btn.dataset.copyState = ok ? 'copied' : 'error';
+        if (announce) announce.textContent = ok ? 'Copied to clipboard' : 'Copy failed';
+        window.clearTimeout(resetTimer);
+        resetTimer = window.setTimeout(() => {
+          btn.dataset.copyState = 'idle';
+          if (announce) announce.textContent = '';
+        }, RESET_MS);
       });
     });
   }

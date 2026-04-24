@@ -186,20 +186,20 @@ body::after {
 }
 
 .hero-btn--primary {
-  background: var(--sl-color-accent);
+  background: #7cf27c;
   color: #052e16;
   border-color: transparent;
-  box-shadow: 0 4px 16px -6px rgba(92, 234, 92, 0.55);
+  box-shadow: 0 4px 16px -6px rgba(124, 242, 124, 0.6);
 }
 
 .hero-btn--primary:hover,
 :root[data-theme='light'] .hero-btn--primary:hover {
-  background: #16a34a;
+  background: #9ef59e;
   color: #052e16;
   border-color: transparent;
   box-shadow:
-    0 0 0 3px rgba(92, 234, 92, 0.18),
-    0 6px 22px -8px rgba(92, 234, 92, 0.7);
+    0 0 0 3px rgba(124, 242, 124, 0.22),
+    0 6px 22px -8px rgba(124, 242, 124, 0.75);
   transform: translateY(-1px);
 }
 
@@ -338,8 +338,23 @@ body::after {
    Install Command
    ============================================ */
 
+.install-heading {
+  margin-block: 2.5rem 0.6rem;
+  text-align: center;
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3, #9aa4b2);
+}
+
+:root[data-theme='light'] .install-heading {
+  color: var(--sl-color-gray-4, #6b7280);
+}
+
 .install-command {
-  margin-block: 2.5rem 0.65rem;
+  margin-block: 0 0.65rem;
   text-align: center;
 }
 
@@ -455,27 +470,44 @@ body::after {
   background: rgba(92, 234, 92, 0.1);
 }
 
-.install-copy svg {
-  display: block;
+.install-copy .install-icon {
   width: 15px;
   height: 15px;
 }
 
-.install-copy-done {
-  display: none;
-}
-
-.install-command-inner.is-copied .install-copy {
-  color: #5cea5c;
-  background: rgba(92, 234, 92, 0.18);
-}
-
-.install-command-inner.is-copied .install-copy-default {
-  display: none;
-}
-
-.install-command-inner.is-copied .install-copy-done {
+/* Idle state: copy icon visible, check hidden */
+[data-copy-state='idle'] .install-icon--copy,
+[data-copy-state='error'] .install-icon--copy {
   display: block;
+}
+[data-copy-state='idle'] .install-icon--check,
+[data-copy-state='error'] .install-icon--check {
+  display: none;
+}
+
+/* Copied state: check icon visible, copy hidden */
+[data-copy-state='copied'] .install-icon--copy {
+  display: none;
+}
+[data-copy-state='copied'] .install-icon--check {
+  display: block;
+  animation: gw-copy-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+[data-copy-state='copied'] .install-copy {
+  color: #5cea5c;
+  background: rgba(92, 234, 92, 0.2);
+}
+
+@keyframes gw-copy-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-copy-state='copied'] .install-icon--check {
+    animation: none;
+  }
 }
 
 .downloads-badge-wrap {
@@ -497,7 +529,7 @@ body::after {
   align-items: center;
   gap: 0.5rem;
   padding: 0.8rem 1.6rem;
-  background: var(--sl-color-accent);
+  background: #7cf27c;
   color: #052e16;
   border-radius: 8px;
   font-size: 0.95rem;
@@ -505,7 +537,7 @@ body::after {
   letter-spacing: 0.01em;
   text-decoration: none;
   border: 1px solid transparent;
-  box-shadow: 0 4px 16px -6px rgba(92, 234, 92, 0.55);
+  box-shadow: 0 4px 16px -6px rgba(124, 242, 124, 0.6);
   transition:
     background-color 0.15s ease,
     box-shadow 0.2s ease,
@@ -513,10 +545,10 @@ body::after {
 }
 
 .docs-cta-button:hover {
-  background: #16a34a;
+  background: #9ef59e;
   box-shadow:
-    0 0 0 3px rgba(92, 234, 92, 0.18),
-    0 6px 22px -8px rgba(92, 234, 92, 0.7);
+    0 0 0 3px rgba(124, 242, 124, 0.22),
+    0 6px 22px -8px rgba(124, 242, 124, 0.75);
   transform: translateY(-1px);
   color: #052e16;
 }
