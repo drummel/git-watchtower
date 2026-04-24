@@ -261,8 +261,12 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
   const counts = new Array(days).fill(0);
 
   try {
+    // %cI is strict ISO 8601 (YYYY-MM-DDTHH:MM:SS±HH:MM). %ci uses a
+    // space separator and a compact ±HHMM offset — V8 parses it today,
+    // but the spec doesn't require engines to accept non-strict forms,
+    // so rely on the strict variant for Date(string) parsing.
     const { stdout } = await execGit(
-      ['log', branchName, '--format=%ci', `--since=${days} days ago`],
+      ['log', branchName, '--format=%cI', `--since=${days} days ago`],
       { cwd, timeout: 10000 }
     );
 
