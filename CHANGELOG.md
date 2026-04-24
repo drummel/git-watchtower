@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/drummel/git-watchtower/compare/v2.1.0...v2.1.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* use strict ISO 8601 for git timestamps so Date() parse is portable ([be1420d](https://github.com/drummel/git-watchtower/commit/be1420d5e0fe81e9702c373b882ff7c74edab19a))
+
 # [2.1.0](https://github.com/drummel/git-watchtower/compare/v2.0.3...v2.1.0) (2026-04-24)
 
 
