@@ -23,6 +23,7 @@ const {
   WATCHTOWER_DIR,
   LOCK_FILE,
   SOCKET_PATH,
+  MAX_IPC_BUFFER,
 } = require('../../../src/server/coordinator');
 
 describe('generateProjectId', () => {
@@ -370,6 +371,62 @@ describe('Worker', () => {
     w2.disconnect();
     await new Promise(r => setTimeout(r, 100));
     assert.equal(coord.getProjects().length, 0);
+  });
+});
+
+describe('Coordinator outbound backpressure', () => {
+  let coord;
+
+  afterEach(() => {
+    if (coord) { coord.stop(); coord = null; }
+    removeSocket();
+  });
+
+  function fakeSocket(writableLength) {
+    const calls = { write: 0, destroy: 0 };
+    return {
+      writableLength,
+      write() { calls.write++; return true; },
+      destroy() { calls.destroy++; },
+      _calls: calls,
+    };
+  }
+
+  it('writes normally when the outbound buffer is below MAX_IPC_BUFFER', () => {
+    coord = new Coordinator({ socketPath: SOCKET_PATH + '.bp-ok' });
+    const socket = fakeSocket(MAX_IPC_BUFFER - 1);
+    coord.workerSockets.set('w-ok', socket);
+    coord.projects.set('w-ok', { id: 'w-ok', projectPath: '/p', projectName: 'p', state: {}, lastUpdate: 0 });
+
+    coord.sendCommand('w-ok', 'doThing', { x: 1 });
+    assert.equal(socket._calls.write, 1);
+    assert.equal(socket._calls.destroy, 0);
+  });
+
+  it('destroys the worker socket when its outbound buffer is at MAX_IPC_BUFFER', () => {
+    // Pre-fix: socket.write() was called regardless of writableLength,
+    // so a wedged worker would let coordinator memory grow on every
+    // pushState / command broadcast. Post-fix: we drop the worker;
+    // it'll reconnect when it can keep up.
+    coord = new Coordinator({ socketPath: SOCKET_PATH + '.bp-full' });
+    const socket = fakeSocket(MAX_IPC_BUFFER);
+    coord.workerSockets.set('w-stuck', socket);
+    coord.projects.set('w-stuck', { id: 'w-stuck', projectPath: '/p', projectName: 'p', state: {}, lastUpdate: 0 });
+
+    coord.sendCommand('w-stuck', 'doThing', { x: 1 });
+    assert.equal(socket._calls.write, 0, 'write should be skipped');
+    assert.equal(socket._calls.destroy, 1, 'socket should be destroyed');
+  });
+
+  it('destroys the worker socket when its outbound buffer is above MAX_IPC_BUFFER', () => {
+    coord = new Coordinator({ socketPath: SOCKET_PATH + '.bp-over' });
+    const socket = fakeSocket(MAX_IPC_BUFFER + 4096);
+    coord.workerSockets.set('w-over', socket);
+    coord.projects.set('w-over', { id: 'w-over', projectPath: '/p', projectName: 'p', state: {}, lastUpdate: 0 });
+
+    coord.sendCommand('w-over', 'doThing', {});
+    assert.equal(socket._calls.write, 0);
+    assert.equal(socket._calls.destroy, 1);
   });
 });
 
