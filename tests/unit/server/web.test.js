@@ -247,6 +247,40 @@ describe('WebDashboardServer', () => {
       assert.equal(state.switchHistory.length, 1);
       assert.equal(state.switchHistory[0].from, 'main');
     });
+
+    it('should expose casinoModeEnabled flag', () => {
+      server = new WebDashboardServer({ store });
+      assert.equal(server.getSerializableState().casinoModeEnabled, false);
+
+      store.setState({ casinoModeEnabled: true });
+      assert.equal(server.getSerializableState().casinoModeEnabled, true);
+    });
+
+    it('should omit casinoStats when casino mode is off', () => {
+      store.setState({ casinoModeEnabled: false });
+      server = new WebDashboardServer({ store });
+      assert.equal(server.getSerializableState().casinoStats, null);
+    });
+
+    it('should include casinoStats when casino mode is on', () => {
+      store.setState({ casinoModeEnabled: true });
+      server = new WebDashboardServer({ store });
+      const cs = server.getSerializableState().casinoStats;
+
+      assert.ok(cs, 'casinoStats should be present when enabled');
+      // The shape comes straight from src/casino/index.js#getStats — guard
+      // the fields the web UI reads so a casino refactor surfaces here.
+      assert.equal(typeof cs.totalLinesAdded, 'number');
+      assert.equal(typeof cs.totalLinesDeleted, 'number');
+      assert.equal(typeof cs.totalLines, 'number');
+      assert.equal(typeof cs.totalPolls, 'number');
+      assert.equal(typeof cs.netWinnings, 'number');
+      assert.equal(typeof cs.houseEdge, 'number');
+      assert.equal(typeof cs.luckMeter, 'number');
+      assert.equal(typeof cs.dopamineHits, 'number');
+      assert.equal(typeof cs.sessionDuration, 'string');
+      assert.equal(typeof cs.vibesQuality, 'string');
+    });
   });
 
   describe('start and stop', () => {
