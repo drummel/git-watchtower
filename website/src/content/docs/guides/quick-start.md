@@ -61,7 +61,7 @@ git-watchtower --help
 
 ## Requirements
 
-- **Node.js** 18.0.0 or higher
+- **Node.js** 20.0.0 or higher
 - **Git** installed and in PATH
 - **Git remote** configured (any name, defaults to `origin`)
 - **Terminal** with ANSI color support
