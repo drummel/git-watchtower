@@ -39,7 +39,7 @@ cd git-watchtower
 npm install
 ```
 
-**Requirements:** Node.js >= 18.0.0
+**Requirements:** Node.js >= 20.0.0
 
 ### Useful Commands
 
@@ -53,6 +53,19 @@ npm install
 | `npm run typecheck` | TypeScript type checking |
 
 Please make sure `npm test` and `npm run typecheck` pass before submitting a PR.
+
+### Documentation Site
+
+The documentation at [gitwatchtower.dev](https://gitwatchtower.dev) is built from `website/` with Astro Starlight:
+
+```sh
+cd website
+npm install
+npm run dev      # local preview at http://localhost:4321
+npm run build    # production build to website/dist
+```
+
+If your change adds, removes, or alters a user-facing feature, please update the relevant page under `website/src/content/docs/`. Each docs page also has an "Edit this page" link in the footer that drops you straight into the GitHub editor.
 
 ## Commit Messages
 

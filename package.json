@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/drummel/git-watchtower/issues"
   },
-  "homepage": "https://github.com/drummel/git-watchtower#readme",
+  "homepage": "https://gitwatchtower.dev",
   "engines": {
     "node": ">=20.0.0"
   },

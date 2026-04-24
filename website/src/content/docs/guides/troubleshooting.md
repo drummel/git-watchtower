@@ -98,6 +98,14 @@ The web dashboard auto-opens a browser tab on first launch. If this doesn't work
 - Open `http://localhost:4000` manually (or the port shown in the TUI)
 - On headless systems, the browser open is skipped automatically
 
+### Live reload not working on Windows
+
+Static-mode live reload uses Node.js `fs.watch()` with recursive watching. Recursive `fs.watch` is unreliable on some filesystems on Windows (notably non-NTFS volumes and network drives). If you see a warning at startup or live reload doesn't fire, try one of:
+
+- Move the project to a local NTFS volume
+- Switch to custom server command mode and rely on your dev server's own file watcher (`git-watchtower --mode command -c "npm run dev"`)
+- Press `r` in the TUI to manually trigger a browser reload
+
 ## Version Updates
 
 Git Watchtower checks for new versions via the npm registry and shows a notification in the TUI when an update is available. Update with:

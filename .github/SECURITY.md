@@ -26,6 +26,7 @@ If you discover a security vulnerability in Git Watchtower, please report it res
 This security policy covers:
 - The `git-watchtower` npm package
 - The source code in this repository
+- The documentation site at https://gitwatchtower.dev
 
 ## Security Considerations
 
@@ -34,4 +35,4 @@ Git Watchtower:
 - Optionally runs a local HTTP server for live reload
 - Optionally executes custom dev server commands specified in your config
 
-Always review your `.watchtowerrc.json` configuration, especially the `devServer.command` field, as it will be executed as a shell command.
+Always review your `.watchtowerrc.json` configuration, especially the `server.command` field, as it will be executed as a shell command.

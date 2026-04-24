@@ -3,8 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
 [![npm downloads](https://img.shields.io/npm/dm/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-gitwatchtower.dev-5cf25c.svg)](https://gitwatchtower.dev)
 
 Monitor and switch between git branches in real-time. Built for working with web-based AI coding agents, like Claude Code Web & Codex.
+
+📚 **Full documentation: [gitwatchtower.dev](https://gitwatchtower.dev)** — [Quick Start](https://gitwatchtower.dev/guides/quick-start/) · [Configuration](https://gitwatchtower.dev/guides/configuration/) · [Web Dashboard](https://gitwatchtower.dev/guides/web-dashboard/) · [Keyboard Controls](https://gitwatchtower.dev/guides/keyboard-controls/) · [Troubleshooting](https://gitwatchtower.dev/guides/troubleshooting/)
 
 - **Live branch monitoring** with activity sparklines and ahead/behind counters
 - **Web dashboard** for browser-based branch management and PR workflows
@@ -38,7 +41,7 @@ The web dashboard provides real-time branch monitoring, PR workflows, CI status,
 
 Press `W` in the TUI to toggle the web dashboard on or off at any time.
 
-[Full web dashboard documentation &rarr;](docs/web-dashboard.md)
+[Full web dashboard documentation →](https://gitwatchtower.dev/guides/web-dashboard/)
 
 ## Installation
 
@@ -62,6 +65,8 @@ git-watchtower
 
 On first run, you'll be guided through a configuration wizard.
 
+[Full quick-start guide →](https://gitwatchtower.dev/guides/quick-start/)
+
 ## Usage
 
 ```bash
@@ -84,7 +89,7 @@ git-watchtower --init
 git-watchtower --help
 ```
 
-[Full CLI reference &rarr;](docs/configuration.md#cli-flags)
+[Full CLI reference →](https://gitwatchtower.dev/guides/configuration/#cli-flags)
 
 ## Server Modes
 
@@ -96,46 +101,31 @@ Git Watchtower supports three server modes:
 | **Custom Command** | `--mode command -c "npm run dev"` | Run your own dev server (Next.js, Vite, Nuxt, etc.) |
 | **No Server** | `--no-server` | Branch monitoring only |
 
-[Full server modes documentation &rarr;](docs/server-modes.md)
+[Full server modes documentation →](https://gitwatchtower.dev/guides/server-modes/)
 
 ## Configuration
 
-Settings are saved to `.watchtowerrc.json` in your project directory. Key settings:
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Server mode | static, command, or none | static |
-| Port | Server port number | 3000 |
-| Web dashboard | Enable browser dashboard | false (use `--web`) |
-| Auto-pull | Auto-pull when current branch has updates | true |
-| Polling interval | How often to check for git updates | 5 seconds |
-| Sound notifications | Audio alerts for updates | true |
-| Visible branches | Number of branches shown in list | 7 |
-
-[Full configuration reference &rarr;](docs/configuration.md)
+Settings are saved to `.watchtowerrc.json` in your project directory. See the [full configuration reference](https://gitwatchtower.dev/guides/configuration/) for every setting, CLI flag, and environment variable.
 
 ## Keyboard Controls
 
-| Key | Action |
-|-----|--------|
-| `Up` / `k`, `Down` / `j` | Navigate branch list |
-| `Enter` | Switch to selected branch |
-| `v` | Preview branch (commits & files) |
-| `/` | Search/filter branches |
-| `b` | Branch actions (PR, CI, merge, approve) |
-| `u` | Undo last branch switch |
-| `S` | Stash changes |
-| `W` | Toggle web dashboard |
-| `q` | Quit |
+The most-used keys: `j`/`k` to navigate, `Enter` to switch branches, `v` to preview, `b` for branch actions (PR, CI, merge), `W` to toggle the web dashboard, `q` to quit.
 
-[Full keyboard reference &rarr;](docs/keyboard-controls.md)
+[Full keyboard reference →](https://gitwatchtower.dev/guides/keyboard-controls/)
+
+## 🎰 Casino Mode
+
+Yes, it's a real feature. Every `git fetch` is a slot-machine spin, every commit is a payout. Enable with `--casino` or `"casinoMode": true`.
+
+[Read about Casino Mode →](https://gitwatchtower.dev/casino/)
 
 ## Requirements
 
-- **Node.js** 18.0.0 or higher
+- **Node.js** 20.0.0 or higher
 - **Git** installed and in PATH
 - **Git remote** configured (any name, defaults to `origin`)
 - **Terminal** with ANSI color support
+- **Optional**: [`gh`](https://cli.github.com/) or [`glab`](https://gitlab.com/gitlab-org/cli) CLI for branch actions (PR create, approve, merge, CI status)
 
 ## How It Works
 
@@ -148,7 +138,7 @@ Settings are saved to `.watchtowerrc.json` in your project directory. Key settin
 
 ## Troubleshooting
 
-Common issues and solutions are covered in the [troubleshooting guide](docs/troubleshooting.md).
+Common issues and solutions are covered in the [troubleshooting guide](https://gitwatchtower.dev/guides/troubleshooting/).
 
 ## Contributing
 
@@ -172,6 +162,14 @@ npm test
 
 # Run directly without installing
 node bin/git-watchtower.js
+```
+
+The documentation site lives in [`website/`](website/) and is built with Astro Starlight:
+
+```bash
+cd website
+npm install
+npm run dev
 ```
 
 ## License

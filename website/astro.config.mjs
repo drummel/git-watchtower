@@ -2,6 +2,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
+  site: 'https://gitwatchtower.dev',
   integrations: [
     starlight({
       title: 'Git Watchtower',
@@ -10,6 +11,9 @@ export default defineConfig({
         { icon: 'github', label: 'GitHub', href: 'https://github.com/drummel/git-watchtower' },
         { icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/git-watchtower' },
       ],
+      editLink: {
+        baseUrl: 'https://github.com/drummel/git-watchtower/edit/main/website/',
+      },
       components: {
         SiteTitle: './src/components/SiteTitle.astro',
         SocialIcons: './src/components/SocialIcons.astro',
