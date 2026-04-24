@@ -594,6 +594,20 @@ body::after {
   opacity: 1;
 }
 
+.casino-gif {
+  margin-block: 1.5rem 2rem;
+  display: flex;
+  justify-content: center;
+}
+
+.casino-gif img {
+  max-width: min(100%, 560px);
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--gw-border);
+  box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
 /* Heading anchor chain-link icons: hover-only so they're available for
    deep-linking on docs pages without adding visual noise by default. */
 .sl-heading-wrapper .sl-anchor-link {
