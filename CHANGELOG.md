@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/drummel/git-watchtower/compare/v2.0.1...v2.0.2) (2026-04-24)
+
+
+### Bug Fixes
+
+* expose cancel() on throttle() so shutdown can drop pending trailing calls ([5a75864](https://github.com/drummel/git-watchtower/commit/5a75864775642d592ea1da14e4a54860b124ad7c))
+
 ## [2.0.1](https://github.com/drummel/git-watchtower/compare/v2.0.0...v2.0.1) (2026-04-24)
 
 
