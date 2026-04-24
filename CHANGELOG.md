@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/drummel/git-watchtower/compare/v2.0.0...v2.0.1) (2026-04-24)
+
+
+### Bug Fixes
+
+* require an ownership token on Mutex.release() ([387d123](https://github.com/drummel/git-watchtower/commit/387d1234766d8387d8a361b88a187d533707a5d6))
+
 # [2.0.0](https://github.com/drummel/git-watchtower/compare/v1.14.18...v2.0.0) (2026-04-24)
 
 
