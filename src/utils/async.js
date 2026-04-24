@@ -175,6 +175,18 @@ function sleep(ms) {
 
 /**
  * Debounce a function - only execute after delay with no calls
+ *
+ * cancel() both clears the pending timer and sets an internal flag
+ * that the scheduled callback checks at the top. Without the flag,
+ * cancel() racing with a timer whose callback has already been
+ * dequeued (the timer fired, but the callback hadn't executed yet)
+ * was a no-op — clearTimeout can't recall a callback that libuv
+ * has already promoted — so fn would run anyway and write into
+ * state the caller had just asked to abandon.
+ *
+ * Calling debounced(...) re-arms: the cancelled flag resets so a new
+ * schedule is not pre-squelched by a prior cancel().
+ *
  * @template {(...args: any[]) => void} T
  * @param {T} fn - Function to debounce
  * @param {number} delay - Delay in milliseconds
@@ -182,18 +194,22 @@ function sleep(ms) {
  */
 function debounce(fn, delay) {
   let timeoutId = null;
+  let cancelled = false;
 
   const debounced = (...args) => {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
+    cancelled = false;
     timeoutId = setTimeout(() => {
-      fn(...args);
       timeoutId = null;
+      if (cancelled) return;
+      fn(...args);
     }, delay);
   };
 
   debounced.cancel = () => {
+    cancelled = true;
     if (timeoutId) {
       clearTimeout(timeoutId);
       timeoutId = null;

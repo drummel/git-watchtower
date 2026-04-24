@@ -355,6 +355,69 @@ describe('debounce', () => {
 
     assert.deepStrictEqual(receivedArgs, ['a', 'b', 'c']);
   });
+
+  it('cancel() ignores a late callback whose clearTimeout was a no-op', () => {
+    // Simulate the race the cancelled-flag guard defends against: the
+    // timer fires and libuv enqueues the callback, then cancel() runs
+    // before the callback executes. clearTimeout can't recall a
+    // callback that's already been dequeued, so a stub clearTimeout
+    // that's a no-op faithfully models that case.
+    const realSetTimeout = global.setTimeout;
+    const realClearTimeout = global.clearTimeout;
+    const captured = [];
+    let nextId = 1;
+    global.setTimeout = (cb) => {
+      const id = nextId++;
+      captured.push({ id, cb });
+      return id;
+    };
+    global.clearTimeout = () => { /* no-op: models "too late to recall" */ };
+
+    try {
+      let callCount = 0;
+      const fn = debounce(() => callCount++, 50);
+
+      fn();
+      assert.strictEqual(captured.length, 1, 'timer should have been scheduled');
+
+      fn.cancel();           // clearTimeout is a no-op above
+      captured[0].cb();      // invoke the enqueued callback as libuv would
+
+      assert.strictEqual(
+        callCount,
+        0,
+        'cancelled flag should block the late callback from calling fn',
+      );
+    } finally {
+      global.setTimeout = realSetTimeout;
+      global.clearTimeout = realClearTimeout;
+    }
+  });
+
+  it('debounced() re-arms after cancel() — a fresh call still fires', async () => {
+    let callCount = 0;
+    const fn = debounce(() => callCount++, 50);
+
+    fn();
+    fn.cancel();
+
+    // Guard against a naïve implementation that latches cancelled=true
+    // forever — we must be able to use the debounced function again.
+    fn();
+    await sleep(100);
+    assert.strictEqual(callCount, 1);
+  });
+
+  it('cancel() before any call is a harmless no-op', async () => {
+    let callCount = 0;
+    const fn = debounce(() => callCount++, 50);
+    assert.doesNotThrow(() => fn.cancel());
+
+    // Still schedulable afterwards.
+    fn();
+    await sleep(100);
+    assert.strictEqual(callCount, 1);
+  });
 });
 
 describe('throttle', () => {
