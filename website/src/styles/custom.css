@@ -118,36 +118,84 @@ body::after {
   z-index: 1;
 }
 
+/* On desktop: split copy (left) and actions stack (right) */
+@media (min-width: 50rem) {
+  .hero .stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3rem;
+    align-items: center;
+    width: 100%;
+  }
+
+  .hero .copy {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .hero .actions {
+    grid-column: 2;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    min-width: 240px;
+  }
+}
+
 /* ============================================
    Hero Buttons
    ============================================ */
 
 .hero .sl-link-button {
-  border-radius: 6px;
-  font-weight: 500;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 8px;
+  font-weight: 600;
   letter-spacing: 0.01em;
-  padding: 0.6rem 1.4rem;
+  padding: 0.7rem 1.4rem;
   font-size: 0.95rem;
-  transition: all 0.15s ease;
+  width: 100%;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.2s ease,
+    transform 0.1s ease,
+    color 0.15s ease;
 }
 
+@media (max-width: 50rem) {
+  .hero .actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+  .hero .sl-link-button {
+    width: 100%;
+  }
+}
+
+/* Primary = green */
 .hero .sl-link-button.primary {
-  background: var(--sl-color-white);
-  color: var(--sl-color-black);
+  background: var(--sl-color-accent);
+  color: #052e16;
   border: 1px solid transparent;
+  box-shadow:
+    0 0 0 0 rgba(34, 197, 94, 0.45),
+    0 4px 16px -6px rgba(34, 197, 94, 0.6);
 }
 
 .hero .sl-link-button.primary:hover {
-  background: var(--sl-color-gray-1, #e5e5e5);
+  background: #16a34a;
+  box-shadow:
+    0 0 0 3px rgba(34, 197, 94, 0.18),
+    0 6px 22px -8px rgba(34, 197, 94, 0.7);
+  transform: translateY(-1px);
 }
 
-:root:not([data-theme='light']) .hero .sl-link-button.primary {
-  background: var(--sl-color-white);
-  color: #0a0a0a;
-}
-
-:root:not([data-theme='light']) .hero .sl-link-button.primary:hover {
-  background: #e5e5e5;
+:root[data-theme='light'] .hero .sl-link-button.primary {
+  color: #052e16;
 }
 
 .hero .sl-link-button:not(.primary) {
@@ -157,8 +205,13 @@ body::after {
 }
 
 .hero .sl-link-button:not(.primary):hover {
-  border-color: var(--sl-color-gray-3);
-  background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.03));
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.05);
+  color: var(--sl-color-accent-high);
+}
+
+:root[data-theme='light'] .hero .sl-link-button:not(.primary):hover {
+  color: var(--sl-color-accent);
 }
 
 /* ============================================
@@ -267,8 +320,7 @@ body::after {
   text-align: center;
 }
 
-/* Terminal-style block — consistent across light/dark themes for legibility
-   and to match the CLI nature of the product. */
+/* Wrapper for the offset glowing border around the install button */
 .install-command-inner {
   position: relative;
   display: inline-flex;
@@ -288,13 +340,49 @@ body::after {
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.12s ease;
+  z-index: 1;
+}
+
+/* Animated green outline with gap around the install block */
+.install-command-inner::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(34, 197, 94, 0.35);
+  pointer-events: none;
+  z-index: -1;
+  animation: gw-install-glow 3.2s ease-in-out infinite;
+}
+
+@keyframes gw-install-glow {
+  0%,
+  100% {
+    border-color: rgba(34, 197, 94, 0.28);
+    box-shadow:
+      0 0 0 0 rgba(34, 197, 94, 0),
+      0 0 18px -2px rgba(34, 197, 94, 0.12);
+  }
+  50% {
+    border-color: rgba(34, 197, 94, 0.7);
+    box-shadow:
+      0 0 0 1px rgba(34, 197, 94, 0.08),
+      0 0 28px 2px rgba(34, 197, 94, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-command-inner::before {
+    animation: none;
+    border-color: rgba(34, 197, 94, 0.4);
+  }
 }
 
 .install-command-inner:hover {
-  border-color: rgba(34, 197, 94, 0.45);
+  border-color: rgba(34, 197, 94, 0.6);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 6px 28px -8px rgba(34, 197, 94, 0.25);
+    0 6px 28px -8px rgba(34, 197, 94, 0.3);
 }
 
 .install-command-inner:active {
@@ -345,6 +433,7 @@ body::after {
 }
 
 .install-copy svg {
+  display: block;
   width: 15px;
   height: 15px;
 }
@@ -395,49 +484,25 @@ body::after {
 }
 
 /* ============================================
-   CTA Section
+   Header Social Icons - always visible
    ============================================ */
 
-.cta-section {
-  position: relative;
-  text-align: center;
-  margin-top: 4rem;
-  padding: 3rem 2rem;
-  border-radius: 10px;
-  border: 1px solid var(--gw-border);
-  overflow: hidden;
+/* Starlight hides .right-group below 50rem via .sl-hidden. Force visible
+   so GitHub + npm icons appear on mobile too. */
+.header .right-group {
+  display: flex !important;
 }
 
-.cta-section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    var(--gw-dot-grid),
-    linear-gradient(135deg, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
-  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
-  pointer-events: none;
-}
-
-:root[data-theme='light'] .cta-section::before {
-  background:
-    var(--gw-dot-grid),
-    linear-gradient(135deg, rgba(22, 163, 74, 0.03) 0%, transparent 50%);
-  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
-}
-
-.cta-link {
-  position: relative;
-  z-index: 1;
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--sl-color-accent);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.cta-link:hover {
-  color: var(--sl-color-accent-high);
+@media (max-width: 50rem) {
+  .header {
+    gap: 0.5rem;
+  }
+  .header .right-group {
+    gap: 0.5rem;
+  }
+  .header .social-icons::after {
+    display: none;
+  }
 }
 
 /* ============================================
