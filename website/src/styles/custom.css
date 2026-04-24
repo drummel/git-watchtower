@@ -108,17 +108,13 @@ body::after {
    Hero Section
    ============================================ */
 
-/* The hero lives inside Starlight's .sl-container, which caps content
-   at ~45rem for readable body text. The hero wants to be wider than
-   that, so we let it break out to the viewport while the rest of the
-   page content stays in its normal container. */
+/* Starlight's default .hero uses grid-template-columns: 7fr 4fr at
+   50rem+ to reserve a column for a hero image. We don't have one, so
+   that 4fr column shows up as empty space on the right. Collapse it
+   to a single column so the copy centers inside the content panel. */
 .hero {
   position: relative;
-  margin-inline: calc(50% - 50vw);
-  width: 100vw;
-  max-width: 100vw;
-  box-sizing: border-box;
-  padding: 2.5rem 1.5rem 3rem;
+  padding-block: 2.5rem 2rem;
 }
 
 .hero > * {
@@ -126,109 +122,117 @@ body::after {
   z-index: 1;
 }
 
-/* Desktop: two real columns (copy left, actions right), centered
-   inside the full-bleed hero at a comfortable reading width. */
 @media (min-width: 50rem) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
   .hero .stack {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
-    gap: 4rem;
-    align-items: center;
-    width: 100%;
-    max-width: 1100px;
-    margin-inline: auto;
+    text-align: center;
   }
-
   .hero .copy {
-    grid-column: 1;
-    min-width: 0;
-  }
-
-  .hero .actions {
-    grid-column: 2;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.65rem;
-    width: 100%;
+    align-items: center;
   }
 }
 
 /* ============================================
-   Hero Buttons
+   Hero Actions (separate container below the hero)
    ============================================ */
 
-.hero .sl-link-button {
-  display: inline-flex;
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 0.75rem;
+  margin-block: 0 2.5rem;
+}
+
+.hero-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 170px;
+  padding: 0.7rem 1.3rem;
   border-radius: 8px;
+  font-family: var(--sl-font);
+  font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.01em;
-  padding: 0.7rem 1.4rem;
-  font-size: 0.95rem;
-  width: 100%;
+  text-decoration: none;
+  border: 1px solid var(--sl-color-gray-5);
+  background: transparent;
+  color: var(--sl-color-white);
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
-    box-shadow 0.2s ease,
+    color 0.15s ease,
     transform 0.1s ease,
-    color 0.15s ease;
+    box-shadow 0.2s ease;
 }
 
-/* Mobile: stacked buttons with generous side breathing room so they
-   don't run edge-to-edge, and a cap so they stay readable on tablets. */
-@media (max-width: 50rem) {
-  .hero .actions {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.6rem;
-    padding-inline: 2.25rem;
-    max-width: 420px;
-    margin-inline: auto;
-    width: 100%;
-  }
-  .hero .sl-link-button {
-    width: 100%;
-  }
+:root[data-theme='light'] .hero-btn {
+  color: var(--sl-color-black);
 }
 
-/* Primary = green */
-.hero .sl-link-button.primary {
+.hero-btn:hover {
+  border-color: rgba(92, 234, 92, 0.55);
+  background: rgba(92, 234, 92, 0.06);
+  color: var(--sl-color-accent-high);
+}
+
+:root[data-theme='light'] .hero-btn:hover {
+  color: var(--sl-color-accent);
+}
+
+.hero-btn--primary {
   background: var(--sl-color-accent);
   color: #052e16;
-  border: 1px solid transparent;
-  box-shadow:
-    0 0 0 0 rgba(92, 234, 92, 0.45),
-    0 4px 16px -6px rgba(92, 234, 92, 0.6);
+  border-color: transparent;
+  box-shadow: 0 4px 16px -6px rgba(92, 234, 92, 0.55);
 }
 
-.hero .sl-link-button.primary:hover {
+.hero-btn--primary:hover {
   background: #16a34a;
+  color: #052e16;
+  border-color: transparent;
   box-shadow:
     0 0 0 3px rgba(92, 234, 92, 0.18),
     0 6px 22px -8px rgba(92, 234, 92, 0.7);
   transform: translateY(-1px);
 }
 
-:root[data-theme='light'] .hero .sl-link-button.primary {
-  color: #052e16;
+.hero-btn-arrow {
+  transition: transform 0.15s ease;
 }
 
-.hero .sl-link-button:not(.primary) {
-  background: transparent;
-  color: var(--sl-color-gray-2, var(--sl-color-white));
-  border: 1px solid var(--sl-color-gray-5);
+.hero-btn--primary:hover .hero-btn-arrow {
+  transform: translateX(3px);
 }
 
-.hero .sl-link-button:not(.primary):hover {
-  border-color: rgba(92, 234, 92, 0.5);
-  background: rgba(92, 234, 92, 0.05);
-  color: var(--sl-color-accent-high);
+.hero-btn-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
 }
 
-:root[data-theme='light'] .hero .sl-link-button:not(.primary):hover {
-  color: var(--sl-color-accent);
+.hero-btn:hover .hero-btn-icon {
+  opacity: 1;
+}
+
+/* Mobile: stack buttons full-width inside a padded container so they
+   don't run edge-to-edge. */
+@media (max-width: 50rem) {
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding-inline: 2rem;
+    max-width: 420px;
+    margin-inline: auto;
+  }
+  .hero-btn {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 /* ============================================

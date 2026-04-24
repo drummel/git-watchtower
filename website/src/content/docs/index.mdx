@@ -5,24 +5,26 @@ template: splash
 hero:
   title: Keep tabs on your <br/> AI coding agents.
   tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents."
-  actions:
-    - text: Get Started
-      link: /guides/quick-start/
-      icon: right-arrow
-      variant: primary
-    - text: View on GitHub
-      link: https://github.com/drummel/git-watchtower
-      icon: external
-      variant: minimal
-    - text: View on NPM
-      link: https://www.npmjs.com/package/git-watchtower
-      icon: external
-      variant: minimal
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import InstallCommand from '../../components/InstallCommand.astro';
 import DownloadsBadge from '../../components/DownloadsBadge.astro';
+
+<div class="hero-actions">
+  <a href="/guides/quick-start/" class="hero-btn hero-btn--primary">
+    Get Started
+    <span class="hero-btn-arrow" aria-hidden="true">→</span>
+  </a>
+  <a href="https://github.com/drummel/git-watchtower" class="hero-btn">
+    View on GitHub
+    <svg class="hero-btn-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M14 4h6v6M20 4l-8 8M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </a>
+  <a href="https://www.npmjs.com/package/git-watchtower" class="hero-btn">
+    View on NPM
+    <svg class="hero-btn-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M14 4h6v6M20 4l-8 8M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </a>
+</div>
 
 <InstallCommand />
 
