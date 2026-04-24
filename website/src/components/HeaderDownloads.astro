@@ -52,13 +52,16 @@ const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.35rem 0.75rem;
+    padding: 0.4rem 0.8rem;
     border-radius: 999px;
-    border: 1px solid rgba(74, 222, 128, 0.3);
-    background: rgba(74, 222, 128, 0.06);
-    color: var(--sl-color-white);
+    border: 1px solid rgba(74, 222, 128, 0.45);
+    background: rgba(10, 15, 12, 0.65);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #e6edf3;
     font-family: var(--sl-font);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
+    font-weight: 500;
     line-height: 1;
     text-decoration: none;
     opacity: 0;
@@ -74,15 +77,20 @@ const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
   }
 
   :root[data-theme='light'] .gw-header-downloads {
-    color: var(--sl-color-black);
-    background: rgba(22, 163, 74, 0.08);
-    border-color: rgba(22, 163, 74, 0.3);
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(22, 163, 74, 0.5);
   }
 
   .gw-header-downloads:hover {
-    border-color: rgba(74, 222, 128, 0.6);
-    background: rgba(74, 222, 128, 0.12);
+    border-color: rgba(74, 222, 128, 0.8);
+    background: rgba(10, 15, 12, 0.8);
     transform: translateY(-1px);
+  }
+
+  :root[data-theme='light'] .gw-header-downloads:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(22, 163, 74, 0.7);
   }
 
   .gw-hd-icon {
@@ -110,16 +118,16 @@ const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
   .gw-hd-num {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    color: var(--sl-color-accent);
+    color: #4ade80;
     letter-spacing: -0.01em;
   }
 
   :root[data-theme='light'] .gw-hd-num {
-    color: var(--sl-color-accent-high);
+    color: #15803d;
   }
 
   .gw-hd-label {
-    opacity: 0.75;
+    color: inherit;
   }
 
   @keyframes gw-hd-slide {

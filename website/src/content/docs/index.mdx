@@ -23,7 +23,6 @@ hero:
 import { Card, CardGrid } from '@astrojs/starlight/components';
 import InstallCommand from '../../components/InstallCommand.astro';
 import DownloadsBadge from '../../components/DownloadsBadge.astro';
-import TerminalCTA from '../../components/TerminalCTA.astro';
 
 <InstallCommand />
 
@@ -109,7 +108,12 @@ npx git-watchtower
 
 On first run, you'll be guided through a configuration wizard.
 
-<TerminalCTA />
+<div class="docs-cta">
+  <a href="/guides/quick-start/" class="docs-cta-button">
+    Read the full documentation
+    <span class="docs-cta-arrow" aria-hidden="true">→</span>
+  </a>
+</div>
 
 <div style="text-align: center; margin-top: 6rem;">
   <a href="/casino/" class="casino-link">🎰</a>

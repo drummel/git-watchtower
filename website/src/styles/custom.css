@@ -471,6 +471,56 @@ body::after {
 }
 
 /* ============================================
+   Docs CTA Button
+   ============================================ */
+
+.docs-cta {
+  text-align: center;
+  margin-block: 4.5rem 1rem;
+}
+
+.docs-cta-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.6rem;
+  background: var(--sl-color-accent);
+  color: #052e16;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 16px -6px rgba(74, 222, 128, 0.55);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.2s ease,
+    transform 0.1s ease;
+}
+
+.docs-cta-button:hover {
+  background: #16a34a;
+  box-shadow:
+    0 0 0 3px rgba(74, 222, 128, 0.18),
+    0 6px 22px -8px rgba(74, 222, 128, 0.7);
+  transform: translateY(-1px);
+  color: #052e16;
+}
+
+.docs-cta-button:active {
+  transform: translateY(0);
+}
+
+.docs-cta-arrow {
+  transition: transform 0.15s ease;
+}
+
+.docs-cta-button:hover .docs-cta-arrow {
+  transform: translateX(3px);
+}
+
+/* ============================================
    Screenshots
    ============================================ */
 
