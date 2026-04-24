@@ -6,11 +6,11 @@
 
 :root {
   --sl-color-accent-low: #0c1f17;
-  --sl-color-accent: #4ade80;
+  --sl-color-accent: #5cea5c;
   --sl-color-accent-high: #bbf7d0;
   --sl-font-system-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
-  --gw-glow: rgba(74, 222, 128, 0.08);
+  --gw-glow: rgba(92, 234, 92, 0.08);
   --gw-border: var(--sl-color-gray-5);
 
   --gw-dot-color: rgba(255, 255, 255, 0.03);
@@ -46,7 +46,7 @@ body::before {
   height: 600px;
   background: radial-gradient(
     ellipse 60% 50% at 50% 0%,
-    rgba(74, 222, 128, 0.05) 0%,
+    rgba(92, 234, 92, 0.05) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -108,6 +108,16 @@ body::after {
    Hero Section
    ============================================ */
 
+/* Splash pages: widen the content container and always center it.
+   Starlight's .sl-container only auto-centers above 72rem viewport and
+   is capped at --sl-content-width (~45rem), which leaves the hero
+   left-biased on medium/large screens. Breaking out by targeting the
+   container that holds the hero. */
+.sl-container:has(> .hero) {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
 .hero {
   position: relative;
   padding-block: 2.5rem 3rem;
@@ -118,17 +128,16 @@ body::after {
   z-index: 1;
 }
 
-/* On desktop: split copy (left) and actions stack (right), but keep the
-   whole thing inside the same constrained content container as the
-   heading — no drifting out to the page edge. */
+/* On desktop: split copy (left) and actions stack (right), centered
+   within a comfortable reading width. */
 @media (min-width: 50rem) {
   .hero .stack {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 2.5rem;
+    gap: 3rem;
     align-items: center;
     width: 100%;
-    max-width: 920px;
+    max-width: 960px;
     margin-inline: auto;
   }
 
@@ -192,15 +201,15 @@ body::after {
   color: #052e16;
   border: 1px solid transparent;
   box-shadow:
-    0 0 0 0 rgba(74, 222, 128, 0.45),
-    0 4px 16px -6px rgba(74, 222, 128, 0.6);
+    0 0 0 0 rgba(92, 234, 92, 0.45),
+    0 4px 16px -6px rgba(92, 234, 92, 0.6);
 }
 
 .hero .sl-link-button.primary:hover {
   background: #16a34a;
   box-shadow:
-    0 0 0 3px rgba(74, 222, 128, 0.18),
-    0 6px 22px -8px rgba(74, 222, 128, 0.7);
+    0 0 0 3px rgba(92, 234, 92, 0.18),
+    0 6px 22px -8px rgba(92, 234, 92, 0.7);
   transform: translateY(-1px);
 }
 
@@ -215,8 +224,8 @@ body::after {
 }
 
 .hero .sl-link-button:not(.primary):hover {
-  border-color: rgba(74, 222, 128, 0.5);
-  background: rgba(74, 222, 128, 0.05);
+  border-color: rgba(92, 234, 92, 0.5);
+  background: rgba(92, 234, 92, 0.05);
   color: var(--sl-color-accent-high);
 }
 
@@ -239,7 +248,7 @@ body::after {
   inset: -3rem -2rem;
   background: radial-gradient(
     ellipse 60% 50% at 50% 50%,
-    rgba(74, 222, 128, 0.025) 0%,
+    rgba(92, 234, 92, 0.025) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -270,7 +279,7 @@ body::after {
   height: 140px;
   background: radial-gradient(
     circle at 0% 0%,
-    rgba(74, 222, 128, 0.06) 0%,
+    rgba(92, 234, 92, 0.06) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -308,8 +317,8 @@ body::after {
 }
 
 .card:hover {
-  border-color: rgba(74, 222, 128, 0.15);
-  box-shadow: 0 2px 20px rgba(74, 222, 128, 0.04);
+  border-color: rgba(92, 234, 92, 0.15);
+  box-shadow: 0 2px 20px rgba(92, 234, 92, 0.04);
 }
 
 :root[data-theme='light'] .card:hover {
@@ -359,7 +368,7 @@ body::after {
   position: absolute;
   inset: -7px;
   border-radius: 15px;
-  border: 1.5px solid rgba(74, 222, 128, 0.35);
+  border: 1.5px solid rgba(92, 234, 92, 0.35);
   pointer-events: none;
   z-index: -1;
   animation: gw-install-glow 3.2s ease-in-out infinite;
@@ -368,31 +377,31 @@ body::after {
 @keyframes gw-install-glow {
   0%,
   100% {
-    border-color: rgba(74, 222, 128, 0.28);
+    border-color: rgba(92, 234, 92, 0.28);
     box-shadow:
-      0 0 0 0 rgba(74, 222, 128, 0),
-      0 0 18px -2px rgba(74, 222, 128, 0.12);
+      0 0 0 0 rgba(92, 234, 92, 0),
+      0 0 18px -2px rgba(92, 234, 92, 0.12);
   }
   50% {
-    border-color: rgba(74, 222, 128, 0.7);
+    border-color: rgba(92, 234, 92, 0.7);
     box-shadow:
-      0 0 0 1px rgba(74, 222, 128, 0.08),
-      0 0 28px 2px rgba(74, 222, 128, 0.28);
+      0 0 0 1px rgba(92, 234, 92, 0.08),
+      0 0 28px 2px rgba(92, 234, 92, 0.28);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .install-command-inner::before {
     animation: none;
-    border-color: rgba(74, 222, 128, 0.4);
+    border-color: rgba(92, 234, 92, 0.4);
   }
 }
 
 .install-command-inner:hover {
-  border-color: rgba(74, 222, 128, 0.6);
+  border-color: rgba(92, 234, 92, 0.6);
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 6px 28px -8px rgba(74, 222, 128, 0.3);
+    0 6px 28px -8px rgba(92, 234, 92, 0.3);
 }
 
 .install-command-inner:active {
@@ -405,7 +414,7 @@ body::after {
 }
 
 .install-prompt {
-  color: #4ade80;
+  color: #5cea5c;
   font-family: var(--sl-font-system-mono);
   font-weight: 600;
   font-size: 1rem;
@@ -438,8 +447,8 @@ body::after {
 }
 
 .install-command-inner:hover .install-copy {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.1);
+  color: #5cea5c;
+  background: rgba(92, 234, 92, 0.1);
 }
 
 .install-copy svg {
@@ -453,8 +462,8 @@ body::after {
 }
 
 .install-command-inner.is-copied .install-copy {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.18);
+  color: #5cea5c;
+  background: rgba(92, 234, 92, 0.18);
 }
 
 .install-command-inner.is-copied .install-copy-default {
@@ -492,7 +501,7 @@ body::after {
   letter-spacing: 0.01em;
   text-decoration: none;
   border: 1px solid transparent;
-  box-shadow: 0 4px 16px -6px rgba(74, 222, 128, 0.55);
+  box-shadow: 0 4px 16px -6px rgba(92, 234, 92, 0.55);
   transition:
     background-color 0.15s ease,
     box-shadow 0.2s ease,
@@ -502,8 +511,8 @@ body::after {
 .docs-cta-button:hover {
   background: #16a34a;
   box-shadow:
-    0 0 0 3px rgba(74, 222, 128, 0.18),
-    0 6px 22px -8px rgba(74, 222, 128, 0.7);
+    0 0 0 3px rgba(92, 234, 92, 0.18),
+    0 6px 22px -8px rgba(92, 234, 92, 0.7);
   transform: translateY(-1px);
   color: #052e16;
 }
