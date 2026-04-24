@@ -3,7 +3,7 @@ title: Git Watchtower
 description: Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.
 template: splash
 hero:
-  title: Keep tabs on your <br/> AI coding agents.
+  title: Keep up with your <br class="hero-mobile-br"/>AI coding agents.
   tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents."
 ---
 
@@ -11,9 +11,15 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 import InstallCommand from '../../components/InstallCommand.astro';
 import DownloadsBadge from '../../components/DownloadsBadge.astro';
 
+<InstallCommand />
+
+<div class="downloads-badge-wrap">
+  <DownloadsBadge />
+</div>
+
 <div class="hero-actions">
   <a href="/guides/quick-start/" class="hero-btn hero-btn--primary">
-    Get Started
+    Quick Start
     <span class="hero-btn-arrow" aria-hidden="true">→</span>
   </a>
   <a href="https://github.com/drummel/git-watchtower" class="hero-btn">
@@ -24,12 +30,6 @@ import DownloadsBadge from '../../components/DownloadsBadge.astro';
     View on NPM
     <svg class="hero-btn-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M14 4h6v6M20 4l-8 8M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </a>
-</div>
-
-<InstallCommand />
-
-<div class="downloads-badge-wrap">
-  <DownloadsBadge />
 </div>
 
 ## Why Git Watchtower?

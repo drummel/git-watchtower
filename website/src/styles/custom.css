@@ -161,7 +161,7 @@ body::after {
   text-decoration: none;
   border: 1px solid var(--sl-color-gray-5);
   background: transparent;
-  color: var(--sl-color-white);
+  color: #e6edf3;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease,
@@ -171,7 +171,8 @@ body::after {
 }
 
 :root[data-theme='light'] .hero-btn {
-  color: var(--sl-color-black);
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.2);
 }
 
 .hero-btn:hover {
@@ -581,14 +582,73 @@ body::after {
    ============================================ */
 
 .casino-link {
-  opacity: 0.12;
-  font-size: 0.7rem;
+  opacity: 0.27;
+  font-size: 1.05rem;
   transition: opacity 0.3s ease;
   text-decoration: none;
+  display: inline-block;
 }
 
 .casino-link:hover {
   opacity: 1;
+}
+
+/* ============================================
+   Responsive tweaks
+   ============================================ */
+
+/* Hero title: mobile-only <br> */
+.hero-mobile-br {
+  display: none;
+}
+@media (max-width: 50rem) {
+  .hero-mobile-br {
+    display: initial;
+  }
+}
+
+/* Mobile: shrink the install command so the full string fits on one
+   line on small viewports; hide the copy icon (tap-and-hold to copy on
+   touch devices). */
+@media (max-width: 30rem) {
+  .install-command-inner {
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+  }
+  .install-prompt {
+    font-size: 0.85rem;
+  }
+  .install-text {
+    font-size: 0.78rem;
+    letter-spacing: -0.01em;
+  }
+  .install-copy {
+    display: none;
+  }
+  .install-command-inner {
+    cursor: default;
+  }
+}
+
+/* Mobile: collapse the theme select to just its caret (still tappable
+   to open the dark/light/auto dropdown). */
+@media (max-width: 50rem) {
+  starlight-theme-select .label-icon {
+    display: none;
+  }
+  starlight-theme-select select {
+    color: transparent;
+    width: 1.5rem;
+    padding-inline: 0.25rem;
+  }
+  starlight-theme-select label {
+    --sl-select-width: 0;
+    gap: 0;
+  }
+  starlight-theme-select .caret {
+    position: static;
+    transform: none;
+  }
 }
 
 /* ============================================
