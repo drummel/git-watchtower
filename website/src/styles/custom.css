@@ -595,13 +595,12 @@ body::after {
 }
 
 .casino-gif {
-  margin-block: 1.5rem 2rem;
-  display: flex;
-  justify-content: center;
+  margin-block: 1.75rem 2rem;
 }
 
 .casino-gif img {
-  max-width: min(100%, 560px);
+  display: block;
+  width: 100%;
   height: auto;
   border-radius: 10px;
   border: 1px solid var(--gw-border);
