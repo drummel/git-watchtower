@@ -33,6 +33,7 @@ Settings are saved to `.watchtowerrc.json` in your project directory.
 | `gitPollInterval` | How often to check for git updates (1000-300000ms) | `5000` |
 | `soundEnabled` | Audio alerts for updates | `true` |
 | `visibleBranches` | Number of branches shown in list (1-50) | `7` |
+| `casinoMode` | Enable [casino mode](/casino/) | `false` |
 
 ### Example Configuration
 
@@ -89,6 +90,7 @@ All settings can be overridden from the command line:
 | `--sound` | Enable sound notifications (default) |
 | `--no-sound` | Disable sound notifications |
 | `--visible-branches <n>` | Number of branches to display (default: 7) |
+| `--casino` | Enable [casino mode](/casino/) |
 
 ### Web Dashboard
 
