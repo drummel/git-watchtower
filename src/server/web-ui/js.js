@@ -40,6 +40,8 @@ function getDashboardJs() {
   // from the server-pushed 'state' above.
   const ui = {
     prevBranches: null,
+    prevPollingStatus: 'idle',
+    prevCasinoEnabled: false,
     selectedIndex: 0,
     searchMode: false,
     searchQuery: '',
@@ -59,6 +61,35 @@ function getDashboardJs() {
     updateNotificationShown: false,
     remoteTabPollTimer: null,
   };
+
+  // Casino mode client state. Kept separate so it can be fully torn down
+  // on disable without touching unrelated UI state.
+  const casino = {
+    reelSpinTimer: null,
+    reelFrame: 0,
+    reelResultClearTimer: null,
+    winFlashTimer: null,
+    winFlashFrames: 0,
+    lossFlashTimer: null,
+    lossFlashFrames: 0,
+    lastTotalPollsWithUpdates: null,
+  };
+  const CASINO_SYMBOLS = ['\u{1f352}','\u{1f34b}','\u{1f34a}','\u{1f347}','\u{1f514}','\u{1f48e}','7⃣','\u{1f3b0}'];
+  const CASINO_WIN_LEVELS = [
+    { key: 'small',   min: 1,    max: 49,    label: '✨ WIN',        color: '#3fb950' },
+    { key: 'medium',  min: 50,   max: 199,   label: '\u{1f389} NICE WIN!', color: '#ffd400' },
+    { key: 'large',   min: 200,  max: 499,   label: '\u{1f525} BIG WIN!',  color: '#ff9a00' },
+    { key: 'huge',    min: 500,  max: 999,   label: '\u{1f4a5} HUGE WIN!', color: '#bc8cff' },
+    { key: 'jackpot', min: 1000, max: 4999,  label: '\u{1f4b0} JACKPOT! \u{1f4b0}', color: '#29d4ff' },
+    { key: 'mega',    min: 5000, max: Infinity, label: '\u{1f3b0} MEGA JACKPOT!!! \u{1f3b0}', color: '#ff2d2d' },
+  ];
+  function getCasinoWinLevel(totalLines) {
+    for (let i = 0; i < CASINO_WIN_LEVELS.length; i++) {
+      const lvl = CASINO_WIN_LEVELS[i];
+      if (totalLines >= lvl.min && totalLines <= lvl.max) return lvl;
+    }
+    return null;
+  }
 
   // ── Persistent Preferences (localStorage) ─────────────────────
   const PREFS_KEY = 'git-watchtower-prefs';
@@ -218,7 +249,12 @@ function getDashboardJs() {
             diffBranchesForNotifications(state.branches, newState.branches || []);
           }
           ui.prevBranches = state ? state.branches : null;
+          // Casino effects key off the edge between two SSE frames — grab
+          // the transition BEFORE the new state replaces the old.
+          const prevBranchesForCasino = state ? state.branches : null;
           state = newState;
+          onStateTransition(newState, prevBranchesForCasino);
+          ui.prevPollingStatus = newState.pollingStatus;
         } else {
           if (state) {
             state.projects = newState.projects;
@@ -476,6 +512,200 @@ ${pureFnBlock}
     });
   };
 
+  // ── Casino Mode ────────────────────────────────────────────────
+  // The terminal drives reel/win animations from server-side timers; in
+  // the browser we drive them off state transitions instead. That lets us
+  // avoid pushing a frame-by-frame stream over SSE and keeps effects local
+  // to each connected client.
+
+  function casinoCleanup() {
+    if (casino.reelSpinTimer) { clearInterval(casino.reelSpinTimer); casino.reelSpinTimer = null; }
+    if (casino.reelResultClearTimer) { clearTimeout(casino.reelResultClearTimer); casino.reelResultClearTimer = null; }
+    if (casino.winFlashTimer) { clearInterval(casino.winFlashTimer); casino.winFlashTimer = null; }
+    if (casino.lossFlashTimer) { clearInterval(casino.lossFlashTimer); casino.lossFlashTimer = null; }
+    casino.winFlashFrames = 0;
+    casino.lossFlashFrames = 0;
+    const reels = document.getElementById('casino-reels');
+    if (reels) reels.className = 'casino-reels';
+    const win = document.getElementById('casino-win-overlay');
+    if (win) win.className = 'casino-overlay';
+    const loss = document.getElementById('casino-loss-overlay');
+    if (loss) loss.className = 'casino-overlay loss';
+  }
+
+  function casinoSetReelSymbol(idx, emoji) {
+    const el = document.querySelector('.casino-reel[data-reel="' + idx + '"]');
+    if (el) el.textContent = emoji;
+  }
+
+  function casinoStartSpinning() {
+    if (casino.reelSpinTimer) return;
+    if (casino.reelResultClearTimer) {
+      clearTimeout(casino.reelResultClearTimer);
+      casino.reelResultClearTimer = null;
+    }
+    const reels = document.getElementById('casino-reels');
+    if (!reels) return;
+    reels.className = 'casino-reels active spinning';
+    const label = document.getElementById('casino-reel-label');
+    if (label) label.textContent = '';
+    casino.reelSpinTimer = setInterval(() => {
+      casino.reelFrame++;
+      for (let i = 0; i < 5; i++) {
+        const idx = (casino.reelFrame + i * 3) % CASINO_SYMBOLS.length;
+        casinoSetReelSymbol(i, CASINO_SYMBOLS[idx]);
+      }
+    }, 100);
+  }
+
+  function casinoStopSpinning(hadUpdates, totalLines) {
+    if (casino.reelSpinTimer) { clearInterval(casino.reelSpinTimer); casino.reelSpinTimer = null; }
+    const reels = document.getElementById('casino-reels');
+    const label = document.getElementById('casino-reel-label');
+    if (!reels || !label) return;
+    const winLevel = hadUpdates ? getCasinoWinLevel(totalLines || 1) : null;
+
+    if (hadUpdates && winLevel) {
+      const isJackpot = winLevel.key === 'jackpot' || winLevel.key === 'mega';
+      const sym = isJackpot ? '7⃣' : CASINO_SYMBOLS[Math.floor(Math.random() * (CASINO_SYMBOLS.length - 1))];
+      for (let i = 0; i < 5; i++) casinoSetReelSymbol(i, sym);
+      reels.className = 'casino-reels active result win';
+      label.textContent = winLevel.label.replace(/^[^A-Z0-9]+/, '').trim() || 'WIN';
+      label.style.color = winLevel.color;
+      // Fire the centered banner.
+      casinoTriggerWin(winLevel);
+      // Let the flashing linger a beat, then settle.
+      casino.reelResultClearTimer = setTimeout(() => {
+        casino.reelResultClearTimer = null;
+        reels.className = 'casino-reels';
+      }, isJackpot ? 4000 : 2400);
+    } else {
+      // No updates — show a random losing line and auto-fade.
+      for (let i = 0; i < 5; i++) {
+        casinoSetReelSymbol(i, CASINO_SYMBOLS[(casino.reelFrame + i * 3) % CASINO_SYMBOLS.length]);
+      }
+      reels.className = 'casino-reels active result';
+      label.textContent = '\u{1f634} NOTHING';
+      label.style.color = '#8b949e';
+      casino.reelResultClearTimer = setTimeout(() => {
+        casino.reelResultClearTimer = null;
+        reels.className = 'casino-reels';
+      }, 2000);
+    }
+  }
+
+  function casinoTriggerWin(winLevel) {
+    const overlay = document.getElementById('casino-win-overlay');
+    if (!overlay) return;
+    overlay.textContent = winLevel.label;
+    overlay.className = 'casino-overlay active level-' + winLevel.key;
+    if (casino.winFlashTimer) clearInterval(casino.winFlashTimer);
+    casino.winFlashFrames = 0;
+    const maxFrames = (winLevel.key === 'jackpot' || winLevel.key === 'mega') ? 30 : 16;
+    casino.winFlashTimer = setInterval(() => {
+      casino.winFlashFrames++;
+      if (casino.winFlashFrames >= maxFrames) {
+        clearInterval(casino.winFlashTimer);
+        casino.winFlashTimer = null;
+        overlay.className = 'casino-overlay';
+      }
+    }, 120);
+  }
+
+  function casinoTriggerLoss(message) {
+    const overlay = document.getElementById('casino-loss-overlay');
+    if (!overlay) return;
+    overlay.textContent = '\u{1f480} ' + (message || 'BUST!') + ' \u{1f480}';
+    overlay.className = 'casino-overlay loss active';
+    if (casino.lossFlashTimer) clearInterval(casino.lossFlashTimer);
+    casino.lossFlashFrames = 0;
+    casino.lossFlashTimer = setInterval(() => {
+      casino.lossFlashFrames++;
+      if (casino.lossFlashFrames >= 12) {
+        clearInterval(casino.lossFlashTimer);
+        casino.lossFlashTimer = null;
+        overlay.className = 'casino-overlay loss';
+      }
+    }, 130);
+  }
+
+  // Sum up the line churn from branches that just transitioned to
+  // justUpdated. Mirrors how the terminal decides a poll was a "win".
+  function casinoMeasureUpdate(prevBranches, newBranches, newAheadBehind) {
+    if (!newBranches) return { hadUpdates: false, totalLines: 0 };
+    const prevMap = {};
+    if (prevBranches) {
+      for (let i = 0; i < prevBranches.length; i++) prevMap[prevBranches[i].name] = prevBranches[i];
+    }
+    let hadUpdates = false;
+    let totalLines = 0;
+    for (let i = 0; i < newBranches.length; i++) {
+      const nb = newBranches[i];
+      const ob = prevMap[nb.name];
+      const transitioned = nb.justUpdated && (!ob || !ob.justUpdated);
+      if (transitioned) {
+        hadUpdates = true;
+        const ab = newAheadBehind ? newAheadBehind[nb.name] : null;
+        if (ab) totalLines += (ab.linesAdded || 0) + (ab.linesDeleted || 0);
+      }
+    }
+    return { hadUpdates, totalLines };
+  }
+
+  function renderCasinoStats() {
+    const panel = document.getElementById('casino-stats-panel');
+    if (!panel) return;
+    const cs = state && state.casinoStats;
+    if (!cs) { panel.innerHTML = ''; return; }
+    const netClass = cs.netWinnings >= 0 ? 'pos' : 'neg';
+    const netSign = cs.netWinnings >= 0 ? '+' : '';
+    let html = '<div class="cstats-title">\u{1f3b0} CASINO WINNINGS \u{1f3b0}</div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4dd} Line Changes</span><span class="cstats-v"><span class="pos">+' + (cs.totalLinesAdded || 0) + '</span> / <span class="neg">-' + (cs.totalLinesDeleted || 0) + '</span> = <span class="gold">$' + (cs.totalLines || 0) + '</span></span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4b8} Poll Cost</span><span class="cstats-v neg">$' + (cs.totalPolls || 0) + '</span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4b0} Net Earnings</span><span class="cstats-v ' + netClass + '">' + netSign + '$' + (cs.netWinnings || 0) + '</span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f3b0} House Edge</span><span class="cstats-v neon">' + (cs.houseEdge || 0) + '%</span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f60e} Vibes</span><span class="cstats-v">' + escHtml(cs.vibesQuality || '') + '</span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f3b2} Luck</span><span class="cstats-v gold">' + (cs.luckMeter || 0) + '%</span></div>';
+    html += '<div class="cstats-row"><span class="cstats-k">\u{1f9e0} Dopamine Hits</span><span class="cstats-v pos">' + (cs.dopamineHits || 0) + '</span></div>';
+    if (cs.consecutivePolls > 1) {
+      html += '<div class="cstats-row"><span class="cstats-k">\u{1f525} Streak</span><span class="cstats-v gold">' + cs.consecutivePolls + 'x</span></div>';
+    }
+    html += '<div class="cstats-row"><span class="cstats-k">⏱ Session</span><span class="cstats-v">' + escHtml(cs.sessionDuration || '') + '</span></div>';
+    panel.innerHTML = html;
+  }
+
+  // Apply/tear down casino mode based on state.casinoModeEnabled.
+  function reconcileCasinoMode() {
+    if (!state) return;
+    const enabled = !!state.casinoModeEnabled;
+    document.body.classList.toggle('casino-active', enabled);
+    if (!enabled) {
+      if (ui.prevCasinoEnabled) {
+        casinoCleanup();
+        ui.prevCasinoEnabled = false;
+      }
+      return;
+    }
+    ui.prevCasinoEnabled = true;
+    renderCasinoStats();
+  }
+
+  // Drive reel spin/stop from the polling status transition, and fire win
+  // effects when new updates land. Called from the SSE state handler so
+  // we see each edge exactly once.
+  function onStateTransition(newState, prevBranches) {
+    if (!newState.casinoModeEnabled) return;
+    const prevStatus = ui.prevPollingStatus;
+    const newStatus = newState.pollingStatus;
+    if (newStatus === 'fetching' && prevStatus !== 'fetching') {
+      casinoStartSpinning();
+    } else if (prevStatus === 'fetching' && newStatus !== 'fetching') {
+      const { hadUpdates, totalLines } = casinoMeasureUpdate(prevBranches, newState.branches, newState.aheadBehindCache);
+      casinoStopSpinning(hadUpdates, totalLines);
+    }
+    if (newState.hasMergeConflict) casinoTriggerLoss('MERGE CONFLICT!');
+  }
+
   // ── Render ─────────────────────────────────────────────────────
   function render() {
     if (!state) return;
@@ -510,7 +740,9 @@ ${pureFnBlock}
     renderBranches();
     renderActivityLog();
     renderSessionStats();
+    renderSessionStatsCard();
     renderPrefsBar();
+    reconcileCasinoMode();
 
     // Auto-show update notification (once per session)
     if (state.updateAvailable && !ui.updateNotificationShown && !anyModalOpen()) {
@@ -1012,6 +1244,33 @@ ${pureFnBlock}
     }
     html += '<span class="stat-item"><span class="stat-label">Active:</span> <span class="stat-value">' + activeBranches + '</span> <span class="stat-label">Stale:</span> <span class="stat-value">' + staleBranches + '</span></span>';
     bar.innerHTML = html;
+  }
+
+  // ── Session Stats Card (sidebar) ───────────────────────────────
+  // Lives at the top of the activity log. Real, grounded numbers the
+  // dashboard always shows — not dependent on casino mode.
+  function renderSessionStatsCard() {
+    const card = document.getElementById('session-stats-card');
+    if (!card) return;
+    const s = state && state.sessionStats;
+    if (!s) { card.innerHTML = ''; return; }
+    const branches = (state && state.branches) || [];
+    let activeCount = 0;
+    let staleCount = 0;
+    for (let i = 0; i < branches.length; i++) {
+      const b = branches[i];
+      if (b.justUpdated || b.name === state.currentBranch) activeCount++;
+      else staleCount++;
+    }
+    let html = '';
+    html += '<span class="stat-k">Session</span><span class="stat-v">' + escHtml(s.sessionDuration || '0m') + '</span>';
+    html += '<span class="stat-k">Lines</span><span class="stat-v"><span class="added">+' + fmtCompact(s.linesAdded || 0) + '</span> <span class="sep">/</span> <span class="deleted">-' + fmtCompact(s.linesDeleted || 0) + '</span></span>';
+    html += '<span class="stat-k">Polls</span><span class="stat-v">' + (s.totalPolls || 0) + ' <span class="sep">·</span> <span class="accent">' + (s.hitRate || 0) + '%</span> hit</span>';
+    if (s.lastUpdate) {
+      html += '<span class="stat-k">Last hit</span><span class="stat-v">' + escHtml(s.lastUpdate) + '</span>';
+    }
+    html += '<span class="stat-k">Branches</span><span class="stat-v">' + activeCount + ' <span class="sep">active</span> <span class="sep">·</span> ' + staleCount + ' <span class="sep">stale</span></span>';
+    card.innerHTML = html;
   }
 
   // ── Error Toast with Stash Hint ────────────────────────────────

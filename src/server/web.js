@@ -14,6 +14,7 @@ const http = require('http');
 const { getWebDashboardHtml } = require('./web-ui');
 const { version: PACKAGE_VERSION } = require('../../package.json');
 const sessionStats = require('../stats/session');
+const casino = require('../casino');
 
 /**
  * Default web dashboard port
@@ -122,6 +123,13 @@ class WebDashboardServer {
 
       // UI
       soundEnabled: s.soundEnabled,
+      casinoModeEnabled: s.casinoModeEnabled,
+      // Casino stats track server-side regardless of which surface toggled
+      // the mode on, so the web dashboard can render the same winnings box
+      // the terminal does. Null when disabled — keeps payload small and
+      // avoids ticking Math.random()/Date.now() into every SSE push when
+      // nobody's asked for the effect.
+      casinoStats: s.casinoModeEnabled ? casino.getStats() : null,
       projectName: s.projectName,
 
       // Activity
