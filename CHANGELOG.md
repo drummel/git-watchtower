@@ -1,3 +1,29 @@
+# [2.0.0](https://github.com/drummel/git-watchtower/compare/v1.14.18...v2.0.0) (2026-04-24)
+
+
+### Bug Fixes
+
+* correct Node.js version requirement on website ([f9f09d6](https://github.com/drummel/git-watchtower/commit/f9f09d6248bad48a7077320bda2685534d0ab878))
+
+
+### chore
+
+* visual overhaul and upgrade all packages to latest stable ([2d72f66](https://github.com/drummel/git-watchtower/commit/2d72f66c827a07f6642c182f53d5656fbd7a5a98))
+
+
+### Features
+
+* add project website with Astro Starlight ([c9acc0c](https://github.com/drummel/git-watchtower/commit/c9acc0cd1673b2311d9e82e692beb69d70449936))
+
+
+### BREAKING CHANGES
+
+* fixes:
+- social config: object → array format (Starlight 0.33+)
+- Remove 404.md (no longer needed with Astro 6 built-in handling)
+
+https://claude.ai/code/session_018wwhEtYasbZnCSvQbc78RQ
+
 ## [1.14.18](https://github.com/drummel/git-watchtower/compare/v1.14.17...v1.14.18) (2026-04-23)
 
 
