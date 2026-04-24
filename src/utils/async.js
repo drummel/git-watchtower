@@ -6,22 +6,33 @@
 /**
  * Simple mutex for preventing concurrent operations
  * Use this to prevent race conditions in polling and server operations
+ *
+ * Mutual exclusion is enforced by ownership tokens: acquire() returns a
+ * unique Symbol, and release() requires the caller to hand that same
+ * token back. Previously release() was just a zero-arg "drain the next
+ * waiter" operation — so a double-release or a stray release() without
+ * a matching acquire() would advance the queue twice, handing the lock
+ * to two owners concurrently and silently breaking the invariant the
+ * mutex exists to protect. Tokens make that misuse throw instead.
  */
 class Mutex {
   constructor() {
-    this.locked = false;
+    /** @type {symbol | null} */
+    this._heldBy = null;
+    /** @type {Array<(token: symbol) => void>} */
     this.queue = [];
   }
 
   /**
-   * Acquire the lock. Returns a promise that resolves when lock is acquired.
-   * @returns {Promise<void>}
+   * Acquire the lock. Resolves with an opaque token that must be passed
+   * back to release(). Hold on to it and don't share it across callers.
+   * @returns {Promise<symbol>}
    */
   async acquire() {
     return new Promise((resolve) => {
-      if (!this.locked) {
-        this.locked = true;
-        resolve();
+      if (this._heldBy === null) {
+        this._heldBy = Symbol('mutex-token');
+        resolve(this._heldBy);
       } else {
         this.queue.push(resolve);
       }
@@ -29,14 +40,28 @@ class Mutex {
   }
 
   /**
-   * Release the lock. If there are waiting acquirers, the next one gets the lock.
+   * Release the lock. The token must be the one returned by the
+   * corresponding acquire(). Throws for:
+   *   - release() on an unlocked mutex (release-without-acquire)
+   *   - release() with a token that doesn't match the current holder
+   *     (double-release, or release from the wrong caller)
+   *
+   * @param {symbol} token
    */
-  release() {
+  release(token) {
+    if (this._heldBy === null) {
+      throw new Error('Mutex.release(): called on an unlocked mutex');
+    }
+    if (token !== this._heldBy) {
+      throw new Error('Mutex.release(): token does not match the current holder');
+    }
     if (this.queue.length > 0) {
       const next = this.queue.shift();
-      next();
+      const nextToken = Symbol('mutex-token');
+      this._heldBy = nextToken;
+      next(nextToken);
     } else {
-      this.locked = false;
+      this._heldBy = null;
     }
   }
 
@@ -47,11 +72,11 @@ class Mutex {
    * @returns {Promise<T>}
    */
   async withLock(fn) {
-    await this.acquire();
+    const token = await this.acquire();
     try {
       return await fn();
     } finally {
-      this.release();
+      this.release(token);
     }
   }
 
@@ -60,7 +85,7 @@ class Mutex {
    * @returns {boolean}
    */
   isLocked() {
-    return this.locked;
+    return this._heldBy !== null;
   }
 
   /**

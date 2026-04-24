@@ -30,24 +30,36 @@ describe('Mutex', () => {
     assert.strictEqual(mutex.isLocked(), true);
   });
 
+  it('acquire() resolves with a unique symbol token', async () => {
+    const t1 = await mutex.acquire();
+    assert.strictEqual(typeof t1, 'symbol');
+    mutex.release(t1);
+
+    const t2 = await mutex.acquire();
+    assert.notStrictEqual(t1, t2);
+    mutex.release(t2);
+  });
+
   it('should unlock when released', async () => {
-    await mutex.acquire();
-    mutex.release();
+    const token = await mutex.acquire();
+    mutex.release(token);
     assert.strictEqual(mutex.isLocked(), false);
   });
 
   it('should queue waiters when locked', async () => {
-    await mutex.acquire();
+    const firstToken = await mutex.acquire();
 
     // Start a second acquire (will be queued)
     const secondAcquire = mutex.acquire();
     assert.strictEqual(mutex.getQueueLength(), 1);
 
     // Release to let second through
-    mutex.release();
-    await secondAcquire;
+    mutex.release(firstToken);
+    const secondToken = await secondAcquire;
     assert.strictEqual(mutex.getQueueLength(), 0);
     assert.strictEqual(mutex.isLocked(), true);
+    assert.notStrictEqual(firstToken, secondToken);
+    mutex.release(secondToken);
   });
 
   it('should enforce sequential execution with withLock', async () => {
@@ -78,6 +90,72 @@ describe('Mutex', () => {
     }
 
     assert.strictEqual(mutex.isLocked(), false);
+  });
+
+  it('release() on an unlocked mutex throws', () => {
+    assert.throws(
+      () => mutex.release(Symbol('bogus')),
+      /unlocked mutex/,
+    );
+  });
+
+  it('release() with a wrong token throws and does not hand off to waiters', async () => {
+    const realToken = await mutex.acquire();
+    const waiter = mutex.acquire(); // queued
+
+    // An attacker / buggy caller releases with a token they made up.
+    // Pre-fix: this drained the next waiter, letting two holders run
+    // concurrently. Post-fix: it throws and the waiter stays queued.
+    assert.throws(
+      () => mutex.release(Symbol('not-the-real-token')),
+      /does not match the current holder/,
+    );
+
+    assert.strictEqual(mutex.isLocked(), true);
+    assert.strictEqual(mutex.getQueueLength(), 1);
+
+    // A proper release still works and hands off normally.
+    mutex.release(realToken);
+    const waiterToken = await waiter;
+    assert.strictEqual(mutex.isLocked(), true);
+    mutex.release(waiterToken);
+  });
+
+  it('release() called twice with the same token throws the second time', async () => {
+    const token = await mutex.acquire();
+    mutex.release(token);
+
+    // Second release with the (now stale) token must throw — otherwise
+    // we'd drain a waiter on behalf of someone who no longer holds the
+    // lock, silently breaking exclusion.
+    assert.throws(
+      () => mutex.release(token),
+      /unlocked mutex/,
+    );
+  });
+
+  it('double-release during contention does not hand off to two waiters', async () => {
+    const firstToken = await mutex.acquire();
+    const waiterA = mutex.acquire();
+    const waiterB = mutex.acquire();
+    assert.strictEqual(mutex.getQueueLength(), 2);
+
+    mutex.release(firstToken); // hands off to A
+    const aToken = await waiterA;
+    assert.strictEqual(mutex.getQueueLength(), 1);
+
+    // Now caller incorrectly releases again with the *old* token. Pre-fix
+    // this would have drained B too, so A and B would both think they
+    // held the lock. Post-fix: throws.
+    assert.throws(() => mutex.release(firstToken), /does not match/);
+
+    // B is still queued, A still holds the lock.
+    assert.strictEqual(mutex.isLocked(), true);
+    assert.strictEqual(mutex.getQueueLength(), 1);
+
+    mutex.release(aToken);
+    const bToken = await waiterB;
+    mutex.release(bToken);
   });
 });
 

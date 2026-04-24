@@ -1753,7 +1753,7 @@ const pollMutex = new Mutex();
 async function pollGitChanges() {
   // Skip if a poll is already in progress (don't queue)
   if (pollMutex.isLocked()) return;
-  await pollMutex.acquire();
+  const pollToken = await pollMutex.acquire();
   store.setState({ isPolling: true, pollingStatus: 'fetching' });
 
   // Casino mode: start slot reels spinning (no sound - too annoying)
@@ -2122,7 +2122,7 @@ async function pollGitChanges() {
     }
   } finally {
     store.setState({ isPolling: false });
-    pollMutex.release();
+    pollMutex.release(pollToken);
     render();
   }
 }
