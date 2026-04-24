@@ -1,0 +1,112 @@
+---
+title: Git Watchtower
+description: Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.
+template: splash
+hero:
+  title: Keep tabs on your <br/> AI coding agents.
+  tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents."
+  actions:
+    - text: Get Started
+      link: /guides/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/drummel/git-watchtower
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<div class="install-command">
+  <div class="install-command-inner">
+    <span class="install-prompt">$</span>
+    <code>npm install -g git-watchtower</code>
+  </div>
+</div>
+
+## Why Git Watchtower?
+
+When you're using AI coding agents on the web — Claude Code, OpenAI Codex, and others — they create branches and push commits while you're not looking. You end up with multiple branches to check on and no easy way to know when they've been updated or what changed.
+
+Git Watchtower watches your remote and notifies you when branches are updated. Preview what changed, switch with a keypress, undo if needed.
+
+<div class="screenshot">
+  <img src="/git-watchtower-screenshot.png" alt="Git Watchtower terminal UI showing branch monitoring with sparklines" />
+</div>
+
+## Features
+
+<CardGrid stagger>
+  <Card title="Live Branch Monitoring">
+    Know instantly when a branch gets new commits. Ahead/behind counters, status badges, and activity sparklines show you what changed at a glance.
+  </Card>
+  <Card title="Web Dashboard">
+    Full browser-based dashboard with PR workflows, CI status, and session statistics. Launch with `--web` and manage everything without touching the terminal.
+  </Card>
+  <Card title="Instant Notifications">
+    Audio and visual alerts the moment a branch updates. Never miss an AI agent finishing its work.
+  </Card>
+  <Card title="Quick Branch Switching">
+    Switch branches with a single keypress. Preview commits and changed files first. Undo if you don't like what you see.
+  </Card>
+  <Card title="Auto-Pull">
+    Your current branch stays up to date automatically. Remote changes get pulled without you lifting a finger.
+  </Card>
+  <Card title="Zero Dependencies">
+    Built entirely on Node.js built-ins. No dependency tree. Installs in seconds.
+  </Card>
+</CardGrid>
+
+## Web Dashboard
+
+Launch a browser-based dashboard alongside the terminal UI:
+
+```bash
+git-watchtower --web
+```
+
+<div class="screenshot">
+  <img src="/git-watchtower-web-ui.png" alt="Git Watchtower web dashboard showing branch management and PR workflows" />
+</div>
+
+The web dashboard provides real-time branch monitoring, PR workflows, CI status, session statistics, and more. When running multiple instances across different projects, they coordinate automatically into a single multi-project dashboard.
+
+## Built-in Dev Server
+
+Run a static file server with live reload, or wrap your own dev server command (Next.js, Vite, Nuxt, etc.) — all while monitoring branches.
+
+```bash
+# Static site with live reload (default)
+git-watchtower
+
+# Wrap your own dev server
+git-watchtower --mode command -c "npm run dev"
+
+# Branch monitoring only
+git-watchtower --no-server
+```
+
+## Quick Start
+
+```bash
+# Install globally
+npm install -g git-watchtower
+
+# Navigate to any git repo and run
+cd your-project
+git-watchtower
+
+# Or run directly with npx
+npx git-watchtower
+```
+
+On first run, you'll be guided through a configuration wizard.
+
+<div class="cta-section">
+  <a href="/guides/quick-start/" class="cta-link">Read the full documentation →</a>
+</div>
+
+<div style="text-align: center; margin-top: 6rem;">
+  <a href="/casino/" class="casino-link">🎰</a>
+</div>

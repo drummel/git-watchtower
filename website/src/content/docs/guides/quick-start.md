@@ -1,0 +1,67 @@
+---
+title: Quick Start
+description: Get up and running with Git Watchtower in under a minute.
+---
+
+## Installation
+
+```bash
+# Global install (recommended)
+npm install -g git-watchtower
+
+# Or run directly with npx
+npx git-watchtower
+```
+
+## Start Monitoring
+
+```bash
+# Navigate to any git repository
+cd your-project
+
+# Start Git Watchtower
+git-watchtower
+```
+
+On first run, you'll be guided through a configuration wizard to set your preferred server mode, port, and notification preferences.
+
+## Usage
+
+```bash
+# Run with default settings (or saved config)
+git-watchtower
+
+# Run without dev server (branch monitoring only)
+git-watchtower --no-server
+
+# Launch with web dashboard
+git-watchtower --web
+
+# Specify custom ports
+git-watchtower --port 8080 --web --web-port 9000
+
+# Wrap your own dev server
+git-watchtower --mode command -c "npm run dev"
+
+# Re-run the configuration wizard
+git-watchtower --init
+
+# Show help
+git-watchtower --help
+```
+
+## How It Works
+
+1. **Polling** — Runs `git fetch` periodically to check for updates
+2. **Detection** — Compares commit hashes to detect new commits, branches, and deletions
+3. **Auto-pull** — When your current branch has remote updates, pulls automatically (if enabled)
+4. **Server** — Depending on mode, serves static files, runs your command, or does nothing
+5. **Live Reload** — In static site mode, notifies connected browsers via SSE when files change
+6. **Web Dashboard** — Optional browser UI that mirrors and extends the TUI via SSE
+
+## Requirements
+
+- **Node.js** 20.0.0 or higher
+- **Git** installed and in PATH
+- **Git remote** configured (any name, defaults to `origin`)
+- **Terminal** with ANSI color support

@@ -1,0 +1,396 @@
+/* Git Watchtower - Custom Starlight Styles */
+
+/* ============================================
+   Color System — warm neutral + green accent
+   ============================================ */
+
+:root {
+  --sl-color-accent-low: #0c1f17;
+  --sl-color-accent: #22c55e;
+  --sl-color-accent-high: #bbf7d0;
+  --sl-font-system-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --gw-glow: rgba(34, 197, 94, 0.08);
+  --gw-border: var(--sl-color-gray-5);
+
+  --gw-dot-color: rgba(255, 255, 255, 0.03);
+  --gw-dot-size: 1px;
+  --gw-dot-gap: 24px;
+  --gw-dot-grid: radial-gradient(circle, var(--gw-dot-color) var(--gw-dot-size), transparent var(--gw-dot-size));
+
+  --gw-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #dcfce7;
+  --sl-color-accent: #16a34a;
+  --sl-color-accent-high: #14532d;
+  --gw-glow: rgba(22, 163, 74, 0.05);
+  --gw-dot-color: rgba(0, 0, 0, 0.035);
+  --gw-noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+/* ============================================
+   Page-level Background Art
+   Gradient + grid covers the full page from top,
+   including behind the header — no seams.
+   ============================================ */
+
+/* Accent gradient glow — sits behind header + hero seamlessly */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 600px;
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 0%,
+    rgba(34, 197, 94, 0.05) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+:root[data-theme='light'] body::before {
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 0%,
+    rgba(22, 163, 74, 0.04) 0%,
+    transparent 70%
+  );
+}
+
+/* Algorithmic grid art — full page, fades down */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 800px;
+  background-image:
+    /* Primary dot grid */
+    var(--gw-dot-grid),
+    /* Secondary larger grid — creates a cross-hatch depth effect */
+    radial-gradient(circle, var(--gw-dot-color) var(--gw-dot-size), transparent var(--gw-dot-size)),
+    /* Horizontal scan lines — very faint */
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 47px,
+      var(--gw-dot-color) 47px,
+      var(--gw-dot-color) 48px
+    );
+  background-size:
+    var(--gw-dot-gap) var(--gw-dot-gap),
+    72px 72px,
+    100% 48px;
+  mask-image: linear-gradient(to bottom, black 0%, black 15%, transparent 70%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 15%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Film grain noise — full viewport */
+.page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: var(--gw-noise);
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ============================================
+   Hero Section
+   ============================================ */
+
+.hero {
+  position: relative;
+  padding-block: 2.5rem 3rem;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   Hero Buttons
+   ============================================ */
+
+.hero .sl-link-button {
+  border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  padding: 0.6rem 1.4rem;
+  font-size: 0.95rem;
+  transition: all 0.15s ease;
+}
+
+.hero .sl-link-button.primary {
+  background: var(--sl-color-white);
+  color: var(--sl-color-black);
+  border: 1px solid transparent;
+}
+
+.hero .sl-link-button.primary:hover {
+  background: var(--sl-color-gray-1, #e5e5e5);
+}
+
+:root:not([data-theme='light']) .hero .sl-link-button.primary {
+  background: var(--sl-color-white);
+  color: #0a0a0a;
+}
+
+:root:not([data-theme='light']) .hero .sl-link-button.primary:hover {
+  background: #e5e5e5;
+}
+
+.hero .sl-link-button:not(.primary) {
+  background: transparent;
+  color: var(--sl-color-gray-2, var(--sl-color-white));
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+.hero .sl-link-button:not(.primary):hover {
+  border-color: var(--sl-color-gray-3);
+  background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.03));
+}
+
+/* ============================================
+   Feature Cards
+   ============================================ */
+
+.card-grid {
+  position: relative;
+}
+
+/* Accent glow behind the card grid area */
+.card-grid::before {
+  content: '';
+  position: absolute;
+  inset: -3rem -2rem;
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 50%,
+    rgba(34, 197, 94, 0.025) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+:root[data-theme='light'] .card-grid::before {
+  background: radial-gradient(
+    ellipse 60% 50% at 50% 50%,
+    rgba(22, 163, 74, 0.025) 0%,
+    transparent 70%
+  );
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Corner gradient glow inside each card */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(
+    circle at 0% 0%,
+    rgba(34, 197, 94, 0.06) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+:root[data-theme='light'] .card::before {
+  background: radial-gradient(
+    circle at 0% 0%,
+    rgba(22, 163, 74, 0.05) 0%,
+    transparent 70%
+  );
+}
+
+/* Top accent line */
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--sl-color-accent) 0%,
+    transparent 60%
+  );
+  opacity: 0.25;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.card:hover::after {
+  opacity: 0.5;
+}
+
+.card:hover {
+  border-color: rgba(34, 197, 94, 0.15);
+  box-shadow: 0 2px 20px rgba(34, 197, 94, 0.04);
+}
+
+:root[data-theme='light'] .card:hover {
+  border-color: rgba(22, 163, 74, 0.15);
+  box-shadow: 0 2px 20px rgba(22, 163, 74, 0.04);
+}
+
+.card .title {
+  color: var(--sl-color-accent);
+}
+
+/* ============================================
+   Install Command
+   ============================================ */
+
+.install-command {
+  margin-block: 2.5rem;
+  text-align: center;
+}
+
+.install-command-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.75rem;
+  background: var(--sl-color-gray-6);
+  border-radius: 8px;
+  border: 1px solid var(--gw-border);
+  transition: border-color 0.2s ease;
+}
+
+.install-command-inner:hover {
+  border-color: var(--sl-color-gray-3);
+}
+
+.install-prompt {
+  color: var(--sl-color-accent);
+  font-family: var(--sl-font-system-mono);
+  font-weight: 600;
+  font-size: 1.1rem;
+  user-select: none;
+}
+
+.install-command code {
+  font-size: 1.05rem;
+  font-family: var(--sl-font-system-mono);
+  background: none;
+  padding: 0;
+  border: none;
+  color: var(--sl-color-white);
+}
+
+/* ============================================
+   Screenshots
+   ============================================ */
+
+.screenshot {
+  border: 1px solid var(--gw-border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-block: 2.5rem;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.08);
+  transition: box-shadow 0.3s ease;
+}
+
+.screenshot:hover {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.14);
+}
+
+.screenshot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* ============================================
+   CTA Section
+   ============================================ */
+
+.cta-section {
+  position: relative;
+  text-align: center;
+  margin-top: 4rem;
+  padding: 3rem 2rem;
+  border-radius: 10px;
+  border: 1px solid var(--gw-border);
+  overflow: hidden;
+}
+
+.cta-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    var(--gw-dot-grid),
+    linear-gradient(135deg, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
+  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
+  pointer-events: none;
+}
+
+:root[data-theme='light'] .cta-section::before {
+  background:
+    var(--gw-dot-grid),
+    linear-gradient(135deg, rgba(22, 163, 74, 0.03) 0%, transparent 50%);
+  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
+}
+
+.cta-link {
+  position: relative;
+  z-index: 1;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--sl-color-accent);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.cta-link:hover {
+  color: var(--sl-color-accent-high);
+}
+
+/* ============================================
+   Casino Easter Egg
+   ============================================ */
+
+.casino-link {
+  opacity: 0.12;
+  font-size: 0.7rem;
+  transition: opacity 0.3s ease;
+  text-decoration: none;
+}
+
+.casino-link:hover {
+  opacity: 1;
+}
+
+/* ============================================
+   Global Refinements
+   ============================================ */
+
+a {
+  transition: color 0.15s ease;
+}
+
+:not(pre) > code {
+  border-radius: 4px;
+}

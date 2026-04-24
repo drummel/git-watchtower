@@ -1,0 +1,83 @@
+---
+title: "🎰 Casino Mode"
+description: "You found it. The hidden mode that turns waiting for AI agents into a slot machine."
+sidebar:
+  hidden: true
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<div style="text-align: center; margin-block: 2rem;">
+
+# 🎰 MAX ADDICTION 🎰
+
+</div>
+
+<Aside type="caution" title="You found the easter egg.">
+  Casino Mode is a real feature. It ships with git-watchtower. It's hidden, but it's real.
+</Aside>
+
+## What is Casino Mode?
+
+When you're watching AI agents work on your code, every `git fetch` is a pull of the lever. Will there be new commits? How many lines changed? **Casino Mode leans into the dopamine loop.**
+
+It turns your terminal into a Vegas-style slot machine:
+
+- **Slot reel animations** spin on every poll cycle
+- **Marquee lights** border your terminal in flashing neon
+- **Win celebrations** scale with the size of the change:
+  - 🍒 **WIN** — small changes (1-49 lines)
+  - 🎉 **NICE WIN!** — medium changes (50-199 lines)
+  - 🔥 **BIG WIN!** — large changes (200-499 lines)
+  - 💥 **HUGE WIN!** — massive changes (500-999 lines)
+  - 💰 **JACKPOT!** — enormous changes (1000-4999 lines)
+  - 🎰💰 **MEGA JACKPOT!!!** 💰🎰 — legendary changes (5000+ lines)
+- **Loss animations** when merges fail or switches error out (💀)
+- **Session stats** tracking your "winnings" in lines of code
+
+### The Stats
+
+Casino Mode tracks everything a degenerate git gambler needs:
+
+| Stat | What it measures |
+|------|-----------------|
+| **Net Winnings** | Total lines changed minus poll cost |
+| **Hit Rate** | Percentage of polls that found updates |
+| **Streak** | Consecutive polls with updates |
+| **Dopamine Hits** | Updates received, weighted by size |
+| **Luck Meter** | A completely meaningless number (50-99%) |
+| **House Edge** | Oscillates randomly between 55-100% |
+| **Vibes Quality** | A rotating emoji. It means nothing. |
+
+## Enable It
+
+```bash
+# CLI flag
+git-watchtower --casino
+
+# Or in .watchtowerrc.json
+{
+  "casinoMode": true
+}
+```
+
+## The Origin Story
+
+Casino Mode exists because [this blog post](https://fibonaccilabs.com/blog/my-optimized-ai-agent-workflow-felt-like-a-slot-machine) nailed the feeling perfectly — the optimized AI agent workflow *does* feel like a slot machine. You set up your agents, pull the lever, and wait to see what comes back.
+
+So we built it for real. Every `git fetch` is a spin. Every commit is a payout. The terminal lights up like Vegas when your AI agent ships a 2,000-line feature.
+
+Is it useful? No. Is it honest about what we're all doing here? Absolutely.
+
+<div style="text-align: center; margin-top: 3rem; font-size: 1.5rem;">
+
+**The house always wins.** <br/>
+**But the code ships anyway.**
+
+</div>
+
+<div style="text-align: center; margin-top: 4rem; opacity: 0.3; font-size: 0.8rem;">
+
+*If you or someone you know has a problem with AI agent gambling, please close your terminal and go outside.*
+
+</div>

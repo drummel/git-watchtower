@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Tower body - tapered rectangle -->
+  <path d="M12 28L13.5 10H18.5L20 28H12Z" fill="#1e293b" stroke="#1e293b" stroke-width="0.5" stroke-linejoin="round"/>
+  <!-- Tower top / observation deck -->
+  <rect x="11" y="8" width="10" height="3" rx="0.5" fill="#1e293b"/>
+  <!-- Tower roof -->
+  <path d="M13 8L16 4L19 8" fill="#1e293b"/>
+  <!-- Beacon glow - outer -->
+  <circle cx="16" cy="4" r="3.5" fill="#3b82f6" opacity="0.15"/>
+  <!-- Beacon glow - middle -->
+  <circle cx="16" cy="4" r="2.2" fill="#3b82f6" opacity="0.25"/>
+  <!-- Beacon light -->
+  <circle cx="16" cy="4" r="1.2" fill="#3b82f6"/>
+  <!-- Signal arcs - left -->
+  <path d="M9 5.5C10 3.5 12 2 14 1.5" stroke="#3b82f6" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M7 7C8.5 4 11.5 1.5 14 0.5" stroke="#3b82f6" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.25"/>
+  <!-- Signal arcs - right -->
+  <path d="M23 5.5C22 3.5 20 2 18 1.5" stroke="#3b82f6" stroke-width="1" stroke-linecap="round" fill="none" opacity="0.5"/>
+  <path d="M25 7C23.5 4 20.5 1.5 18 0.5" stroke="#3b82f6" stroke-width="0.8" stroke-linecap="round" fill="none" opacity="0.25"/>
+  <!-- Window details -->
+  <rect x="14.5" y="12" width="3" height="2" rx="0.3" fill="#3b82f6" opacity="0.6"/>
+  <rect x="14.5" y="16" width="3" height="2" rx="0.3" fill="#3b82f6" opacity="0.4"/>
+  <rect x="14.5" y="20" width="3" height="2" rx="0.3" fill="#3b82f6" opacity="0.25"/>
+</svg>
