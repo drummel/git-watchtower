@@ -192,7 +192,8 @@ body::after {
   box-shadow: 0 4px 16px -6px rgba(92, 234, 92, 0.55);
 }
 
-.hero-btn--primary:hover {
+.hero-btn--primary:hover,
+:root[data-theme='light'] .hero-btn--primary:hover {
   background: #16a34a;
   color: #052e16;
   border-color: transparent;
@@ -590,6 +591,23 @@ body::after {
 }
 
 .casino-link:hover {
+  opacity: 1;
+}
+
+/* Heading anchor chain-link icons: hover-only so they're available for
+   deep-linking on docs pages without adding visual noise by default. */
+.sl-heading-wrapper .sl-anchor-link {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sl-heading-wrapper:hover .sl-anchor-link,
+.sl-heading-wrapper .sl-anchor-link:focus-visible {
+  opacity: 0.55;
+}
+
+.sl-heading-wrapper .sl-anchor-link:hover,
+.sl-heading-wrapper .sl-anchor-link:focus-visible {
   opacity: 1;
 }
 
