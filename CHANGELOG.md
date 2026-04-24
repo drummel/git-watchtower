@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/drummel/git-watchtower/compare/v2.0.2...v2.0.3) (2026-04-24)
+
+
+### Bug Fixes
+
+* guard debounce().cancel() against the already-queued callback race ([c7e4de0](https://github.com/drummel/git-watchtower/commit/c7e4de02e88b6e78dcb091fb79ecc38283226acb))
+
 ## [2.0.2](https://github.com/drummel/git-watchtower/compare/v2.0.1...v2.0.2) (2026-04-24)
 
 
