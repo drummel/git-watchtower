@@ -2,12 +2,11 @@
 const PACKAGE_NAME = 'git-watchtower';
 
 let monthly: number | null = null;
-let weekly: number | null = null;
 
-async function fetchPoint(range: 'last-month' | 'last-week'): Promise<number | null> {
+async function fetchMonthly(): Promise<number | null> {
   try {
     const res = await fetch(
-      `https://api.npmjs.org/downloads/point/${range}/${PACKAGE_NAME}`,
+      `https://api.npmjs.org/downloads/point/last-month/${PACKAGE_NAME}`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!res.ok) return null;
@@ -18,49 +17,21 @@ async function fetchPoint(range: 'last-month' | 'last-week'): Promise<number | n
   }
 }
 
-[monthly, weekly] = await Promise.all([fetchPoint('last-month'), fetchPoint('last-week')]);
+monthly = await fetchMonthly();
 
-function formatCount(n: number): string {
-  if (n >= 1000) {
-    const k = n / 1000;
-    return `${k.toFixed(k >= 10 ? 0 : 1)}k`;
-  }
-  return n.toLocaleString('en-US');
-}
-
-const monthlyDisplay = monthly !== null ? formatCount(monthly) : null;
-const weeklyDisplay = weekly !== null ? formatCount(weekly) : null;
-const monthlyExact = monthly !== null ? monthly.toLocaleString('en-US') : null;
+const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
 ---
 
 {
-  monthlyDisplay && (
+  monthly !== null && (
     <a
       class="gw-downloads"
       href={`https://www.npmjs.com/package/${PACKAGE_NAME}`}
       target="_blank"
       rel="noopener"
-      title={monthlyExact ? `${monthlyExact} downloads in the last 30 days` : undefined}
     >
-      <span class="gw-downloads-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M12 4v11m0 0l-4-4m4 4l4-4M5 19h14"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </span>
-      <span class="gw-downloads-count">{monthlyDisplay}</span>
-      <span class="gw-downloads-label">downloads / month</span>
-      {weeklyDisplay && (
-        <span class="gw-downloads-sub">
-          <span class="gw-dot" aria-hidden="true" />
-          {weeklyDisplay}/wk
-        </span>
-      )}
+      <span class="gw-downloads-num">{exact}</span>
+      <span class="gw-downloads-label">downloads in the last 30 days</span>
     </a>
   )
 }
@@ -68,89 +39,36 @@ const monthlyExact = monthly !== null ? monthly.toLocaleString('en-US') : null;
 <style>
   .gw-downloads {
     display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    padding: 0.45rem 0.85rem 0.45rem 0.7rem;
-    border-radius: 999px;
-    border: 1px solid rgba(34, 197, 94, 0.28);
-    background: linear-gradient(
-      180deg,
-      rgba(34, 197, 94, 0.08) 0%,
-      rgba(34, 197, 94, 0.02) 100%
-    );
-    color: var(--sl-color-white);
+    align-items: baseline;
+    gap: 0.4rem;
     font-family: var(--sl-font);
     font-size: 0.85rem;
-    line-height: 1;
+    line-height: 1.4;
+    color: var(--sl-color-gray-3, #999);
     text-decoration: none;
-    transition:
-      border-color 0.2s ease,
-      transform 0.2s ease,
-      box-shadow 0.2s ease;
-    box-shadow: 0 1px 8px rgba(34, 197, 94, 0.06);
+    transition: color 0.15s ease;
   }
 
   :root[data-theme='light'] .gw-downloads {
-    color: var(--sl-color-black);
-    background: linear-gradient(
-      180deg,
-      rgba(22, 163, 74, 0.07) 0%,
-      rgba(22, 163, 74, 0.02) 100%
-    );
-    border-color: rgba(22, 163, 74, 0.28);
+    color: var(--sl-color-gray-4, #6b7280);
   }
 
   .gw-downloads:hover {
-    border-color: rgba(34, 197, 94, 0.5);
-    transform: translateY(-1px);
-    box-shadow: 0 3px 14px rgba(34, 197, 94, 0.16);
-  }
-
-  .gw-downloads-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
     color: var(--sl-color-accent);
   }
 
-  .gw-downloads-icon svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  .gw-downloads-count {
-    font-weight: 700;
-    color: var(--sl-color-accent-high);
+  .gw-downloads-num {
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
+    color: var(--sl-color-accent);
+    letter-spacing: -0.01em;
   }
 
-  :root[data-theme='light'] .gw-downloads-count {
-    color: var(--sl-color-accent);
+  :root[data-theme='light'] .gw-downloads-num {
+    color: var(--sl-color-accent-high);
   }
 
   .gw-downloads-label {
-    opacity: 0.75;
-  }
-
-  .gw-downloads-sub {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin-left: 0.25rem;
-    padding-left: 0.6rem;
-    border-left: 1px solid var(--sl-color-gray-5);
-    opacity: 0.6;
-    font-variant-numeric: tabular-nums;
-    font-size: 0.78rem;
-  }
-
-  .gw-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--sl-color-accent);
-    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+    font-weight: 400;
   }
 </style>

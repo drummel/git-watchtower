@@ -9,7 +9,6 @@ export default defineConfig({
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/drummel/git-watchtower' },
         { icon: 'npm', label: 'npm', href: 'https://www.npmjs.com/package/git-watchtower' },
-        { icon: 'x.com', label: 'X', href: 'https://x.com/AdrianDrummond' },
       ],
       components: {
         SiteTitle: './src/components/SiteTitle.astro',

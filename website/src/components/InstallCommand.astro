@@ -10,7 +10,7 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
     aria-label={`Copy install command: ${command}`}
   >
     <span class="install-prompt" aria-hidden="true">$</span>
-    <code>{command}</code>
+    <code class="install-text">{command}</code>
     <span class="install-copy" aria-hidden="true">
       <svg class="install-copy-default" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
@@ -31,7 +31,6 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
         />
       </svg>
     </span>
-    <span class="install-feedback" aria-live="polite">Copied</span>
   </button>
 </div>
 
@@ -58,10 +57,10 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
             document.body.removeChild(textarea);
           }
           btn.classList.add('is-copied');
-          window.setTimeout(() => btn.classList.remove('is-copied'), 1800);
+          window.setTimeout(() => btn.classList.remove('is-copied'), 1600);
         } catch {
           btn.classList.add('is-error');
-          window.setTimeout(() => btn.classList.remove('is-error'), 1800);
+          window.setTimeout(() => btn.classList.remove('is-error'), 1600);
         }
       });
     });
