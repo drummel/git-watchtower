@@ -3,26 +3,33 @@ title: Git Watchtower
 description: Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.
 template: splash
 hero:
-  title: Keep tabs on your <br/> AI coding agents.
-  tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents."
-  actions:
-    - text: Get Started
-      link: /guides/quick-start/
-      icon: right-arrow
-      variant: primary
-    - text: View on GitHub
-      link: https://github.com/drummel/git-watchtower
-      icon: external
-      variant: minimal
+  title: Keep up with your <br class="hero-mobile-br"/>AI coding agents.
+  tagline: "Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with<br/>Claude Code, Codex, and other AI agents."
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import InstallCommand from '../../components/InstallCommand.astro';
+import DownloadsBadge from '../../components/DownloadsBadge.astro';
 
-<div class="install-command">
-  <div class="install-command-inner">
-    <span class="install-prompt">$</span>
-    <code>npm install -g git-watchtower</code>
-  </div>
+<div class="install-heading">Install via npm</div>
+
+<InstallCommand />
+
+<div class="downloads-badge-wrap">
+  <DownloadsBadge />
+</div>
+
+<div class="hero-actions">
+  <a href="/guides/quick-start/" class="hero-btn hero-btn--primary">
+    Quick Start
+    <span class="hero-btn-arrow" aria-hidden="true">→</span>
+  </a>
+  <a href="https://github.com/drummel/git-watchtower" class="hero-btn">
+    View on GitHub
+  </a>
+  <a href="https://www.npmjs.com/package/git-watchtower" class="hero-btn">
+    View on NPM
+  </a>
 </div>
 
 ## Why Git Watchtower?
@@ -103,8 +110,11 @@ npx git-watchtower
 
 On first run, you'll be guided through a configuration wizard.
 
-<div class="cta-section">
-  <a href="/guides/quick-start/" class="cta-link">Read the full documentation →</a>
+<div class="docs-cta">
+  <a href="/guides/quick-start/" class="docs-cta-button">
+    Read the full documentation
+    <span class="docs-cta-arrow" aria-hidden="true">→</span>
+  </a>
 </div>
 
 <div style="text-align: center; margin-top: 6rem;">

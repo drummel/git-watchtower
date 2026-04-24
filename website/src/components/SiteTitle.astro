@@ -1,0 +1,186 @@
+---
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="gw-site-title" aria-label="Git Watchtower">
+  <span class="gw-throbber" aria-hidden="true">
+    <span class="gw-throbber-core"></span>
+  </span>
+  <span class="gw-wordmark" translate="no">git-watchtower</span>
+  <span class="gw-ping" aria-hidden="true"></span>
+  <span class="gw-ping gw-ping--2" aria-hidden="true"></span>
+</a>
+
+<style>
+  .gw-site-title {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    text-decoration: none;
+    white-space: nowrap;
+    min-width: 0;
+    padding: 0.35rem 0.55rem;
+    line-height: 1;
+    border-radius: 6px;
+    isolation: isolate;
+  }
+
+  /* Throbber / beacon light */
+  .gw-throbber {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 10px;
+    height: 10px;
+    flex: none;
+  }
+
+  .gw-throbber-core {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #5cf25c;
+    box-shadow:
+      0 0 0 2px rgba(92, 242, 92, 0.15),
+      0 0 8px rgba(92, 242, 92, 0.7),
+      0 0 14px rgba(92, 242, 92, 0.35);
+  }
+
+  :root[data-theme='light'] .gw-throbber-core {
+    background: #16a34a;
+    box-shadow:
+      0 0 0 2px rgba(22, 163, 74, 0.12),
+      0 0 6px rgba(22, 163, 74, 0.4);
+  }
+
+  .gw-throbber::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 0 rgba(92, 242, 92, 0.5);
+    animation: gw-throb 2.2s ease-out infinite;
+  }
+
+  :root[data-theme='light'] .gw-throbber::after {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5);
+    animation-name: gw-throb-light;
+  }
+
+  @keyframes gw-throb {
+    0% { box-shadow: 0 0 0 0 rgba(92, 242, 92, 0.55); }
+    70% { box-shadow: 0 0 0 7px rgba(92, 242, 92, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(92, 242, 92, 0); }
+  }
+
+  @keyframes gw-throb-light {
+    0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+    70% { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); }
+  }
+
+  /* Wordmark — phosphor green, softened from raw #4AF626 */
+  .gw-wordmark {
+    position: relative;
+    z-index: 1;
+    font-family: var(--sl-font-system-mono);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #5cf25c;
+    text-shadow:
+      0 0 6px rgba(92, 242, 92, 0.38),
+      0 0 14px rgba(92, 242, 92, 0.2);
+    transition: color 0.2s ease, text-shadow 0.3s ease;
+  }
+
+  :root[data-theme='light'] .gw-wordmark {
+    color: #0f7d3d;
+    text-shadow:
+      0 0 4px rgba(22, 163, 74, 0.2),
+      0 0 10px rgba(22, 163, 74, 0.1);
+  }
+
+  /* Hover: stay in-palette — brighter phosphor in dark, darker forest in light. No black/white flip. */
+  .gw-site-title:hover .gw-wordmark {
+    color: #8dff8d;
+    text-shadow:
+      0 0 10px rgba(141, 255, 141, 0.6),
+      0 0 22px rgba(92, 242, 92, 0.35);
+  }
+
+  :root[data-theme='light'] .gw-site-title:hover .gw-wordmark {
+    color: #0a5a2d;
+    text-shadow:
+      0 0 8px rgba(22, 163, 74, 0.35),
+      0 0 18px rgba(22, 163, 74, 0.18);
+  }
+
+  /* Ambient glow on hover */
+  .gw-site-title::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(92, 234, 92, 0.14) 0%,
+      transparent 70%
+    );
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    z-index: 0;
+  }
+
+  .gw-site-title:hover::before {
+    opacity: 1;
+  }
+
+  /* Radar ping rings on hover */
+  .gw-ping {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1px solid rgba(92, 234, 92, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .gw-site-title:hover .gw-ping {
+    animation: gw-ping 1.6s cubic-bezier(0.25, 0.8, 0.3, 1) infinite;
+  }
+
+  .gw-site-title:hover .gw-ping--2 {
+    animation-delay: 0.8s;
+  }
+
+  @keyframes gw-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.7;
+    }
+    80% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gw-throbber::after,
+    .gw-site-title:hover .gw-ping {
+      animation: none;
+    }
+  }
+</style>

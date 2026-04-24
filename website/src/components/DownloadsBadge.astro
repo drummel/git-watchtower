@@ -1,0 +1,74 @@
+---
+const PACKAGE_NAME = 'git-watchtower';
+
+let monthly: number | null = null;
+
+async function fetchMonthly(): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `https://api.npmjs.org/downloads/point/last-month/${PACKAGE_NAME}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { downloads?: number };
+    return typeof data.downloads === 'number' ? data.downloads : null;
+  } catch {
+    return null;
+  }
+}
+
+monthly = await fetchMonthly();
+
+const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
+---
+
+{
+  monthly !== null && (
+    <a
+      class="gw-downloads"
+      href={`https://www.npmjs.com/package/${PACKAGE_NAME}`}
+      target="_blank"
+      rel="noopener"
+    >
+      <span class="gw-downloads-num">{exact}</span>
+      <span class="gw-downloads-label">downloads in the last 30 days</span>
+    </a>
+  )
+}
+
+<style>
+  .gw-downloads {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-family: var(--sl-font);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--sl-color-gray-3, #999);
+    text-decoration: none;
+    transition: color 0.15s ease;
+  }
+
+  :root[data-theme='light'] .gw-downloads {
+    color: var(--sl-color-gray-4, #6b7280);
+  }
+
+  .gw-downloads:hover {
+    color: var(--sl-color-accent);
+  }
+
+  .gw-downloads-num {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--sl-color-accent);
+    letter-spacing: -0.01em;
+  }
+
+  :root[data-theme='light'] .gw-downloads-num {
+    color: var(--sl-color-accent-high);
+  }
+
+  .gw-downloads-label {
+    font-weight: 400;
+  }
+</style>

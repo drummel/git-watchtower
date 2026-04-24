@@ -1,0 +1,17 @@
+---
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+import HeaderDownloads from './HeaderDownloads.astro';
+---
+
+<div class="gw-header-extras">
+  <HeaderDownloads />
+</div>
+<Default><slot /></Default>
+
+<style>
+  .gw-header-extras {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 0.25rem;
+  }
+</style>

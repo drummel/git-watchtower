@@ -6,11 +6,11 @@
 
 :root {
   --sl-color-accent-low: #0c1f17;
-  --sl-color-accent: #22c55e;
+  --sl-color-accent: #5cea5c;
   --sl-color-accent-high: #bbf7d0;
   --sl-font-system-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
-  --gw-glow: rgba(34, 197, 94, 0.08);
+  --gw-glow: rgba(92, 234, 92, 0.08);
   --gw-border: var(--sl-color-gray-5);
 
   --gw-dot-color: rgba(255, 255, 255, 0.03);
@@ -46,7 +46,7 @@ body::before {
   height: 600px;
   background: radial-gradient(
     ellipse 60% 50% at 50% 0%,
-    rgba(34, 197, 94, 0.05) 0%,
+    rgba(92, 234, 92, 0.05) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -108,9 +108,13 @@ body::after {
    Hero Section
    ============================================ */
 
+/* Starlight's default .hero uses grid-template-columns: 7fr 4fr at
+   50rem+ to reserve a column for a hero image. We don't have one, so
+   that 4fr column shows up as empty space on the right. Collapse it
+   to a single column so the copy centers inside the content panel. */
 .hero {
   position: relative;
-  padding-block: 2.5rem 3rem;
+  padding-block: 2.5rem 2rem;
 }
 
 .hero > * {
@@ -118,47 +122,119 @@ body::after {
   z-index: 1;
 }
 
+@media (min-width: 50rem) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+  .hero .stack {
+    text-align: center;
+  }
+  .hero .copy {
+    align-items: center;
+  }
+}
+
 /* ============================================
-   Hero Buttons
+   Hero Actions (separate container below the hero)
    ============================================ */
 
-.hero .sl-link-button {
-  border-radius: 6px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  padding: 0.6rem 1.4rem;
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-block: 0 2.5rem;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 170px;
+  padding: 0.7rem 1.3rem;
+  border-radius: 8px;
+  font-family: var(--sl-font);
   font-size: 0.95rem;
-  transition: all 0.15s ease;
-}
-
-.hero .sl-link-button.primary {
-  background: var(--sl-color-white);
-  color: var(--sl-color-black);
-  border: 1px solid transparent;
-}
-
-.hero .sl-link-button.primary:hover {
-  background: var(--sl-color-gray-1, #e5e5e5);
-}
-
-:root:not([data-theme='light']) .hero .sl-link-button.primary {
-  background: var(--sl-color-white);
-  color: #0a0a0a;
-}
-
-:root:not([data-theme='light']) .hero .sl-link-button.primary:hover {
-  background: #e5e5e5;
-}
-
-.hero .sl-link-button:not(.primary) {
-  background: transparent;
-  color: var(--sl-color-gray-2, var(--sl-color-white));
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
   border: 1px solid var(--sl-color-gray-5);
+  background: transparent;
+  color: #e6edf3;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease,
+    box-shadow 0.2s ease;
 }
 
-.hero .sl-link-button:not(.primary):hover {
-  border-color: var(--sl-color-gray-3);
-  background: var(--sl-color-gray-7, rgba(255, 255, 255, 0.03));
+:root[data-theme='light'] .hero-btn {
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.2);
+}
+
+.hero-btn:hover {
+  border-color: rgba(92, 234, 92, 0.55);
+  background: rgba(92, 234, 92, 0.06);
+  color: var(--sl-color-accent-high);
+}
+
+:root[data-theme='light'] .hero-btn:hover {
+  color: var(--sl-color-accent);
+}
+
+.hero-btn--primary {
+  background: #7cf27c;
+  color: #052e16;
+  border-color: transparent;
+  box-shadow: 0 4px 16px -6px rgba(124, 242, 124, 0.6);
+}
+
+.hero-btn--primary:hover,
+:root[data-theme='light'] .hero-btn--primary:hover {
+  background: #9ef59e;
+  color: #052e16;
+  border-color: transparent;
+  box-shadow:
+    0 0 0 3px rgba(124, 242, 124, 0.22),
+    0 6px 22px -8px rgba(124, 242, 124, 0.75);
+  transform: translateY(-1px);
+}
+
+.hero-btn-arrow {
+  transition: transform 0.15s ease;
+}
+
+.hero-btn--primary:hover .hero-btn-arrow {
+  transform: translateX(3px);
+}
+
+.hero-btn-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+}
+
+.hero-btn:hover .hero-btn-icon {
+  opacity: 1;
+}
+
+/* Mobile: stack buttons full-width inside a padded container so they
+   don't run edge-to-edge. */
+@media (max-width: 50rem) {
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    padding-inline: 2rem;
+    max-width: 420px;
+    margin-inline: auto;
+  }
+  .hero-btn {
+    width: 100%;
+    min-width: 0;
+  }
 }
 
 /* ============================================
@@ -176,7 +252,7 @@ body::after {
   inset: -3rem -2rem;
   background: radial-gradient(
     ellipse 60% 50% at 50% 50%,
-    rgba(34, 197, 94, 0.025) 0%,
+    rgba(92, 234, 92, 0.025) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -207,7 +283,7 @@ body::after {
   height: 140px;
   background: radial-gradient(
     circle at 0% 0%,
-    rgba(34, 197, 94, 0.06) 0%,
+    rgba(92, 234, 92, 0.06) 0%,
     transparent 70%
   );
   pointer-events: none;
@@ -245,8 +321,8 @@ body::after {
 }
 
 .card:hover {
-  border-color: rgba(34, 197, 94, 0.15);
-  box-shadow: 0 2px 20px rgba(34, 197, 94, 0.04);
+  border-color: rgba(92, 234, 92, 0.15);
+  box-shadow: 0 2px 20px rgba(92, 234, 92, 0.04);
 }
 
 :root[data-theme='light'] .card:hover {
@@ -262,41 +338,231 @@ body::after {
    Install Command
    ============================================ */
 
+.install-heading {
+  margin-block: 2.5rem 0.6rem;
+  text-align: center;
+  font-family: var(--sl-font-system-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3, #9aa4b2);
+}
+
+:root[data-theme='light'] .install-heading {
+  color: var(--sl-color-gray-4, #6b7280);
+}
+
 .install-command {
-  margin-block: 2.5rem;
+  margin-block: 0 0.65rem;
   text-align: center;
 }
 
+/* Wrapper for the offset glowing border around the install button */
 .install-command-inner {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.85rem 1.75rem;
-  background: var(--sl-color-gray-6);
-  border-radius: 8px;
-  border: 1px solid var(--gw-border);
-  transition: border-color 0.2s ease;
+  gap: 0.85rem;
+  padding: 0.7rem 0.7rem 0.7rem 1.1rem;
+  background: #0d1117;
+  border-radius: 10px;
+  border: 1px solid #1f2630;
+  font: inherit;
+  color: #e6edf3;
+  cursor: copy;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 4px 24px -8px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.12s ease;
+  z-index: 1;
+}
+
+/* Animated green outline with gap around the install block */
+.install-command-inner::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 15px;
+  border: 1.5px solid rgba(92, 234, 92, 0.35);
+  pointer-events: none;
+  z-index: -1;
+  animation: gw-install-glow 3.2s ease-in-out infinite;
+}
+
+@keyframes gw-install-glow {
+  0%,
+  100% {
+    border-color: rgba(92, 234, 92, 0.28);
+    box-shadow:
+      0 0 0 0 rgba(92, 234, 92, 0),
+      0 0 18px -2px rgba(92, 234, 92, 0.12);
+  }
+  50% {
+    border-color: rgba(92, 234, 92, 0.7);
+    box-shadow:
+      0 0 0 1px rgba(92, 234, 92, 0.08),
+      0 0 28px 2px rgba(92, 234, 92, 0.28);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-command-inner::before {
+    animation: none;
+    border-color: rgba(92, 234, 92, 0.4);
+  }
 }
 
 .install-command-inner:hover {
-  border-color: var(--sl-color-gray-3);
+  border-color: rgba(92, 234, 92, 0.6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 6px 28px -8px rgba(92, 234, 92, 0.3);
+}
+
+.install-command-inner:active {
+  transform: translateY(1px);
+}
+
+.install-command-inner:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
 }
 
 .install-prompt {
-  color: var(--sl-color-accent);
+  color: #5cea5c;
   font-family: var(--sl-font-system-mono);
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: 1rem;
   user-select: none;
+  line-height: 1;
 }
 
-.install-command code {
-  font-size: 1.05rem;
+.install-text {
+  font-size: 0.95rem;
   font-family: var(--sl-font-system-mono);
   background: none;
   padding: 0;
   border: none;
-  color: var(--sl-color-white);
+  color: #e6edf3;
+  letter-spacing: -0.005em;
+}
+
+.install-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #7d8590;
+  background: transparent;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.install-command-inner:hover .install-copy {
+  color: #5cea5c;
+  background: rgba(92, 234, 92, 0.1);
+}
+
+.install-copy .install-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Idle state: copy icon visible, check hidden */
+[data-copy-state='idle'] .install-icon--copy,
+[data-copy-state='error'] .install-icon--copy {
+  display: block;
+}
+[data-copy-state='idle'] .install-icon--check,
+[data-copy-state='error'] .install-icon--check {
+  display: none;
+}
+
+/* Copied state: check icon visible, copy hidden */
+[data-copy-state='copied'] .install-icon--copy {
+  display: none;
+}
+[data-copy-state='copied'] .install-icon--check {
+  display: block;
+  animation: gw-copy-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+[data-copy-state='copied'] .install-copy {
+  color: #5cea5c;
+  background: rgba(92, 234, 92, 0.2);
+}
+
+@keyframes gw-copy-pop {
+  from { transform: scale(0.6); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-copy-state='copied'] .install-icon--check {
+    animation: none;
+  }
+}
+
+.downloads-badge-wrap {
+  text-align: center;
+  margin-block: 0 3rem;
+}
+
+/* ============================================
+   Docs CTA Button
+   ============================================ */
+
+.docs-cta {
+  text-align: center;
+  margin-block: 4.5rem 1rem;
+}
+
+.docs-cta-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.6rem;
+  background: #7cf27c;
+  color: #052e16;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 16px -6px rgba(124, 242, 124, 0.6);
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.2s ease,
+    transform 0.1s ease;
+}
+
+.docs-cta-button:hover {
+  background: #9ef59e;
+  box-shadow:
+    0 0 0 3px rgba(124, 242, 124, 0.22),
+    0 6px 22px -8px rgba(124, 242, 124, 0.75);
+  transform: translateY(-1px);
+  color: #052e16;
+}
+
+.docs-cta-button:active {
+  transform: translateY(0);
+}
+
+.docs-cta-arrow {
+  transition: transform 0.15s ease;
+}
+
+.docs-cta-button:hover .docs-cta-arrow {
+  transform: translateX(3px);
 }
 
 /* ============================================
@@ -323,49 +589,25 @@ body::after {
 }
 
 /* ============================================
-   CTA Section
+   Header Social Icons - always visible
    ============================================ */
 
-.cta-section {
-  position: relative;
-  text-align: center;
-  margin-top: 4rem;
-  padding: 3rem 2rem;
-  border-radius: 10px;
-  border: 1px solid var(--gw-border);
-  overflow: hidden;
+/* Starlight hides .right-group below 50rem via .sl-hidden. Force visible
+   so GitHub + npm icons appear on mobile too. */
+.header .right-group {
+  display: flex !important;
 }
 
-.cta-section::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    var(--gw-dot-grid),
-    linear-gradient(135deg, rgba(34, 197, 94, 0.03) 0%, transparent 50%);
-  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
-  pointer-events: none;
-}
-
-:root[data-theme='light'] .cta-section::before {
-  background:
-    var(--gw-dot-grid),
-    linear-gradient(135deg, rgba(22, 163, 74, 0.03) 0%, transparent 50%);
-  background-size: var(--gw-dot-gap) var(--gw-dot-gap), 100% 100%;
-}
-
-.cta-link {
-  position: relative;
-  z-index: 1;
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--sl-color-accent);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.cta-link:hover {
-  color: var(--sl-color-accent-high);
+@media (max-width: 50rem) {
+  .header {
+    gap: 0.5rem;
+  }
+  .header .right-group {
+    gap: 0.5rem;
+  }
+  .header .social-icons::after {
+    display: none;
+  }
 }
 
 /* ============================================
@@ -373,14 +615,103 @@ body::after {
    ============================================ */
 
 .casino-link {
-  opacity: 0.12;
-  font-size: 0.7rem;
+  opacity: 0.27;
+  font-size: 1.05rem;
   transition: opacity 0.3s ease;
   text-decoration: none;
+  display: inline-block;
 }
 
 .casino-link:hover {
   opacity: 1;
+}
+
+.casino-gif {
+  margin-block: 1.75rem 2rem;
+}
+
+.casino-gif img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--gw-border);
+  box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+}
+
+/* Heading anchor chain-link icons: hover-only so they're available for
+   deep-linking on docs pages without adding visual noise by default. */
+.sl-heading-wrapper .sl-anchor-link {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sl-heading-wrapper:hover .sl-anchor-link,
+.sl-heading-wrapper .sl-anchor-link:focus-visible {
+  opacity: 0.55;
+}
+
+.sl-heading-wrapper .sl-anchor-link:hover,
+.sl-heading-wrapper .sl-anchor-link:focus-visible {
+  opacity: 1;
+}
+
+/* ============================================
+   Responsive tweaks
+   ============================================ */
+
+/* Hero title: mobile-only <br> */
+.hero-mobile-br {
+  display: none;
+}
+@media (max-width: 50rem) {
+  .hero-mobile-br {
+    display: initial;
+  }
+}
+
+/* Mobile: shrink the install command so the full string fits on one
+   line on small viewports; hide the copy icon (tap-and-hold to copy on
+   touch devices). */
+@media (max-width: 30rem) {
+  .install-command-inner {
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+  }
+  .install-prompt {
+    font-size: 0.85rem;
+  }
+  .install-text {
+    font-size: 0.78rem;
+    letter-spacing: -0.01em;
+  }
+  .install-copy {
+    display: none;
+  }
+  .install-command-inner {
+    cursor: default;
+  }
+}
+
+/* Mobile: collapse the theme select to just its caret (still tappable
+   to open the dark/light/auto dropdown). */
+@media (max-width: 50rem) {
+  starlight-theme-select .label-icon {
+    display: none;
+  }
+  starlight-theme-select select {
+    color: transparent;
+    width: 1.5rem;
+    padding-inline: 0.25rem;
+  }
+  starlight-theme-select label {
+    --sl-select-width: 0;
+    gap: 0;
+  }
+  starlight-theme-select .caret {
+    position: static;
+    transform: none;
+  }
 }
 
 /* ============================================
