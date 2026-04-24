@@ -206,17 +206,24 @@ function debounce(fn, delay) {
 
 /**
  * Throttle a function - execute at most once per interval
+ *
+ * Mirrors debounce() in returning a wrapped function with a `.cancel()`
+ * method. If a trailing call has been scheduled (throttle fires on the
+ * leading edge and coalesces further calls during the interval into a
+ * single trailing call), cancel() drops it. Wire cancel() into shutdown
+ * paths so a UI-event-driven throttle can't fire a deferred call after
+ * the target module has torn down and leave state partially written.
+ *
  * @template {(...args: any[]) => void} T
  * @param {T} fn - Function to throttle
  * @param {number} interval - Minimum interval between calls in milliseconds
- * @returns {T}
+ * @returns {T & { cancel: () => void }}
  */
 function throttle(fn, interval) {
   let lastCall = 0;
   let timeoutId = null;
 
-  // @ts-ignore - TypeScript can't verify generic function return type
-  return (...args) => {
+  const throttled = (...args) => {
     const now = Date.now();
     const timeSinceLastCall = now - lastCall;
 
@@ -232,6 +239,16 @@ function throttle(fn, interval) {
       }, interval - timeSinceLastCall);
     }
   };
+
+  throttled.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  // @ts-ignore - TypeScript can't verify generic function augmentation
+  return throttled;
 }
 
 module.exports = {

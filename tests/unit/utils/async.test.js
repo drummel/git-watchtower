@@ -392,4 +392,45 @@ describe('throttle', () => {
     fn();
     assert.strictEqual(callCount, 2);
   });
+
+  it('exposes a cancel() method that drops a pending trailing call', async () => {
+    let callCount = 0;
+    const fn = throttle(() => callCount++, 50);
+
+    fn(); // Leading edge fires immediately.
+    assert.strictEqual(callCount, 1);
+
+    fn(); // Coalesced — schedules a trailing call.
+
+    // Cancel before the trailing call fires. Without cancel(), this
+    // deferred setTimeout would fire after the process/module under
+    // test had torn down, writing into stale state.
+    fn.cancel();
+
+    await sleep(80);
+    assert.strictEqual(callCount, 1, 'trailing call should not have fired after cancel');
+  });
+
+  it('cancel() is a no-op when nothing is pending', () => {
+    const fn = throttle(() => {}, 50);
+    assert.doesNotThrow(() => fn.cancel());
+    fn();
+    assert.doesNotThrow(() => fn.cancel());
+  });
+
+  it('throttle() can be re-used after cancel()', async () => {
+    let callCount = 0;
+    const fn = throttle(() => callCount++, 50);
+
+    fn();
+    fn();        // trailing scheduled
+    fn.cancel(); // trailing dropped
+    await sleep(60);
+    assert.strictEqual(callCount, 1);
+
+    // After the interval has expired, a fresh call must still fire
+    // on the leading edge.
+    fn();
+    assert.strictEqual(callCount, 2);
+  });
 });
