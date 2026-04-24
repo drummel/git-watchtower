@@ -17,12 +17,13 @@ hero:
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+import InstallCommand from '../../components/InstallCommand.astro';
+import DownloadsBadge from '../../components/DownloadsBadge.astro';
 
-<div class="install-command">
-  <div class="install-command-inner">
-    <span class="install-prompt">$</span>
-    <code>npm install -g git-watchtower</code>
-  </div>
+<InstallCommand />
+
+<div class="downloads-badge-wrap">
+  <DownloadsBadge />
 </div>
 
 ## Why Git Watchtower?

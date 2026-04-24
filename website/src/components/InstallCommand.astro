@@ -1,0 +1,72 @@
+---
+const { command = 'npm install -g git-watchtower' } = Astro.props;
+---
+
+<div class="install-command">
+  <button
+    type="button"
+    class="install-command-inner"
+    data-install-command={command}
+    aria-label={`Copy install command: ${command}`}
+  >
+    <span class="install-prompt" aria-hidden="true">$</span>
+    <code>{command}</code>
+    <span class="install-copy" aria-hidden="true">
+      <svg class="install-copy-default" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
+        <path
+          d="M5 15V5a2 2 0 0 1 2-2h10"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+        />
+      </svg>
+      <svg class="install-copy-done" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M5 12.5l4.5 4.5L19 7"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+    </span>
+    <span class="install-feedback" aria-live="polite">Copied</span>
+  </button>
+</div>
+
+<script>
+  function setupCopyButtons() {
+    const buttons = document.querySelectorAll<HTMLButtonElement>('[data-install-command]');
+    buttons.forEach((btn) => {
+      if (btn.dataset.copyBound === 'true') return;
+      btn.dataset.copyBound = 'true';
+      btn.addEventListener('click', async () => {
+        const text = btn.dataset.installCommand ?? '';
+        if (!text) return;
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+          }
+          btn.classList.add('is-copied');
+          window.setTimeout(() => btn.classList.remove('is-copied'), 1800);
+        } catch {
+          btn.classList.add('is-error');
+          window.setTimeout(() => btn.classList.remove('is-error'), 1800);
+        }
+      });
+    });
+  }
+
+  setupCopyButtons();
+  document.addEventListener('astro:page-load', setupCopyButtons);
+</script>

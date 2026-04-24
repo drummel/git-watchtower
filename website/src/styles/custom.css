@@ -263,23 +263,39 @@ body::after {
    ============================================ */
 
 .install-command {
-  margin-block: 2.5rem;
+  margin-block: 2.5rem 1rem;
   text-align: center;
 }
 
 .install-command-inner {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 1.75rem;
+  padding: 0.85rem 1.1rem 0.85rem 1.4rem;
   background: var(--sl-color-gray-6);
   border-radius: 8px;
   border: 1px solid var(--gw-border);
-  transition: border-color 0.2s ease;
+  font: inherit;
+  color: inherit;
+  cursor: copy;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    transform 0.15s ease;
 }
 
 .install-command-inner:hover {
-  border-color: var(--sl-color-gray-3);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.install-command-inner:active {
+  transform: translateY(1px);
+}
+
+.install-command-inner:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
 }
 
 .install-prompt {
@@ -297,6 +313,83 @@ body::after {
   padding: 0;
   border: none;
   color: var(--sl-color-white);
+}
+
+:root[data-theme='light'] .install-command code {
+  color: var(--sl-color-black);
+}
+
+.install-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  margin-left: 0.35rem;
+  color: var(--sl-color-gray-3, #999);
+  background: transparent;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.install-command-inner:hover .install-copy {
+  color: var(--sl-color-accent);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.install-copy svg {
+  width: 16px;
+  height: 16px;
+}
+
+.install-copy-done {
+  display: none;
+}
+
+.install-command-inner.is-copied .install-copy {
+  color: var(--sl-color-accent);
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.install-command-inner.is-copied .install-copy-default {
+  display: none;
+}
+
+.install-command-inner.is-copied .install-copy-done {
+  display: block;
+}
+
+.install-feedback {
+  position: absolute;
+  top: -1.6rem;
+  left: 50%;
+  transform: translate(-50%, 4px);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+.install-command-inner.is-copied .install-feedback {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.downloads-badge-wrap {
+  text-align: center;
+  margin-block: 0 2.5rem;
 }
 
 /* ============================================

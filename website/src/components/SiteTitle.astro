@@ -1,0 +1,153 @@
+---
+const { siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="gw-site-title sl-flex" aria-label="Git Watchtower">
+  <span class="gw-mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M5 20V10l7-5 7 5v10"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M9 20v-5h6v5"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle cx="12" cy="9" r="1.4" fill="currentColor" />
+    </svg>
+    <span class="gw-pulse"></span>
+  </span>
+  <span class="gw-wordmark" translate="no">
+    <span class="gw-word-git">Git</span><span class="gw-word-watch">Watchtower</span>
+  </span>
+</a>
+
+<style>
+  .gw-site-title {
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    white-space: nowrap;
+    min-width: 0;
+    padding: 0.25rem 0.1rem;
+    line-height: 1;
+  }
+
+  .gw-mark {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    color: var(--sl-color-accent);
+    background: linear-gradient(
+      145deg,
+      rgba(34, 197, 94, 0.16) 0%,
+      rgba(34, 197, 94, 0.04) 100%
+    );
+    border: 1px solid rgba(34, 197, 94, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 1px 8px rgba(34, 197, 94, 0.18);
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease,
+      border-color 0.25s ease;
+  }
+
+  .gw-mark svg {
+    width: 16px;
+    height: 16px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .gw-pulse {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--sl-color-accent);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+    animation: gw-pulse 2.4s ease-out infinite;
+  }
+
+  @keyframes gw-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gw-pulse {
+      animation: none;
+    }
+  }
+
+  .gw-site-title:hover .gw-mark {
+    transform: translateY(-1px);
+    border-color: rgba(34, 197, 94, 0.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 2px 12px rgba(34, 197, 94, 0.28);
+  }
+
+  .gw-wordmark {
+    font-family: var(--sl-font);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    background: linear-gradient(
+      180deg,
+      var(--sl-color-white) 0%,
+      var(--sl-color-gray-2, #c7c7c7) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    transition: filter 0.2s ease;
+  }
+
+  :root[data-theme='light'] .gw-wordmark {
+    background: linear-gradient(
+      180deg,
+      var(--sl-color-black) 0%,
+      var(--sl-color-gray-3, #4b4b4b) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .gw-word-git {
+    font-weight: 500;
+    opacity: 0.78;
+  }
+
+  .gw-word-watch {
+    font-weight: 700;
+    margin-left: 0.18em;
+  }
+
+  .gw-site-title:hover .gw-wordmark {
+    filter: brightness(1.08);
+  }
+</style>
