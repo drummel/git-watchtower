@@ -120,10 +120,15 @@ ${getDashboardHtml()}
     window.Notification = { permission: 'denied' };
   `;
 
-  // Combine: mocks first, then dashboard JS
+  // Combine: mocks first, then dashboard JS.
+  // Use a function replacer — a string replacement would interpret `$'`,
+  // `$&`, `$n` etc. as back-references, corrupting any generated JS that
+  // happens to contain those byte sequences (e.g. dollar-sign followed by
+  // a single quote inside a casino-stats string literal).
+  const replacement = '<script>' + mockScript + ';' + getDashboardJs() + '</script>';
   const combinedHtml = fullHtml.replace(
     '<div id="__test-ready"></div>',
-    '<script>' + mockScript + ';' + getDashboardJs() + '</script>'
+    () => replacement
   );
 
   const dom = new JSDOM(combinedHtml, {

@@ -39,6 +39,7 @@ function getDashboardHtml() {
 
   <div class="side-panel" id="side-panel">
     <div class="panel-header">Activity Log <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">&#x25b6;</button></div>
+    <div class="session-stats-card" id="session-stats-card"></div>
     <div class="activity-log" id="activity-log"></div>
   </div>
 
@@ -57,6 +58,26 @@ function getDashboardHtml() {
     <span><kbd>Esc</kbd> close</span>
     <span class="stats-bar" id="stats-bar"></span>
   </div>
+</div>
+
+<!-- Casino Mode overlay layer. Everything inside is hidden by default and
+     only becomes visible when body has the .casino-active class (driven by
+     state.casinoModeEnabled). Pointer-events are off so it never blocks
+     clicks on the real dashboard underneath. -->
+<div class="casino-layer" id="casino-layer">
+  <div class="casino-marquee" id="casino-marquee"></div>
+  <div class="casino-reels" id="casino-reels">
+    <div class="casino-reel" data-reel="0">&#x1f3b0;</div>
+    <div class="casino-reel" data-reel="1">&#x1f3b0;</div>
+    <div class="casino-reel" data-reel="2">&#x1f3b0;</div>
+    <div class="casino-reel" data-reel="3">&#x1f3b0;</div>
+    <div class="casino-reel" data-reel="4">&#x1f3b0;</div>
+    <div class="casino-reel-label" id="casino-reel-label"></div>
+  </div>
+  <div class="casino-overlay" id="casino-win-overlay"></div>
+  <div class="casino-overlay loss" id="casino-loss-overlay"></div>
+  <div class="casino-badge" id="casino-badge">&#x1f3b0; MAX ADDICTION &#x1f3b0;</div>
+  <div class="casino-stats-panel" id="casino-stats-panel"></div>
 </div>
 
 <div class="flash" id="flash"></div>
