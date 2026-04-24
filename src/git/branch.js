@@ -103,7 +103,7 @@ async function getAllBranches(options = {}) {
     // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
     const delimiter = '\x1f';
     const localResult = await execGit(
-      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601-strict)${delimiter}%(objectname:short)${delimiter}%(subject)`, 'refs/heads/'],
       { cwd }
     );
 
@@ -128,7 +128,7 @@ async function getAllBranches(options = {}) {
 
     // Get remote branches
     const remoteResult = await execGit(
-      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${remoteName}/`],
+      ['for-each-ref', '--sort=-committerdate', `--format=%(refname:short)${delimiter}%(committerdate:iso8601-strict)${delimiter}%(objectname:short)${delimiter}%(subject)`, `refs/remotes/${remoteName}/`],
       { cwd }
     );
 

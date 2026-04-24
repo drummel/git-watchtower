@@ -97,6 +97,25 @@ describe('branch.js integration tests', () => {
       assert.ok('hasUpdates' in branch);
     });
 
+    it('populates branch.date from a strict-ISO timestamp (audit #24)', async () => {
+      // for-each-ref is asked for committerdate:iso8601-strict, not the
+      // space-separated iso8601 form. Verifies Date parse produced a
+      // valid (non-NaN) timestamp — a regression to :iso8601 would
+      // still parse on V8 today but is unsafe on spec-conformant engines.
+      const branches = await getAllBranches({
+        fetch: false,
+        cwd: fixture.path,
+      });
+      assert.ok(branches.length > 0);
+      for (const b of branches) {
+        assert.ok(b.date instanceof Date, `branch ${b.name} date is not a Date`);
+        assert.ok(
+          !Number.isNaN(b.date.getTime()),
+          `branch ${b.name} date is NaN — strict-ISO parse failed`,
+        );
+      }
+    });
+
     it('should include remote branches when available', async () => {
       fixture.createRemote('origin');
 

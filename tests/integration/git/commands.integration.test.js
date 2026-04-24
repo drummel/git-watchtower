@@ -213,6 +213,20 @@ describe('commands.js integration tests', () => {
     });
   });
 
+  describe('log timestamp format (strict ISO 8601)', () => {
+    it('emits a Date()-parseable timestamp from %cI', async () => {
+      // Verifies the audit #24 intent: getCommitsByDay uses %cI so
+      // Date(string) parsing is reliable on any spec-conformant engine,
+      // not just V8's lenient parser.
+      const result = await execGit(['log', '--format=%cI', '-1'], { cwd: fixture.path });
+      const d = new Date(result.stdout.trim());
+      assert.ok(
+        !Number.isNaN(d.getTime()),
+        `Date parse of %cI output should succeed; got: ${JSON.stringify(result.stdout)}`,
+      );
+    });
+  });
+
   describe('getChangedFiles', () => {
     it('should return array of changed files', async () => {
       // Create a branch with different files
