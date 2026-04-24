@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/drummel/git-watchtower/compare/v2.0.3...v2.1.0) (2026-04-24)
+
+
+### Features
+
+* bring casino mode and session stats to the web dashboard ([bd6bf76](https://github.com/drummel/git-watchtower/commit/bd6bf761c5133464aa1829a20eb963e9503d8160))
+
 ## [2.0.3](https://github.com/drummel/git-watchtower/compare/v2.0.2...v2.0.3) (2026-04-24)
 
 
