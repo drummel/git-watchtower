@@ -708,27 +708,38 @@ function startServerProcess() {
   };
 
   try {
-    serverProcess = spawn(cmd, args, spawnOptions);
+    const proc = spawn(cmd, args, spawnOptions);
+    serverProcess = proc;
     store.setState({ serverRunning: true });
 
-    serverProcess.stdout.on('data', (data) => {
+    // Capture `proc` in each listener so a late event from an old process
+    // (e.g. proc1's SIGTERM-induced 'close' arriving after restart already
+    // spawned proc2) cannot clobber proc2's globals. Without this guard,
+    // proc1's close handler resolves the module-level `serverProcess` at
+    // execution time — which is now proc2 — and nulls it out, leaving the
+    // TUI thinking no server is running while proc2 is alive on its port.
+    proc.stdout.on('data', (data) => {
+      if (serverProcess !== proc) return;
       const lines = data.toString().split('\n').filter(Boolean);
       lines.forEach(line => addServerLog(line));
     });
 
-    serverProcess.stderr.on('data', (data) => {
+    proc.stderr.on('data', (data) => {
+      if (serverProcess !== proc) return;
       const lines = data.toString().split('\n').filter(Boolean);
       lines.forEach(line => addServerLog(line, true));
     });
 
-    serverProcess.on('error', (err) => {
+    proc.on('error', (err) => {
+      if (serverProcess !== proc) return;
       store.setState({ serverRunning: false, serverCrashed: true });
       addServerLog(`Error: ${err.message}`, true);
       addLog(`Server error: ${err.message}`, 'error');
       render();
     });
 
-    serverProcess.on('close', (code) => {
+    proc.on('close', (code) => {
+      if (serverProcess !== proc) return;
       store.setState({ serverRunning: false });
       if (code !== 0 && code !== null) {
         store.setState({ serverCrashed: true });
@@ -742,7 +753,7 @@ function startServerProcess() {
       render();
     });
 
-    addLog(`Server started (pid: ${serverProcess.pid})`, 'success');
+    addLog(`Server started (pid: ${proc.pid})`, 'success');
   } catch (err) {
     store.setState({ serverCrashed: true });
     addServerLog(`Failed to start: ${err.message}`, true);
