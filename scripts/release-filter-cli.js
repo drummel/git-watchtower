@@ -6,11 +6,23 @@ const releaseNotesGenerator = require('@semantic-release/release-notes-generator
 
 const EXCLUDED_PREFIXES = ['website/'];
 
+// Commits whose message bodies contain literal text that
+// conventional-commits-parser misreads as semver-relevant footers
+// (e.g. quoting "BREAKING CHANGE:" while explaining a prior misfire).
+// Skipping by hash is a targeted workaround that avoids rewriting
+// merged history on main.
+const EXCLUDED_HASHES = new Set([
+  // ci: exclude website-only commits from semantic-release analysis
+  // Body quotes "BREAKING CHANGE: footer" which triggered the v3.0.0 misfire.
+  '3012256c45aa94d6dc1b5cd38e8667df6a94e1c6',
+]);
+
 function isExcluded(file) {
   return EXCLUDED_PREFIXES.some((prefix) => file.startsWith(prefix));
 }
 
 function commitTouchesPackage(commit) {
+  if (EXCLUDED_HASHES.has(commit.hash)) return false;
   let output;
   try {
     output = execFileSync(
