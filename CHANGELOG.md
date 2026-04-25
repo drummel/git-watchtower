@@ -1,24 +1,3 @@
-# [3.0.0](https://github.com/drummel/git-watchtower/compare/v2.1.2...v3.0.0) (2026-04-25)
-
-
-### Continuous Integration
-
-* exclude website-only commits from semantic-release analysis ([3012256](https://github.com/drummel/git-watchtower/commit/3012256c45aa94d6dc1b5cd38e8667df6a94e1c6))
-
-
-### BREAKING CHANGES
-
-* footer for the Astro upgrade. The CLI itself had no
-breaking changes, so the major bump was a misfire.
-
-Add a small wrapper plugin that filters out commits whose changes are
-entirely under website/** before they reach commit-analyzer and
-release-notes-generator. Verified against the v1.14.18..v2.0.0 commit
-range: baseline resolves to "major", filtered resolves to "minor",
-dropping 6 website-only commits including the offending chore.
-
-https://claude.ai/code/session_016axPG6JhWHgXpPFXM4Etep
-
 ## [2.1.2](https://github.com/drummel/git-watchtower/compare/v2.1.1...v2.1.2) (2026-04-25)
 
 
