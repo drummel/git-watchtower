@@ -1,3 +1,10 @@
+## [2.1.3](https://github.com/drummel/git-watchtower/compare/v2.1.2...v2.1.3) (2026-04-25)
+
+
+### Bug Fixes
+
+* prevent dev-server close handler from clobbering replacement process ([50ef9bb](https://github.com/drummel/git-watchtower/commit/50ef9bbbf1db5085daadf5b8374b64643f5187b4))
+
 ## [2.1.2](https://github.com/drummel/git-watchtower/compare/v2.1.1...v2.1.2) (2026-04-25)
 
 
