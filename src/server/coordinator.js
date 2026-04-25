@@ -459,12 +459,26 @@ class Coordinator {
 
   /**
    * Send a JSON message over a socket.
+   *
+   * Honours outbound backpressure: if the per-socket write buffer is
+   * already at or above MAX_IPC_BUFFER, drop the worker rather than
+   * letting Node's internal buffer grow without bound. A wedged or
+   * paused worker would otherwise let coordinator memory climb on
+   * every pushState / command broadcast — symmetric with the inbound
+   * MAX_IPC_BUFFER policy in _handleWorkerConnection. The worker is
+   * expected to reconnect; until it does, dropping it is preferable
+   * to OOM-ing the coordinator.
+   *
    * @param {net.Socket} socket
    * @param {Object} msg
    * @private
    */
   _sendMessage(socket, msg) {
     try {
+      if (socket.writableLength >= MAX_IPC_BUFFER) {
+        socket.destroy();
+        return;
+      }
       socket.write(JSON.stringify(msg) + '\n');
     } catch (e) { /* peer socket closed between iteration and write — peer will reconnect if it recovers */ }
   }
@@ -643,12 +657,25 @@ class Worker {
   // ─── Private ─────────────────────────────────────────────────
 
   /**
+   * Send a JSON message to the coordinator.
+   *
+   * Outbound backpressure mirrors Coordinator._sendMessage: if the
+   * write buffer already exceeds MAX_IPC_BUFFER, destroy the socket
+   * rather than letting state pushes accumulate unboundedly while
+   * a wedged coordinator can't drain them. The worker's _connected
+   * flag flips to false on socket close, so subsequent pushState
+   * calls become no-ops until reconnect.
+   *
    * @param {Object} msg
    * @private
    */
   _send(msg) {
     if (this.socket && this._connected) {
       try {
+        if (this.socket.writableLength >= MAX_IPC_BUFFER) {
+          this.socket.destroy();
+          return;
+        }
         this.socket.write(JSON.stringify(msg) + '\n');
       } catch (e) { /* coordinator socket closed between isConnected() check and write */ }
     }
@@ -694,4 +721,5 @@ module.exports = {
   WATCHTOWER_DIR,
   LOCK_FILE,
   SOCKET_PATH,
+  MAX_IPC_BUFFER,
 };
