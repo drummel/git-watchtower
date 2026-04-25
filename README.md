@@ -2,15 +2,21 @@
 
 # Git Watchtower
 
-### Keep up with your AI coding agents.
+## Keep up with your AI coding agents.
 
-Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard. Built for teams working with Claude Code, Codex, and other AI agents.
+### Monitor git branches in real-time with activity sparklines, instant notifications, and a web dashboard.
+
+Built for teams working with Claude Code, Codex, and other AI agents.
 
 [![npm version](https://img.shields.io/npm/v/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
 [![npm downloads](https://img.shields.io/npm/dm/git-watchtower.svg)](https://www.npmjs.com/package/git-watchtower)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+#### Visit our website
+
 **[gitwatchtower.dev &rarr;](https://gitwatchtower.dev)**
+
+[Quick Start](https://gitwatchtower.dev/guides/quick-start/) · [Configuration](https://gitwatchtower.dev/guides/configuration/) · [Web Dashboard](https://gitwatchtower.dev/guides/web-dashboard/) · [Keyboard Controls](https://gitwatchtower.dev/guides/keyboard-controls/) · [Server Modes](https://gitwatchtower.dev/guides/server-modes/) · [Troubleshooting](https://gitwatchtower.dev/guides/troubleshooting/)
 
 </div>
 
