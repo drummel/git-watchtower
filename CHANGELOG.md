@@ -1,3 +1,10 @@
+## [2.1.2](https://github.com/drummel/git-watchtower/compare/v2.1.1...v2.1.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* enforce outbound MAX_IPC_BUFFER on coordinator and worker writes ([56066bc](https://github.com/drummel/git-watchtower/commit/56066bc2db1cd5b9336dff65d7882970168b6d38))
+
 ## [2.1.1](https://github.com/drummel/git-watchtower/compare/v2.1.0...v2.1.1) (2026-04-24)
 
 
