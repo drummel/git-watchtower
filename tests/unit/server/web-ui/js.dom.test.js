@@ -650,4 +650,139 @@ describe('dashboard JS — DOM behavior', () => {
       }
     });
   });
+
+  describe('Casino mode', () => {
+    it('should not have casino-active class when state.casinoModeEnabled is false', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(
+        !env.document.body.classList.contains('casino-active'),
+        'body should not be casino-active by default'
+      );
+    });
+
+    it('should add casino-active class to body when state.casinoModeEnabled flips on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      assert.ok(
+        env.document.body.classList.contains('casino-active'),
+        'body should pick up casino-active when state flips on'
+      );
+    });
+
+    it('should remove casino-active class when state.casinoModeEnabled flips off', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(
+        !env.document.body.classList.contains('casino-active'),
+        'body should drop casino-active when state flips off'
+      );
+    });
+
+    it('should POST a toggleCasino action when c is pressed', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({}));
+
+      env.pressKey('c');
+
+      const xhr = env.getXhr('/api/action');
+      assert.ok(xhr, 'pressing c should fire an action POST');
+      const body = JSON.parse(xhr._body);
+      assert.equal(body.action, 'toggleCasino');
+    });
+
+    it('should populate the CASINO WINNINGS panel from state.casinoStats', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats({
+          totalLinesAdded: 42,
+          totalLinesDeleted: 7,
+          totalLines: 49,
+          totalPolls: 5,
+          netWinnings: 44,
+          houseEdge: 73,
+          luckMeter: 88,
+          dopamineHits: 12,
+          sessionDuration: '3m',
+          vibesQuality: '\u{1f680}',
+          consecutivePolls: 0,
+        }),
+      }));
+
+      const panel = env.document.getElementById('casino-stats-panel');
+      const text = panel.textContent;
+      assert.ok(text.includes('CASINO WINNINGS'), 'panel should render the title');
+      assert.ok(text.includes('+42'), 'should show lines added');
+      assert.ok(text.includes('-7'), 'should show lines deleted');
+      assert.ok(text.includes('$49'), 'should show total lines as dollars');
+      assert.ok(text.includes('$5'), 'should show poll cost');
+      assert.ok(text.includes('+$44'), 'should show net winnings with sign');
+      assert.ok(text.includes('73%'), 'should show house edge');
+      assert.ok(text.includes('88%'), 'should show luck meter');
+      assert.ok(text.includes('12'), 'should show dopamine hits');
+    });
+
+    it('should empty the WINNINGS panel when casinoStats is null', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats(),
+      }));
+      env.pushSSE(makeState({ casinoModeEnabled: false, casinoStats: null }));
+
+      const panel = env.document.getElementById('casino-stats-panel');
+      assert.equal(panel.innerHTML, '', 'panel should empty when stats are null');
+    });
+
+    it('should activate slot reels when polling status flips to fetching', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats(), pollingStatus: 'idle' }));
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats(), pollingStatus: 'fetching' }));
+
+      const reels = env.document.getElementById('casino-reels');
+      assert.ok(reels.className.includes('active'), 'reels should be active');
+      assert.ok(reels.className.includes('spinning'), 'reels should be spinning');
+    });
+
+    it('should not activate reels if casino mode is off', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'idle' }));
+      env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'fetching' }));
+
+      const reels = env.document.getElementById('casino-reels');
+      assert.ok(!reels.className.includes('active'), 'reels should stay hidden when mode is off');
+    });
+  });
 });
+
+/**
+ * Realistic-shaped casinoStats stub matching what casino.getStats() returns.
+ * Lets tests override individual fields without restating the whole payload.
+ */
+function stubCasinoStats(overrides) {
+  return Object.assign({
+    totalLinesAdded: 0,
+    totalLinesDeleted: 0,
+    totalLines: 0,
+    totalPolls: 0,
+    pollsWithUpdates: 0,
+    bigWins: 0,
+    jackpots: 0,
+    megaJackpots: 0,
+    consecutivePolls: 0,
+    nearMisses: 0,
+    sessionStart: Date.now(),
+    lastHitTime: null,
+    sessionDuration: '0m',
+    hitRate: 0,
+    timeSinceLastHit: 'Never',
+    luckMeter: 50,
+    houseEdge: 70,
+    vibesQuality: '\u{1f60e}',
+    dopamineHits: 0,
+    netWinnings: 0,
+  }, overrides || {});
+}

@@ -679,14 +679,12 @@ ${pureFnBlock}
     if (!state) return;
     const enabled = !!state.casinoModeEnabled;
     document.body.classList.toggle('casino-active', enabled);
-    if (!enabled) {
-      if (ui.prevCasinoEnabled) {
-        casinoCleanup();
-        ui.prevCasinoEnabled = false;
-      }
-      return;
+    if (!enabled && ui.prevCasinoEnabled) {
+      casinoCleanup();
     }
-    ui.prevCasinoEnabled = true;
+    ui.prevCasinoEnabled = enabled;
+    // Always rerender — when state.casinoStats is null the function clears
+    // the panel, which keeps DOM state consistent with the toggle.
     renderCasinoStats();
   }
 
