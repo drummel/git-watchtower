@@ -496,6 +496,72 @@ describe('WebDashboardServer', () => {
     });
   });
 
+  describe('_pushState dead-client pruning', () => {
+    beforeEach(() => {
+      server = new WebDashboardServer({ store, port: 0 });
+    });
+
+    afterEach(async () => {
+      // No start() called in these tests; nothing to stop.
+    });
+
+    it('prunes a client that throws on write and calls end() best-effort', () => {
+      const healthy = { writes: [], endCalls: 0, write(msg) { this.writes.push(msg); }, end() { this.endCalls++; } };
+      const dead = {
+        endCalls: 0,
+        write() { throw new Error('socket reset'); },
+        end() { this.endCalls++; },
+      };
+      server.clients.add(healthy);
+      server.clients.add(dead);
+
+      // Invalidate the cache so the push actually iterates clients.
+      server.lastPushedJson = '';
+
+      server._pushState();
+
+      // The dead client was pruned synchronously instead of waiting for
+      // an eventual req.on('close') — which on abrupt socket resets can
+      // be arbitrarily delayed.
+      assert.equal(server.clients.has(dead), false, 'dead client should be pruned');
+      assert.equal(dead.endCalls, 1, 'end() should be called once as best-effort cleanup');
+
+      // The healthy client received the message and stays in the set.
+      assert.equal(server.clients.has(healthy), true, 'healthy client stays');
+      assert.equal(healthy.writes.length, 1, 'healthy client received the state frame');
+    });
+
+    it('does not crash if end() itself throws on the dead client', () => {
+      const dead = {
+        write() { throw new Error('write'); },
+        end() { throw new Error('end'); },
+      };
+      server.clients.add(dead);
+      server.lastPushedJson = '';
+
+      assert.doesNotThrow(() => server._pushState());
+      assert.equal(server.clients.has(dead), false, 'dead client pruned even when end() threw');
+    });
+
+    it('deleting during Set iteration does not skip remaining healthy clients', () => {
+      // Set iteration semantics: deleting the current element is safe and
+      // does not skip subsequent entries. Insert [dead, healthy] so the
+      // dead client is visited first and pruned; the healthy one must
+      // still receive the push in the same iteration.
+      const dead = { write() { throw new Error('dead'); }, end() {} };
+      const healthy = { writes: 0, write() { this.writes++; }, end() {} };
+      server.clients.add(dead);
+      server.clients.add(healthy);
+      server.lastPushedJson = '';
+
+      server._pushState();
+
+      assert.equal(server.clients.has(dead), false);
+      assert.equal(server.clients.has(healthy), true);
+      assert.equal(healthy.writes, 1, 'healthy client not skipped after earlier prune');
+    });
+  });
+
   describe('SSE keepalive', () => {
     it('should write real newlines, not escaped backslash-n', async () => {
       server = new WebDashboardServer({ store, port: 19881 });

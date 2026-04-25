@@ -564,7 +564,14 @@ class WebDashboardServer {
       try {
         client.write(message);
       } catch (e) {
-        // Dead client — will be cleaned up on 'close'
+        // Write failed — proactively prune the dead client instead of
+        // waiting for req.on('close') to fire. On abrupt socket resets
+        // 'close' can be delayed long enough that subsequent frames
+        // hit the same failed write, accumulating exception work and
+        // keeping clientCount misleadingly high. Set.delete during
+        // iteration is safe; the for-of iterator handles it.
+        try { client.end(); } catch (_) { /* already torn down */ }
+        this.clients.delete(client);
       }
     }
   }
