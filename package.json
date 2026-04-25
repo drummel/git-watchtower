@@ -67,8 +67,7 @@
       "main"
     ],
     "plugins": [
-      "@semantic-release/commit-analyzer",
-      "@semantic-release/release-notes-generator",
+      "./scripts/release-filter-cli.js",
       [
         "@semantic-release/changelog",
         {
