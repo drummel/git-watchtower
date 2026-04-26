@@ -2282,7 +2282,18 @@ function createStaticServer() {
     // directory. Without this second realpath+check, a symlinked dir
     // whose target pointed outside would serve its attacker-controlled
     // index.html through our root check.
-    if (fs.statSync(initial.path).isDirectory()) {
+    let isDir;
+    try {
+      isDir = fs.statSync(initial.path).isDirectory();
+    } catch (e) {
+      // File vanished (ENOENT), perms changed (EACCES), or symlink loop
+      // (ELOOP) between resolveStaticPath's realpath and this stat.
+      // Without this guard the throw bubbles to uncaughtException and
+      // tears down the entire TUI for what should be a 404.
+      send404();
+      return;
+    }
+    if (isDir) {
       const indexResult = resolveStaticPath(
         path.join(initial.path, 'index.html'),
         realStaticDir,
