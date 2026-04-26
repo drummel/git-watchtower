@@ -1,9 +1,13 @@
 import { defineConfig } from 'astro/config';
+import sitemap from '@astrojs/sitemap';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
   site: 'https://gitwatchtower.dev',
   integrations: [
+    sitemap({
+      filter: (page) => !page.includes('/casino'),
+    }),
     starlight({
       title: 'Git Watchtower',
       description: 'Terminal-based Git branch monitor with activity sparklines. Built for AI coding agents.',
