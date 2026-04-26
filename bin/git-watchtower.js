@@ -529,8 +529,14 @@ async function getSessionUrl(branchName) {
 
 // Check if a CLI tool is available
 async function hasCommand(cmd) {
+  // `which` ships on macOS/Linux; Windows has no `which` by default but
+  // does ship `where` (since Windows Server 2003 / Vista). Without this
+  // platform branch, `hasCommand('gh')` always rejects on Windows, which
+  // makes the entire branch-actions modal (open/approve/merge PR, CI
+  // status) silently inert for Windows users.
+  const probe = process.platform === 'win32' ? 'where' : 'which';
   try {
-    await execCli('which', [cmd]);
+    await execCli(probe, [cmd]);
     return true;
   } catch (e) {
     return false;
