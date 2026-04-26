@@ -31,7 +31,7 @@ function getConfigPath() {
 
 /**
  * Load telemetry config from disk
- * @returns {{ telemetryEnabled: boolean, distinctId: string, promptedAt: string } | null}
+ * @returns {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string } | null}
  */
 function loadTelemetryConfig() {
   try {
@@ -48,7 +48,14 @@ function loadTelemetryConfig() {
 
 /**
  * Save telemetry config to disk
- * @param {{ telemetryEnabled: boolean, distinctId: string, promptedAt: string }} config
+ *
+ * `distinctId` is optional: when the user declines telemetry we persist
+ * `{ telemetryEnabled: false, promptedAt }` only — no persistent identifier
+ * lands on disk for declining users. `getOrCreateDistinctId` already
+ * handles the missing case by minting a fresh UUID if the user later
+ * opts in.
+ *
+ * @param {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string }} config
  */
 function saveTelemetryConfig(config) {
   const dir = getConfigDir();
