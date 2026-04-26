@@ -1,3 +1,11 @@
+## [2.1.7](https://github.com/drummel/git-watchtower/compare/v2.1.6...v2.1.7) (2026-04-26)
+
+
+### Bug Fixes
+
+* don't ship telemetry events when user declines consent ([abed523](https://github.com/drummel/git-watchtower/commit/abed52388408e625583a5c3c38e94e4e19894c1d))
+* mark distinctId optional in telemetry config types ([db4ed9c](https://github.com/drummel/git-watchtower/commit/db4ed9c6df88b560e6eed4593156e2134ba296cb))
+
 ## [2.1.6](https://github.com/drummel/git-watchtower/compare/v2.1.5...v2.1.6) (2026-04-26)
 
 
