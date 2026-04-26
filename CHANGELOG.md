@@ -1,3 +1,10 @@
+## [2.1.4](https://github.com/drummel/git-watchtower/compare/v2.1.3...v2.1.4) (2026-04-26)
+
+
+### Bug Fixes
+
+* use configured REMOTE_NAME for sparkline and preview lookups ([24f343f](https://github.com/drummel/git-watchtower/commit/24f343fbaae2eb7fbdda3d900986b5a9b7485929))
+
 ## [2.1.3](https://github.com/drummel/git-watchtower/compare/v2.1.2...v2.1.3) (2026-04-25)
 
 
