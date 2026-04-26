@@ -1091,7 +1091,7 @@ async function refreshAllSparklines() {
     try {
       // Get commit counts for last 7 days (try remote, fall back to local)
       const sparkResult = await execGitOptional(
-        ['log', `origin/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
+        ['log', `${REMOTE_NAME}/${branch.name}`, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
         { cwd: PROJECT_ROOT }
       ) || await execGitOptional(
         ['log', branch.name, '--since=7 days ago', '--format=%ad', '--date=format:%Y-%m-%d'],
@@ -1130,7 +1130,7 @@ async function getPreviewData(branchName) {
   try {
     // Get last 5 commits (try remote, fall back to local)
     const logResult = await execGitOptional(
-      ['log', `origin/${branchName}`, '-5', '--oneline'],
+      ['log', `${REMOTE_NAME}/${branchName}`, '-5', '--oneline'],
       { cwd: PROJECT_ROOT }
     ) || await execGitOptional(
       ['log', branchName, '-5', '--oneline'],
@@ -1146,7 +1146,7 @@ async function getPreviewData(branchName) {
     // Get files changed (comparing to current branch)
     let filesChanged = [];
     const diffResult = await execGitOptional(
-      ['diff', '--stat', '--name-only', `HEAD...origin/${branchName}`],
+      ['diff', '--stat', '--name-only', `HEAD...${REMOTE_NAME}/${branchName}`],
       { cwd: PROJECT_ROOT }
     ) || await execGitOptional(
       ['diff', '--stat', '--name-only', `HEAD...${branchName}`],
