@@ -58,25 +58,30 @@ async function promptIfNeeded(promptYesNo) {
   console.log('\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518');
   console.log('');
 
-  const distinctId = config.getOrCreateDistinctId();
-
-  // Fire analytics_prompt_shown event — always sent regardless of user's choice
-  analytics.captureAlways('analytics_prompt_shown', distinctId);
-
   const answer = await promptYesNo('Enable anonymous telemetry to help improve Git Watchtower?', false);
 
-  // Fire analytics_decision event — always sent so we know opt-in/out rates
-  analytics.captureAlways('analytics_decision', distinctId, { opted_in: answer });
-
-  config.saveTelemetryConfig({
-    telemetryEnabled: answer,
-    distinctId,
-    promptedAt: new Date().toISOString(),
-  });
-
   if (answer) {
+    // Consent given: assign and persist a stable distinctId, then fire the
+    // prompt-shown and decision events so opt-in rates are observable.
+    const distinctId = config.getOrCreateDistinctId();
+    analytics.captureAlways('analytics_prompt_shown', distinctId);
+    analytics.captureAlways('analytics_decision', distinctId, { opted_in: true });
+    config.saveTelemetryConfig({
+      telemetryEnabled: true,
+      distinctId,
+      promptedAt: new Date().toISOString(),
+    });
     console.log('  Thank you! Telemetry enabled.\n');
   } else {
+    // No consent: don't ship any events to PostHog and don't persist a
+    // distinctId on disk. Previously the prompt-shown and decision events
+    // fired regardless of the answer, tagged with the user's persistent
+    // distinctId — which contradicted the README's "anonymous, opt-in"
+    // pitch and meant declining users still showed up in analytics.
+    config.saveTelemetryConfig({
+      telemetryEnabled: false,
+      promptedAt: new Date().toISOString(),
+    });
     console.log('  No problem! Telemetry disabled.\n');
   }
 }
