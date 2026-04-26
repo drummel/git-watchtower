@@ -1,3 +1,10 @@
+## [2.1.5](https://github.com/drummel/git-watchtower/compare/v2.1.4...v2.1.5) (2026-04-26)
+
+
+### Bug Fixes
+
+* use 'where' on Windows for CLI availability checks ([42b5a07](https://github.com/drummel/git-watchtower/commit/42b5a0702726257706e85db875ce9cd0cead79b6))
+
 ## [2.1.4](https://github.com/drummel/git-watchtower/compare/v2.1.3...v2.1.4) (2026-04-26)
 
 
