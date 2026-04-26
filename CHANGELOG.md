@@ -1,3 +1,10 @@
+## [2.1.6](https://github.com/drummel/git-watchtower/compare/v2.1.5...v2.1.6) (2026-04-26)
+
+
+### Bug Fixes
+
+* guard fs.statSync in static handler against TOCTOU races ([a1dba16](https://github.com/drummel/git-watchtower/commit/a1dba16011ba9f15090a01623eea07e1549cabc1))
+
 ## [2.1.5](https://github.com/drummel/git-watchtower/compare/v2.1.4...v2.1.5) (2026-04-26)
 
 
