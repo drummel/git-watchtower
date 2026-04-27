@@ -1,3 +1,10 @@
+## [2.1.10](https://github.com/drummel/git-watchtower/compare/v2.1.9...v2.1.10) (2026-04-27)
+
+
+### Performance Improvements
+
+* skip git fetch when ls-remote shows no ref changes ([3d8d1f3](https://github.com/drummel/git-watchtower/commit/3d8d1f37bb001d972383d15b488b136fa56669db))
+
 ## [2.1.9](https://github.com/drummel/git-watchtower/compare/v2.1.8...v2.1.9) (2026-04-27)
 
 
