@@ -1602,6 +1602,43 @@ async function undoLastSwitch() {
   }
 
   const lastSwitch = currentHistory[0];
+
+  // Detached HEAD restore: switchHistory captured the previous state as the
+  // synthetic "HEAD@<hash>" name produced by getCurrentBranch(). sanitizeBranchName
+  // rejects '@', so round-tripping through switchToBranch fails with "Invalid
+  // Branch Name". Detect the detached form and `git checkout <hash>` directly.
+  const detachedMatch = /^HEAD@([0-9a-f]{4,40})$/i.exec(lastSwitch.from);
+  if (detachedMatch) {
+    const hash = detachedMatch[1];
+    addLog(`Undoing: restoring detached HEAD at ${hash}`, 'update');
+
+    if (await hasUncommittedChanges()) {
+      addLog('Cannot undo: uncommitted changes in working directory', 'error');
+      pendingDirtyOperation = { type: 'switch', branch: lastSwitch.from };
+      showStashConfirm(`undo to detached HEAD ${hash}`);
+      return { success: false, reason: 'dirty' };
+    }
+
+    try {
+      await execGit(['checkout', hash], { cwd: PROJECT_ROOT });
+      store.setState({
+        currentBranch: lastSwitch.from,
+        isDetachedHead: true,
+        switchHistory: store.get('switchHistory').slice(1),
+      });
+      addLog(`Undone: detached HEAD at ${hash}`, 'success');
+      branchSwitchCount++;
+      pendingDirtyOperation = null;
+      notifyClients();
+      return { success: true };
+    } catch (e) {
+      const errMsg = e.stderr || e.message || String(e);
+      addLog(`Undo failed: ${errMsg}`, 'error');
+      showErrorToast('Undo Failed', truncate(errMsg, 100), 'Commit may have been garbage-collected');
+      return { success: false };
+    }
+  }
+
   addLog(`Undoing: going back to ${lastSwitch.from}`, 'update');
 
   const result = await switchToBranch(lastSwitch.from, false);
@@ -3125,12 +3162,12 @@ async function handleWebAction(action, payload) {
         sendResult(true, 'Fetch complete');
         break;
       case 'undo': {
-        const last = store.getLastSwitch();
-        if (last) {
-          await switchToBranch(last.from);
-          store.popHistory();
-          await pollGitChanges();
-          sendResult(true, `Switched back to ${last.from}`);
+        // Delegate to undoLastSwitch so detached-HEAD restoration and
+        // history popping stay consistent with the TUI 'u' keybinding.
+        const result = await undoLastSwitch();
+        await pollGitChanges();
+        if (result.success) {
+          sendResult(true, `Undone last switch`);
         } else {
           sendResult(false, 'No switch to undo');
         }
