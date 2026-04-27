@@ -202,6 +202,82 @@ async function fetch(remoteName = 'origin', options = {}) {
 }
 
 /**
+ * Probe whether the configured remote has any refs that differ from our
+ * local `refs/remotes/<remote>/` cache. Uses `git ls-remote --heads`
+ * which advertises remote refs over the wire without downloading any
+ * objects — much cheaper than `git fetch` on large repos.
+ *
+ * Comparison is exact across both directions:
+ *   - sha mismatch on a shared ref → changed
+ *   - ref missing locally (new branch) → changed
+ *   - ref missing on remote (deleted, needs prune) → changed
+ *
+ * Returns `null` when the probe itself failed (network, auth, missing
+ * remote). Callers should fall through to a real fetch in that case
+ * rather than treating "couldn't tell" as "no changes."
+ *
+ * @param {string} remoteName
+ * @param {Object} [options]
+ * @param {string} [options.cwd]
+ * @returns {Promise<boolean|null>}
+ */
+async function hasRemoteChanges(remoteName, options = {}) {
+  const { cwd } = options;
+
+  // Probe over the wire — list refs only, no object download.
+  const probeResult = await execGitOptional(
+    ['ls-remote', '--heads', '--quiet', remoteName],
+    { cwd, timeout: FETCH_TIMEOUT }
+  );
+  if (!probeResult) return null;
+
+  const remoteRefs = new Map();
+  for (const line of probeResult.stdout.split('\n').filter(Boolean)) {
+    // Format: "<sha>\trefs/heads/<branch>"
+    const tab = line.indexOf('\t');
+    if (tab === -1) continue;
+    const sha = line.slice(0, tab);
+    const ref = line.slice(tab + 1);
+    if (ref.startsWith('refs/heads/')) {
+      remoteRefs.set(ref.slice('refs/heads/'.length), sha);
+    }
+  }
+
+  // What we already have locally for this remote.
+  const localResult = await execGitOptional(
+    ['for-each-ref', '--format=%(refname:short) %(objectname)', `refs/remotes/${remoteName}/`],
+    { cwd, timeout: SHORT_TIMEOUT }
+  );
+  if (!localResult) return null;
+
+  const localRefs = new Map();
+  const prefix = `${remoteName}/`;
+  for (const line of localResult.stdout.split('\n').filter(Boolean)) {
+    const space = line.indexOf(' ');
+    if (space === -1) continue;
+    const refShort = line.slice(0, space);
+    const sha = line.slice(space + 1);
+    if (!refShort.startsWith(prefix)) continue;
+    const name = refShort.slice(prefix.length);
+    // Skip the symbolic <remote>/HEAD ref — ls-remote --heads doesn't
+    // advertise it, so including it would cause a false-positive size
+    // mismatch.
+    if (name === 'HEAD') continue;
+    localRefs.set(name, sha);
+  }
+
+  // Different ref count → addition or deletion on remote.
+  if (remoteRefs.size !== localRefs.size) return true;
+
+  // Same count, any sha mismatch → update on shared ref.
+  for (const [name, sha] of remoteRefs) {
+    if (localRefs.get(name) !== sha) return true;
+  }
+
+  return false;
+}
+
+/**
  * Pull from remote
  * @param {string} remoteName - Remote name
  * @param {string} branchName - Branch to pull
@@ -512,6 +588,7 @@ module.exports = {
   getRemotes,
   remoteExists,
   fetch,
+  hasRemoteChanges,
   pull,
   log,
   getCommitsByDay,

@@ -3,7 +3,7 @@
  * Provides branch management and parsing
  */
 
-const { execGit, fetch, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
+const { execGit, fetch, hasRemoteChanges, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
 
 // Valid git branch name pattern (conservative)
@@ -91,9 +91,20 @@ async function getAllBranches(options = {}) {
   const { remoteName = 'origin', fetch: shouldFetch = true, cwd } = options;
 
   try {
-    // Optionally fetch first
+    // Optionally fetch first. Probe via `git ls-remote --heads` first
+    // (cheap: lists refs without downloading objects) and skip the full
+    // fetch when the remote's refs exactly match our local cache. On a
+    // mostly-idle repo this turns most poll cycles into a single short
+    // advertise instead of a multi-megabyte object negotiation. When
+    // refs differ — including the new-branch and deleted-branch cases —
+    // we fall through to the regular fetch + prune. A null probe result
+    // (network/auth/missing-remote) also falls through, so an unrelated
+    // probe failure can't masquerade as "no changes."
     if (shouldFetch) {
-      await fetch(remoteName, { prune: true, all: true, cwd });
+      const changed = await hasRemoteChanges(remoteName, { cwd });
+      if (changed !== false) {
+        await fetch(remoteName, { prune: true, all: true, cwd });
+      }
     }
 
     const branchList = [];
