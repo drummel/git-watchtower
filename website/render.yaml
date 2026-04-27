@@ -5,6 +5,11 @@ services:
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: true
+    envVars:
+      - key: PUBLIC_POSTHOG_KEY
+        value: phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG
+      - key: PUBLIC_POSTHOG_HOST
+        value: https://us.i.posthog.com
     headers:
       - path: /*
         name: X-Frame-Options
