@@ -1,3 +1,10 @@
+## [2.1.8](https://github.com/drummel/git-watchtower/compare/v2.1.7...v2.1.8) (2026-04-27)
+
+
+### Bug Fixes
+
+* restore detached HEAD on undo instead of failing validation ([69d123c](https://github.com/drummel/git-watchtower/commit/69d123c76984cb54b67420c5912c87200011c00b))
+
 ## [2.1.7](https://github.com/drummel/git-watchtower/compare/v2.1.6...v2.1.7) (2026-04-26)
 
 
