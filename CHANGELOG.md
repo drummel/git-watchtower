@@ -1,3 +1,10 @@
+## [2.1.9](https://github.com/drummel/git-watchtower/compare/v2.1.8...v2.1.9) (2026-04-27)
+
+
+### Performance Improvements
+
+* O(n) branch matching in getAllBranches via Map lookup ([69aee88](https://github.com/drummel/git-watchtower/commit/69aee8858160eaa1f0f2a3edfd1dbdc892628263))
+
 ## [2.1.8](https://github.com/drummel/git-watchtower/compare/v2.1.7...v2.1.8) (2026-04-27)
 
 
