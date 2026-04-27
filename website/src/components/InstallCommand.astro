@@ -81,6 +81,8 @@ const { command = 'npm install -g git-watchtower' } = Astro.props;
         const ok = await copyText(text);
         btn.dataset.copyState = ok ? 'copied' : 'error';
         if (announce) announce.textContent = ok ? 'Copied to clipboard' : 'Copy failed';
+        const ph = (window as unknown as { posthog?: { capture: (e: string, p?: Record<string, unknown>) => void } }).posthog;
+        ph?.capture('install_command_copied', { command: text, success: ok });
         window.clearTimeout(resetTimer);
         resetTimer = window.setTimeout(() => {
           btn.dataset.copyState = 'idle';

@@ -19,6 +19,7 @@ export default defineConfig({
         baseUrl: 'https://github.com/drummel/git-watchtower/edit/main/website/',
       },
       components: {
+        Head: './src/components/Head.astro',
         SiteTitle: './src/components/SiteTitle.astro',
         SocialIcons: './src/components/SocialIcons.astro',
       },
