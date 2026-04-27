@@ -20,14 +20,14 @@ import DownloadsBadge from '../../components/DownloadsBadge.astro';
 </div>
 
 <div class="hero-actions">
-  <a href="/guides/quick-start/" class="hero-btn hero-btn--primary">
+  <a href="/guides/quick-start/" class="hero-btn hero-btn--primary" data-cta="hero_quick_start">
     Quick Start
     <span class="hero-btn-arrow" aria-hidden="true">→</span>
   </a>
-  <a href="https://github.com/drummel/git-watchtower" class="hero-btn">
+  <a href="https://github.com/drummel/git-watchtower" class="hero-btn" data-cta="hero_github">
     View on GitHub
   </a>
-  <a href="https://www.npmjs.com/package/git-watchtower" class="hero-btn">
+  <a href="https://www.npmjs.com/package/git-watchtower" class="hero-btn" data-cta="hero_npm">
     View on NPM
   </a>
 </div>
@@ -111,7 +111,7 @@ npx git-watchtower
 On first run, you'll be guided through a configuration wizard.
 
 <div class="docs-cta">
-  <a href="/guides/quick-start/" class="docs-cta-button">
+  <a href="/guides/quick-start/" class="docs-cta-button" data-cta="footer_read_docs">
     Read the full documentation
     <span class="docs-cta-arrow" aria-hidden="true">→</span>
   </a>

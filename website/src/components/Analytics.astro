@@ -28,6 +28,19 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
         return 'other';
       }
 
+      function templateFromPath(path: string): string {
+        if (path === '/' || path === '') return 'splash';
+        return 'doc';
+      }
+
+      function registerPageProperties() {
+        const path = window.location.pathname;
+        posthog.register({
+          site_section: sectionFromPath(path),
+          page_template: templateFromPath(path),
+        });
+      }
+
       function initPostHog() {
         if (!config) return;
         posthog.init(config.apiKey, {
@@ -39,8 +52,8 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
           persistence: 'localStorage',
           respect_dnt: true,
           session_recording: { maskAllInputs: true },
-          loaded: (ph) => {
-            ph.register({ site_section: sectionFromPath(window.location.pathname) });
+          loaded: () => {
+            registerPageProperties();
           },
         });
       }
@@ -119,6 +132,35 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
         );
       }
 
+      function trackCtaClicks() {
+        document.addEventListener(
+          'click',
+          (event) => {
+            const target = event.target as HTMLElement | null;
+            const cta = target?.closest?.('[data-cta]') as HTMLElement | null;
+            if (!cta) return;
+            posthog.capture('cta_click', {
+              cta: cta.dataset.cta ?? '',
+              href: (cta as HTMLAnchorElement).href ?? null,
+            });
+          },
+          { capture: true }
+        );
+      }
+
+      function trackDownloadsBadge() {
+        document.addEventListener(
+          'click',
+          (event) => {
+            const target = event.target as HTMLElement | null;
+            const link = target?.closest?.('.gw-header-downloads') as HTMLAnchorElement | null;
+            if (!link) return;
+            posthog.capture('downloads_badge_clicked');
+          },
+          { capture: true }
+        );
+      }
+
       function setupScrollDepth() {
         if (window.location.pathname !== '/' && window.location.pathname !== '') return;
 
@@ -157,10 +199,12 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
       trackCodeBlockCopies();
       trackSearch();
       trackCasinoEgg();
+      trackCtaClicks();
+      trackDownloadsBadge();
       setupScrollDepth();
 
       document.addEventListener('astro:page-load', () => {
-        posthog.register({ site_section: sectionFromPath(window.location.pathname) });
+        registerPageProperties();
         setupScrollDepth();
       });
     </script>
