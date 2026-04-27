@@ -97,7 +97,12 @@ async function getAllBranches(options = {}) {
     }
 
     const branchList = [];
-    const seenBranches = new Set();
+    // O(1) lookup by name. The Map stores the same object references
+    // pushed into branchList, so mutating an entry through the Map (when
+    // a remote ref matches a local ref) updates the array entry too.
+    // Replaces the previous `branchList.find()` per-remote-ref scan,
+    // which was O(n²) and noticeable on large monorepos.
+    const branchByName = new Map();
 
     // Get local branches
     // Use \x1f (Unit Separator) as delimiter since | can appear in commit subjects
@@ -111,9 +116,8 @@ async function getAllBranches(options = {}) {
       for (const line of localResult.stdout.split('\n').filter(Boolean)) {
         const [name, dateStr, commit, ...subjectParts] = line.split(delimiter);
         const subject = subjectParts.join(delimiter);
-        if (!seenBranches.has(name) && isValidBranchName(name)) {
-          seenBranches.add(name);
-          branchList.push({
+        if (!branchByName.has(name) && isValidBranchName(name)) {
+          const branch = {
             name,
             commit,
             subject: subject || '',
@@ -121,7 +125,9 @@ async function getAllBranches(options = {}) {
             isLocal: true,
             hasRemote: false,
             hasUpdates: false,
-          });
+          };
+          branchByName.set(name, branch);
+          branchList.push(branch);
         }
       }
     }
@@ -142,7 +148,7 @@ async function getAllBranches(options = {}) {
         if (name === 'HEAD') continue;
         if (!isValidBranchName(name)) continue;
 
-        const existing = /** @type {Branch|undefined} */ (branchList.find((b) => b.name === name));
+        const existing = /** @type {Branch|undefined} */ (branchByName.get(name));
         if (existing) {
           existing.hasRemote = true;
           existing.remoteCommit = commit;
@@ -154,9 +160,8 @@ async function getAllBranches(options = {}) {
             existing.date = new Date(dateStr);
             existing.subject = subject || existing.subject;
           }
-        } else if (!seenBranches.has(name)) {
-          seenBranches.add(name);
-          branchList.push({
+        } else {
+          const branch = {
             name,
             commit,
             subject: subject || '',
@@ -164,7 +169,9 @@ async function getAllBranches(options = {}) {
             isLocal: false,
             hasRemote: true,
             hasUpdates: false,
-          });
+          };
+          branchByName.set(name, branch);
+          branchList.push(branch);
         }
       }
     }
