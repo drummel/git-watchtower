@@ -1,3 +1,10 @@
+## [2.1.15](https://github.com/drummel/git-watchtower/compare/v2.1.14...v2.1.15) (2026-04-28)
+
+
+### Bug Fixes
+
+* refuse to overwrite an already-pending dirty-repo operation ([48e0e0b](https://github.com/drummel/git-watchtower/commit/48e0e0b9c8985b2e794147ffb1f35f61b32cd518))
+
 ## [2.1.14](https://github.com/drummel/git-watchtower/compare/v2.1.13...v2.1.14) (2026-04-28)
 
 
