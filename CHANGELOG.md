@@ -1,3 +1,10 @@
+## [2.1.11](https://github.com/drummel/git-watchtower/compare/v2.1.10...v2.1.11) (2026-04-28)
+
+
+### Bug Fixes
+
+* await dev-server exit before respawn to prevent EADDRINUSE ([c76b5f3](https://github.com/drummel/git-watchtower/commit/c76b5f32df3f96c32d84c96c6664607646f97b6d))
+
 ## [2.1.10](https://github.com/drummel/git-watchtower/compare/v2.1.9...v2.1.10) (2026-04-27)
 
 
