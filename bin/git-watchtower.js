@@ -397,8 +397,6 @@ const MAX_SERVER_LOG_LINES = 500;
 const FORCE_KILL_GRACE_MS = 3000;
 /** Additional grace period added to a command's timeout before SIGKILL. */
 const SIGKILL_GRACE_AFTER_TIMEOUT_MS = 5000;
-/** Delay between stopping and restarting the dev server. */
-const SERVER_RESTART_DELAY_MS = 500;
 /** How long a transient flash message stays on screen. */
 const FLASH_MESSAGE_DURATION_MS = 3000;
 /** Debounce window for file watcher events before notifying clients. */
@@ -826,13 +824,19 @@ function stopServerProcess() {
   return Promise.race([closedPromise, hardCap]);
 }
 
-function restartServerProcess() {
+async function restartServerProcess() {
   addLog('Restarting server...', 'update');
-  stopServerProcess();
-  setTimeout(() => {
-    startServerProcess();
-    render();
-  }, SERVER_RESTART_DELAY_MS);
+  // Await actual exit before respawning. The previous fire-and-forget
+  // stopServerProcess() + 500 ms setTimeout was shorter than the
+  // FORCE_KILL_GRACE_MS (3 s) SIGKILL escalation, so a dev server with
+  // a slow SIGTERM handler would yield EADDRINUSE on the respawn — the
+  // new process tried to bind a port the old one still held.
+  try {
+    await stopServerProcess();
+  } catch (_) { /* stopServerProcess never rejects in practice; best-effort */ }
+  if (isShuttingDown) return;
+  startServerProcess();
+  render();
 }
 
 // Network and polling state
