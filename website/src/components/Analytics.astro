@@ -1,12 +1,13 @@
 ---
 const apiKey = import.meta.env.PUBLIC_POSTHOG_KEY;
 const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com';
+const uiHost = import.meta.env.PUBLIC_POSTHOG_UI_HOST ?? null;
 ---
 
 {
   apiKey && (
-    <script is:inline define:vars={{ apiKey, apiHost }}>
-      window.__GW_POSTHOG_CONFIG = { apiKey, apiHost };
+    <script is:inline define:vars={{ apiKey, apiHost, uiHost }}>
+      window.__GW_POSTHOG_CONFIG = { apiKey, apiHost, uiHost };
     </script>
   )
 }
@@ -18,8 +19,9 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
 
       type ScrollSentinel = { threshold: number; fired: boolean };
 
-      const config = (window as unknown as { __GW_POSTHOG_CONFIG?: { apiKey: string; apiHost: string } })
-        .__GW_POSTHOG_CONFIG;
+      const config = (window as unknown as {
+        __GW_POSTHOG_CONFIG?: { apiKey: string; apiHost: string; uiHost: string | null };
+      }).__GW_POSTHOG_CONFIG;
 
       function sectionFromPath(path: string): string {
         if (path === '/' || path === '') return 'landing';
@@ -45,6 +47,7 @@ const apiHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com
         if (!config) return;
         posthog.init(config.apiKey, {
           api_host: config.apiHost,
+          ...(config.uiHost ? { ui_host: config.uiHost } : {}),
           capture_pageview: 'history_change',
           capture_pageleave: true,
           capture_performance: { web_vitals: true },
