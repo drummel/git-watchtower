@@ -881,6 +881,27 @@ let errorToastTimeout = null;
 // Shape: { type: 'switch', branch: string } | { type: 'pull' } | null
 let pendingDirtyOperation = null;
 
+/**
+ * Setter for pendingDirtyOperation. Centralizes the assignment so that
+ * future guards (e.g. refusing to overwrite an in-flight pending op)
+ * can be enforced in one place rather than at every mutation site.
+ *
+ * @param {{type: 'switch', branch: string} | {type: 'pull'} | null} op
+ * @returns {boolean} true (always, in this commit — the guard arrives next)
+ */
+function setPendingDirtyOp(op) {
+  pendingDirtyOperation = op;
+  return true;
+}
+
+/**
+ * Clear pendingDirtyOperation. Symmetric with setPendingDirtyOp so all
+ * mutations route through the same surface.
+ */
+function clearPendingDirtyOp() {
+  pendingDirtyOperation = null;
+}
+
 // Cached environment info (populated once at startup, doesn't change during session)
 let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
 
@@ -1524,8 +1545,9 @@ async function switchToBranch(branchName, recordHistory = true) {
     const isDirty = await hasUncommittedChanges();
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
-      pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showStashConfirm(`switch to ${branchName}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
+        showStashConfirm(`switch to ${branchName}`);
+      }
       telemetry.capture('dirty_repo_encountered');
       return { success: false, reason: 'dirty' };
     }
@@ -1563,7 +1585,7 @@ async function switchToBranch(branchName, recordHistory = true) {
     addLog(`Switched to ${safeBranchName}`, 'success');
     telemetry.capture('branch_switched');
     branchSwitchCount++;
-    pendingDirtyOperation = null;
+    clearPendingDirtyOp();
 
     // Restart server if configured (command mode)
     if (SERVER_MODE === 'command' && RESTART_ON_SWITCH && serverProcess) {
@@ -1583,8 +1605,9 @@ async function switchToBranch(branchName, recordHistory = true) {
       );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
-      pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showStashConfirm(`switch to ${branchName}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
+        showStashConfirm(`switch to ${branchName}`);
+      }
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
       showErrorToast(
@@ -1618,8 +1641,9 @@ async function undoLastSwitch() {
 
     if (await hasUncommittedChanges()) {
       addLog('Cannot undo: uncommitted changes in working directory', 'error');
-      pendingDirtyOperation = { type: 'switch', branch: lastSwitch.from };
-      showStashConfirm(`undo to detached HEAD ${hash}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: lastSwitch.from })) {
+        showStashConfirm(`undo to detached HEAD ${hash}`);
+      }
       return { success: false, reason: 'dirty' };
     }
 
@@ -1632,7 +1656,7 @@ async function undoLastSwitch() {
       });
       addLog(`Undone: detached HEAD at ${hash}`, 'success');
       branchSwitchCount++;
-      pendingDirtyOperation = null;
+      clearPendingDirtyOp();
       notifyClients();
       return { success: true };
     } catch (e) {
@@ -1699,7 +1723,7 @@ async function pullCurrentBranch() {
       }
       addLog(`Pulled ${REMOTE_NAME}/${branch}${summary}`, 'success');
     }
-    pendingDirtyOperation = null;
+    clearPendingDirtyOp();
     notifyClients();
     return { success: true };
   } catch (e) {
@@ -1707,8 +1731,9 @@ async function pullCurrentBranch() {
     addLog(`Pull failed: ${errMsg}`, 'error');
 
     if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
-      pendingDirtyOperation = { type: 'pull' };
-      showStashConfirm('pull');
+      if (setPendingDirtyOp({ type: 'pull' })) {
+        showStashConfirm('pull');
+      }
     } else if (isMergeConflict(errMsg)) {
       store.setState({ hasMergeConflict: true });
       showErrorToast(
@@ -1747,7 +1772,7 @@ async function stashAndRetry() {
     return;
   }
 
-  pendingDirtyOperation = null;
+  clearPendingDirtyOp();
   hideErrorToast();
   hideStashConfirm();
 
@@ -2830,7 +2855,7 @@ function setupKeyboardInput() {
           await stashAndRetry();
         } else {
           addLog('Stash cancelled — handle changes manually', 'info');
-          pendingDirtyOperation = null;
+          clearPendingDirtyOp();
         }
         return;
       }
@@ -2844,7 +2869,7 @@ function setupKeyboardInput() {
       if (key === '\u001b') { // Escape — cancel
         hideStashConfirm();
         addLog('Stash cancelled — handle changes manually', 'info');
-        pendingDirtyOperation = null;
+        clearPendingDirtyOp();
         render();
         return;
       }
