@@ -1,3 +1,10 @@
+## [2.1.12](https://github.com/drummel/git-watchtower/compare/v2.1.11...v2.1.12) (2026-04-28)
+
+
+### Bug Fixes
+
+* cap coordinator IPC connections to prevent local FD exhaustion ([33b14f8](https://github.com/drummel/git-watchtower/commit/33b14f8a325895970724578bef3cc0ca2ca3981b))
+
 ## [2.1.11](https://github.com/drummel/git-watchtower/compare/v2.1.10...v2.1.11) (2026-04-28)
 
 
