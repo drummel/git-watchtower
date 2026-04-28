@@ -9,7 +9,9 @@ services:
       - key: PUBLIC_POSTHOG_KEY
         value: phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG
       - key: PUBLIC_POSTHOG_HOST
-        value: https://us.i.posthog.com
+        value: https://aph.gitwatchtower.dev
+      - key: PUBLIC_POSTHOG_UI_HOST
+        value: https://us.posthog.com
     headers:
       - path: /*
         name: X-Frame-Options
