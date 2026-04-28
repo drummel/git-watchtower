@@ -882,14 +882,37 @@ let errorToastTimeout = null;
 let pendingDirtyOperation = null;
 
 /**
- * Setter for pendingDirtyOperation. Centralizes the assignment so that
- * future guards (e.g. refusing to overwrite an in-flight pending op)
- * can be enforced in one place rather than at every mutation site.
+ * Setter for pendingDirtyOperation that refuses to overwrite an
+ * already-pending operation. Returns true if the assignment succeeded,
+ * false if a different operation was already pending and the caller
+ * should skip its follow-up (e.g. the showStashConfirm modal).
+ *
+ * Why this matters: process.stdin's 'data' listener is async, so two
+ * near-simultaneous keypresses spawn concurrent handler bodies. If the
+ * user presses Enter (switch) and then 'p' (pull) within the ~100 ms
+ * it takes hasUncommittedChanges to await, both bodies reach the
+ * dirty-repo branch and the second one's pendingDirtyOperation
+ * silently clobbers the first. The user then sees a stash-confirm
+ * modal labeled "pull" even though they pressed Enter, and the
+ * original switch intent is lost. Refusing the overwrite preserves
+ * the first user action and surfaces the conflict via the activity
+ * log rather than dropping intent on the floor.
+ *
+ * Note: the check + assignment here is synchronous, so JavaScript's
+ * single-threaded event loop guarantees no interleaving — two callers
+ * will see consistent state.
  *
  * @param {{type: 'switch', branch: string} | {type: 'pull'} | null} op
- * @returns {boolean} true (always, in this commit — the guard arrives next)
+ * @returns {boolean} true if assigned, false if refused (already pending)
  */
 function setPendingDirtyOp(op) {
+  if (op !== null && pendingDirtyOperation !== null) {
+    addLog(
+      `Another operation already pending (${pendingDirtyOperation.type}) — resolve the stash dialog first`,
+      'warning',
+    );
+    return false;
+  }
   pendingDirtyOperation = op;
   return true;
 }
