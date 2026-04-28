@@ -1,3 +1,10 @@
+## [2.1.14](https://github.com/drummel/git-watchtower/compare/v2.1.13...v2.1.14) (2026-04-28)
+
+
+### Bug Fixes
+
+* drop coordinator sockets that don't register within 5s ([8d2aa33](https://github.com/drummel/git-watchtower/commit/8d2aa33b650c064bf791f036b613c96d8f55a1cc)), closes [#175](https://github.com/drummel/git-watchtower/issues/175)
+
 ## [2.1.13](https://github.com/drummel/git-watchtower/compare/v2.1.12...v2.1.13) (2026-04-28)
 
 
