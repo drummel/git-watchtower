@@ -35,6 +35,18 @@ const WATCHTOWER_DIR = path.join(os.homedir(), '.watchtower');
 const MAX_IPC_BUFFER = 1024 * 1024;
 
 /**
+ * Maximum number of concurrent worker connections the coordinator will
+ * accept. The legitimate ceiling is "one git-watchtower instance per
+ * project the user is actively working on" — a generous double-digit
+ * limit covers any real workflow. The cap exists so a buggy or
+ * malicious local process running as the same user can't open thousands
+ * of sockets and exhaust the coordinator's file descriptors. Beyond
+ * this limit, Node's net.Server closes incoming connections after
+ * accept() rather than handing them to the request listener.
+ */
+const MAX_WORKER_CONNECTIONS = 64;
+
+/**
  * How long a worker waits for a `registered` ACK from the coordinator
  * after the TCP connection completes and the `register` frame is written.
  *
@@ -254,6 +266,12 @@ class Coordinator {
       this.ipcServer = net.createServer((socket) => {
         this._handleWorkerConnection(socket);
       });
+
+      // Cap concurrent connections so a buggy/malicious local peer can't
+      // exhaust our FDs by opening thousands of sockets. Node's net.Server
+      // honours this by closing the accepted socket immediately when the
+      // count exceeds the limit — request listener never runs.
+      this.ipcServer.maxConnections = MAX_WORKER_CONNECTIONS;
 
       this.ipcServer.on('error', (err) => {
         reject(err);
@@ -722,4 +740,5 @@ module.exports = {
   LOCK_FILE,
   SOCKET_PATH,
   MAX_IPC_BUFFER,
+  MAX_WORKER_CONNECTIONS,
 };
