@@ -881,6 +881,50 @@ let errorToastTimeout = null;
 // Shape: { type: 'switch', branch: string } | { type: 'pull' } | null
 let pendingDirtyOperation = null;
 
+/**
+ * Setter for pendingDirtyOperation that refuses to overwrite an
+ * already-pending operation. Returns true if the assignment succeeded,
+ * false if a different operation was already pending and the caller
+ * should skip its follow-up (e.g. the showStashConfirm modal).
+ *
+ * Why this matters: process.stdin's 'data' listener is async, so two
+ * near-simultaneous keypresses spawn concurrent handler bodies. If the
+ * user presses Enter (switch) and then 'p' (pull) within the ~100 ms
+ * it takes hasUncommittedChanges to await, both bodies reach the
+ * dirty-repo branch and the second one's pendingDirtyOperation
+ * silently clobbers the first. The user then sees a stash-confirm
+ * modal labeled "pull" even though they pressed Enter, and the
+ * original switch intent is lost. Refusing the overwrite preserves
+ * the first user action and surfaces the conflict via the activity
+ * log rather than dropping intent on the floor.
+ *
+ * Note: the check + assignment here is synchronous, so JavaScript's
+ * single-threaded event loop guarantees no interleaving — two callers
+ * will see consistent state.
+ *
+ * @param {{type: 'switch', branch: string} | {type: 'pull'} | null} op
+ * @returns {boolean} true if assigned, false if refused (already pending)
+ */
+function setPendingDirtyOp(op) {
+  if (op !== null && pendingDirtyOperation !== null) {
+    addLog(
+      `Another operation already pending (${pendingDirtyOperation.type}) — resolve the stash dialog first`,
+      'warning',
+    );
+    return false;
+  }
+  pendingDirtyOperation = op;
+  return true;
+}
+
+/**
+ * Clear pendingDirtyOperation. Symmetric with setPendingDirtyOp so all
+ * mutations route through the same surface.
+ */
+function clearPendingDirtyOp() {
+  pendingDirtyOperation = null;
+}
+
 // Cached environment info (populated once at startup, doesn't change during session)
 let cachedEnv = null; // { hasGh, hasGlab, ghAuthed, glabAuthed, webUrlBase, platform }
 
@@ -1524,8 +1568,9 @@ async function switchToBranch(branchName, recordHistory = true) {
     const isDirty = await hasUncommittedChanges();
     if (isDirty) {
       addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
-      pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showStashConfirm(`switch to ${branchName}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
+        showStashConfirm(`switch to ${branchName}`);
+      }
       telemetry.capture('dirty_repo_encountered');
       return { success: false, reason: 'dirty' };
     }
@@ -1563,7 +1608,7 @@ async function switchToBranch(branchName, recordHistory = true) {
     addLog(`Switched to ${safeBranchName}`, 'success');
     telemetry.capture('branch_switched');
     branchSwitchCount++;
-    pendingDirtyOperation = null;
+    clearPendingDirtyOp();
 
     // Restart server if configured (command mode)
     if (SERVER_MODE === 'command' && RESTART_ON_SWITCH && serverProcess) {
@@ -1583,8 +1628,9 @@ async function switchToBranch(branchName, recordHistory = true) {
       );
     } else if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
       addLog(`Cannot switch: local changes would be overwritten`, 'error');
-      pendingDirtyOperation = { type: 'switch', branch: branchName };
-      showStashConfirm(`switch to ${branchName}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
+        showStashConfirm(`switch to ${branchName}`);
+      }
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
       showErrorToast(
@@ -1618,8 +1664,9 @@ async function undoLastSwitch() {
 
     if (await hasUncommittedChanges()) {
       addLog('Cannot undo: uncommitted changes in working directory', 'error');
-      pendingDirtyOperation = { type: 'switch', branch: lastSwitch.from };
-      showStashConfirm(`undo to detached HEAD ${hash}`);
+      if (setPendingDirtyOp({ type: 'switch', branch: lastSwitch.from })) {
+        showStashConfirm(`undo to detached HEAD ${hash}`);
+      }
       return { success: false, reason: 'dirty' };
     }
 
@@ -1632,7 +1679,7 @@ async function undoLastSwitch() {
       });
       addLog(`Undone: detached HEAD at ${hash}`, 'success');
       branchSwitchCount++;
-      pendingDirtyOperation = null;
+      clearPendingDirtyOp();
       notifyClients();
       return { success: true };
     } catch (e) {
@@ -1699,7 +1746,7 @@ async function pullCurrentBranch() {
       }
       addLog(`Pulled ${REMOTE_NAME}/${branch}${summary}`, 'success');
     }
-    pendingDirtyOperation = null;
+    clearPendingDirtyOp();
     notifyClients();
     return { success: true };
   } catch (e) {
@@ -1707,8 +1754,9 @@ async function pullCurrentBranch() {
     addLog(`Pull failed: ${errMsg}`, 'error');
 
     if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
-      pendingDirtyOperation = { type: 'pull' };
-      showStashConfirm('pull');
+      if (setPendingDirtyOp({ type: 'pull' })) {
+        showStashConfirm('pull');
+      }
     } else if (isMergeConflict(errMsg)) {
       store.setState({ hasMergeConflict: true });
       showErrorToast(
@@ -1747,7 +1795,7 @@ async function stashAndRetry() {
     return;
   }
 
-  pendingDirtyOperation = null;
+  clearPendingDirtyOp();
   hideErrorToast();
   hideStashConfirm();
 
@@ -2830,7 +2878,7 @@ function setupKeyboardInput() {
           await stashAndRetry();
         } else {
           addLog('Stash cancelled — handle changes manually', 'info');
-          pendingDirtyOperation = null;
+          clearPendingDirtyOp();
         }
         return;
       }
@@ -2844,7 +2892,7 @@ function setupKeyboardInput() {
       if (key === '\u001b') { // Escape — cancel
         hideStashConfirm();
         addLog('Stash cancelled — handle changes manually', 'info');
-        pendingDirtyOperation = null;
+        clearPendingDirtyOp();
         render();
         return;
       }
