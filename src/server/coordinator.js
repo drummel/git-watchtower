@@ -35,6 +35,18 @@ const WATCHTOWER_DIR = path.join(os.homedir(), '.watchtower');
 const MAX_IPC_BUFFER = 1024 * 1024;
 
 /**
+ * How long the coordinator gives an accepted connection to send a
+ * `register` frame before destroying the socket. Legitimate workers
+ * send register immediately on connect (sub-100 ms in practice), so
+ * 5 s is generous. Without this, a peer that opens a connection and
+ * sits idle without registering consumes one of the
+ * MAX_WORKER_CONNECTIONS slots indefinitely — so a runaway peer that
+ * never sends data could lock out legitimate workers even though it
+ * is below the connection cap.
+ */
+const WORKER_REGISTER_TIMEOUT_MS = 5000;
+
+/**
  * Maximum number of concurrent worker connections the coordinator will
  * accept. The legitimate ceiling is "one git-watchtower instance per
  * project the user is actively working on" — a generous double-digit
@@ -379,6 +391,21 @@ class Coordinator {
     let workerId = null;
     let buffer = '';
 
+    // Drop the socket if the peer doesn't complete the register handshake
+    // in time. Cleared by setWorkerId on a successful 'register' frame
+    // and on close/error to avoid acting on a destroyed socket.
+    const registerTimer = setTimeout(() => {
+      if (!workerId) {
+        socket.destroy();
+      }
+    }, WORKER_REGISTER_TIMEOUT_MS);
+    if (registerTimer.unref) registerTimer.unref();
+
+    const setWorkerId = (id) => {
+      workerId = id;
+      clearTimeout(registerTimer);
+    };
+
     socket.on('data', (data) => {
       buffer += data.toString();
       if (buffer.length > MAX_IPC_BUFFER) {
@@ -392,7 +419,7 @@ class Coordinator {
         if (line.trim()) {
           try {
             const msg = JSON.parse(line);
-            this._handleWorkerMessage(socket, msg, (id) => { workerId = id; }, () => workerId);
+            this._handleWorkerMessage(socket, msg, setWorkerId, () => workerId);
           } catch (e) {
             // Both sides of this socket are our own code, so a JSON-parse
             // failure indicates a protocol/version bug worth diagnosing.
@@ -404,6 +431,7 @@ class Coordinator {
     });
 
     socket.on('close', () => {
+      clearTimeout(registerTimer);
       if (workerId) {
         this.projects.delete(workerId);
         this.workerSockets.delete(workerId);
@@ -412,6 +440,7 @@ class Coordinator {
     });
 
     socket.on('error', () => {
+      clearTimeout(registerTimer);
       if (workerId) {
         this.projects.delete(workerId);
         this.workerSockets.delete(workerId);
@@ -741,4 +770,5 @@ module.exports = {
   SOCKET_PATH,
   MAX_IPC_BUFFER,
   MAX_WORKER_CONNECTIONS,
+  WORKER_REGISTER_TIMEOUT_MS,
 };
