@@ -1,3 +1,10 @@
+## [2.1.13](https://github.com/drummel/git-watchtower/compare/v2.1.12...v2.1.13) (2026-04-28)
+
+
+### Bug Fixes
+
+* prune dead SSE clients on write failure instead of waiting for 'close' ([ba600f7](https://github.com/drummel/git-watchtower/commit/ba600f792f3870b7f0d95edce63cecbb5c33cdc0))
+
 ## [2.1.12](https://github.com/drummel/git-watchtower/compare/v2.1.11...v2.1.12) (2026-04-28)
 
 
