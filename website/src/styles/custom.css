@@ -644,6 +644,10 @@ body::after {
 }
 
 /* Left-aligned variant for in-doc placement */
+.install-tabs[data-align='start'] {
+  margin-block: 1.5rem 2rem;
+}
+
 .install-tabs[data-align='start'] .install-tabs-list {
   justify-content: flex-start;
 }
