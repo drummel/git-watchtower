@@ -549,6 +549,7 @@ body::after {
 .install-tabs-list {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 0.15rem;
   margin: 0 auto 1.15rem;
   padding: 0;
@@ -559,18 +560,26 @@ body::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
   height: 2.4rem;
+  min-height: 2.4rem;
+  max-height: 2.4rem;
+  margin: 0;
+  padding: 0 1.35rem;
   font-family: var(--sl-font);
   font-size: 0.9rem;
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.005em;
-  padding: 0 1.35rem;
+  vertical-align: middle;
   border: none;
   background: transparent;
   color: var(--sl-color-gray-3, #7d8590);
   cursor: pointer;
   border-radius: 6px 6px 0 0;
+  appearance: none;
+  -webkit-appearance: none;
   transition:
     color 0.18s ease,
     background-color 0.18s ease;
