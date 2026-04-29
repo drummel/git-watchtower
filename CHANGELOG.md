@@ -1,3 +1,10 @@
+## [2.1.17](https://github.com/drummel/git-watchtower/compare/v2.1.16...v2.1.17) (2026-04-29)
+
+
+### Bug Fixes
+
+* raise PR-list limit to 1000 and add explicit glab page size ([13abbed](https://github.com/drummel/git-watchtower/commit/13abbedf2d70b623161ec7c5ac76e9f2fc8a0eaf))
+
 ## [2.1.16](https://github.com/drummel/git-watchtower/compare/v2.1.15...v2.1.16) (2026-04-29)
 
 
