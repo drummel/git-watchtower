@@ -63,7 +63,7 @@ function detectInstallSource() {
  */
 function getUpdateCommand(source) {
   switch (source) {
-    case 'homebrew': return 'brew upgrade git-watchtower';
+    case 'homebrew': return 'brew update && brew upgrade git-watchtower';
     case 'npm':      return 'npm i -g git-watchtower';
     case 'source':   return 'git pull && npm install';
     default:         return 'npm i -g git-watchtower';
