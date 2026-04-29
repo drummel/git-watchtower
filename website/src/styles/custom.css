@@ -556,11 +556,16 @@ body::after {
 
 .install-tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.4rem;
   font-family: var(--sl-font);
   font-size: 0.9rem;
   font-weight: 500;
+  line-height: 1;
   letter-spacing: 0.005em;
-  padding: 0.5rem 1rem 0.65rem;
+  padding: 0 1rem;
   border: none;
   background: transparent;
   color: var(--sl-color-gray-3, #7d8590);
@@ -576,7 +581,7 @@ body::after {
   position: absolute;
   left: 1rem;
   right: 1rem;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   background: #5cea5c;
   border-radius: 2px;
