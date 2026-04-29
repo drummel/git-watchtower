@@ -21,7 +21,7 @@ Settings are saved to `.watchtowerrc.json` in your project directory.
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `server.mode` | Server mode: `static`, `command`, or `none` | `static` |
+| `server.mode` | Server mode: `static`, `command`, or `none` | `none` |
 | `server.port` | Dev server port (1-65535) | `3000` |
 | `server.staticDir` | Directory to serve (static mode) | `public` |
 | `server.command` | Dev server command (command mode) | `""` |
@@ -66,9 +66,9 @@ All settings can be overridden from the command line:
 
 | Flag | Description |
 |------|-------------|
-| `-m, --mode <mode>` | Server mode: `static`, `command`, or `none` |
+| `-m, --mode <mode>` | Server mode: `static`, `command`, or `none` (default: `none`) |
 | `-p, --port <port>` | Server port (default: 3000) |
-| `-n, --no-server` | Shorthand for `--mode none` |
+| `-n, --no-server` | Shorthand for `--mode none` (default) |
 | `--static-dir <dir>` | Directory for static file serving (default: `public`) |
 | `-c, --command <cmd>` | Command to run in command mode (e.g., `"npm run dev"`) |
 | `--restart-on-switch` | Restart server on branch switch (default) |
