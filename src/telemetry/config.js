@@ -30,8 +30,18 @@ function getConfigPath() {
 }
 
 /**
- * Load telemetry config from disk
- * @returns {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string } | null}
+ * @typedef {object} UserConfig
+ * @property {boolean} [telemetryEnabled]
+ * @property {string} [distinctId]
+ * @property {string} [promptedAt]
+ * @property {string} [lastSeenUpdateVersion]
+ */
+
+/**
+ * Load user config from disk. The same file persists telemetry preferences
+ * and update-modal state — fields are individually optional because the
+ * file may exist before the telemetry consent prompt has run.
+ * @returns {UserConfig | null}
  */
 function loadTelemetryConfig() {
   try {
@@ -55,7 +65,7 @@ function loadTelemetryConfig() {
  * handles the missing case by minting a fresh UUID if the user later
  * opts in.
  *
- * @param {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string }} config
+ * @param {UserConfig} config
  */
 function saveTelemetryConfig(config) {
   const dir = getConfigDir();
@@ -102,11 +112,15 @@ function isTelemetryEnabled() {
 }
 
 /**
- * Check if the user has already been prompted for telemetry
+ * Check if the user has already been prompted for telemetry.
+ * Looks specifically at `promptedAt` rather than config existence — the
+ * same file also stores non-telemetry preferences (e.g. lastSeenUpdateVersion),
+ * so a present file does not on its own mean the consent prompt has run.
  * @returns {boolean}
  */
 function hasBeenPrompted() {
-  return loadTelemetryConfig() !== null;
+  const config = loadTelemetryConfig();
+  return !!(config && typeof config.promptedAt === 'string');
 }
 
 /**
@@ -118,6 +132,33 @@ function isEnvDisabled() {
   return envVar !== undefined && envVar.toLowerCase() === 'false';
 }
 
+/**
+ * Get the last update version the user has been notified about.
+ * Used to suppress re-popping the update modal on subsequent launches
+ * for a version they've already seen.
+ * @returns {string | null}
+ */
+function getLastSeenUpdateVersion() {
+  const config = loadTelemetryConfig();
+  if (config && typeof config.lastSeenUpdateVersion === 'string') {
+    return config.lastSeenUpdateVersion;
+  }
+  return null;
+}
+
+/**
+ * Persist the version the user has just been notified about. Merges into
+ * the existing user-config file so telemetry preferences are preserved.
+ * @param {string} version
+ */
+function setLastSeenUpdateVersion(version) {
+  const existing = loadTelemetryConfig() || {};
+  saveTelemetryConfig({
+    ...existing,
+    lastSeenUpdateVersion: version,
+  });
+}
+
 module.exports = {
   getConfigDir,
   getConfigPath,
@@ -127,4 +168,6 @@ module.exports = {
   isTelemetryEnabled,
   hasBeenPrompted,
   isEnvDisabled,
+  getLastSeenUpdateVersion,
+  setLastSeenUpdateVersion,
 };

@@ -22,6 +22,7 @@ const {
   renderUpdateModal,
 } = require('../../../src/ui/renderer');
 const { stripAnsi } = require('../../../src/ui/ansi');
+const { detectInstallSource, getUpdateCommand } = require('../../../src/utils/install-source');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1180,13 +1181,23 @@ describe('renderUpdateModal', () => {
     assert.ok(text.includes('Show update command'), 'Expected "Show update command" option in modal');
   });
 
+  it('should show install-source-aware update command', () => {
+    const expectedCmd = getUpdateCommand(detectInstallSource());
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+    });
+    assert.ok(text.includes(expectedCmd), `Expected update command "${expectedCmd}" in modal`);
+  });
+
   it('should show update command when updateInProgress is true', () => {
+    const expectedCmd = getUpdateCommand(detectInstallSource());
     const { text } = collectState(renderUpdateModal, {
       updateAvailable: '2.5.0',
       updateModalVisible: true,
       updateInProgress: true,
     });
-    assert.ok(text.includes('npm i -g git-watchtower'), 'Expected update command during update');
+    assert.ok(text.includes(expectedCmd), 'Expected update command during update');
     assert.ok(text.includes('Updating'), 'Expected updating message');
   });
 

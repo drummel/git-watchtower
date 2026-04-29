@@ -186,6 +186,62 @@ describe('telemetry/config', () => {
 
       assert.equal(config.hasBeenPrompted(), true);
     });
+
+    it('returns false when config exists without promptedAt', () => {
+      // Non-telemetry settings (e.g. lastSeenUpdateVersion) can land in the
+      // same file before the user has been asked about telemetry; that must
+      // not count as having been prompted.
+      const config = createConfigModule();
+      const dir = path.join(tmpDir, '.git-watchtower');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
+        lastSeenUpdateVersion: '2.1.18',
+      }));
+
+      assert.equal(config.hasBeenPrompted(), false);
+    });
+  });
+
+  describe('getLastSeenUpdateVersion / setLastSeenUpdateVersion', () => {
+    it('returns null when no config exists', () => {
+      const config = createConfigModule();
+      assert.equal(config.getLastSeenUpdateVersion(), null);
+    });
+
+    it('returns null when config exists but field is missing', () => {
+      const config = createConfigModule();
+      const dir = path.join(tmpDir, '.git-watchtower');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({
+        telemetryEnabled: false,
+        promptedAt: '2024-01-01T00:00:00Z',
+      }));
+
+      assert.equal(config.getLastSeenUpdateVersion(), null);
+    });
+
+    it('round-trips through set + get', () => {
+      const config = createConfigModule();
+      config.setLastSeenUpdateVersion('2.1.18');
+      assert.equal(config.getLastSeenUpdateVersion(), '2.1.18');
+    });
+
+    it('preserves existing telemetry fields when writing', () => {
+      const config = createConfigModule();
+      config.saveTelemetryConfig({
+        telemetryEnabled: true,
+        distinctId: 'preserved-id',
+        promptedAt: '2024-01-01T00:00:00Z',
+      });
+
+      config.setLastSeenUpdateVersion('2.1.18');
+
+      const reloaded = config.loadTelemetryConfig();
+      assert.equal(reloaded.telemetryEnabled, true);
+      assert.equal(reloaded.distinctId, 'preserved-id');
+      assert.equal(reloaded.promptedAt, '2024-01-01T00:00:00Z');
+      assert.equal(reloaded.lastSeenUpdateVersion, '2.1.18');
+    });
   });
 
   describe('isEnvDisabled', () => {
