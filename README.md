@@ -95,9 +95,9 @@ Real-time branch monitoring, PR workflows, CI status, and session statistics —
 
 | Mode | Flag | Description |
 |------|------|-------------|
-| **Static Site** | `--mode static` | Built-in server with live reload for HTML/CSS/JS (default) |
+| **No Server** | `--no-server` | Branch monitoring only (default) |
+| **Static Site** | `--mode static` | Built-in server with live reload for HTML/CSS/JS |
 | **Custom Command** | `--mode command -c "npm run dev"` | Run your own dev server (Next.js, Vite, Nuxt, etc.) |
-| **No Server** | `--no-server` | Branch monitoring only |
 
 ## 🎰 Casino Mode
 
