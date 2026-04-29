@@ -565,12 +565,12 @@ body::after {
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.005em;
-  padding: 0 1rem;
+  padding: 0 1.35rem;
   border: none;
   background: transparent;
   color: var(--sl-color-gray-3, #7d8590);
   cursor: pointer;
-  border-radius: 4px 4px 0 0;
+  border-radius: 6px 6px 0 0;
   transition:
     color 0.18s ease,
     background-color 0.18s ease;
@@ -579,8 +579,8 @@ body::after {
 .install-tab::after {
   content: '';
   position: absolute;
-  left: 1rem;
-  right: 1rem;
+  left: 1.35rem;
+  right: 1.35rem;
   bottom: 0;
   height: 2px;
   background: #5cea5c;
@@ -626,11 +626,21 @@ body::after {
 
 .install-tab:focus-visible {
   outline: 2px solid var(--sl-color-accent);
-  outline-offset: 3px;
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
 .install-tab-panel[hidden] {
   display: none;
+}
+
+/* Left-aligned variant for in-doc placement */
+.install-tabs[data-align='start'] .install-tabs-list {
+  justify-content: flex-start;
+}
+
+.install-tabs[data-align='start'] .install-command {
+  text-align: left;
 }
 
 /* ============================================

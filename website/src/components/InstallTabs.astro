@@ -1,6 +1,11 @@
 ---
 import InstallCommand from './InstallCommand.astro';
 
+interface Props {
+  align?: 'center' | 'start';
+}
+const { align = 'center' } = Astro.props;
+
 const tabs = [
   { id: 'homebrew', label: 'Homebrew', command: 'brew install drummel/git-watchtower/git-watchtower' },
   { id: 'npm', label: 'npm', command: 'npm install -g git-watchtower' },
@@ -8,7 +13,7 @@ const tabs = [
 ];
 ---
 
-<div class="install-tabs">
+<div class="install-tabs" data-align={align}>
   <div class="install-tabs-list" role="tablist" aria-label="Installation method">
     {tabs.map((tab, i) => (
       <button
