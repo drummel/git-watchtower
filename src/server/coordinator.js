@@ -81,11 +81,28 @@ const LOCK_FILE = path.join(WATCHTOWER_DIR, 'web.lock');
 const SOCKET_PATH = path.join(WATCHTOWER_DIR, 'web.sock');
 
 /**
- * Ensure the ~/.watchtower directory exists.
+ * Ensure the ~/.watchtower directory exists, restricted to the owner.
+ *
+ * The directory hosts the lock file and the Unix-domain IPC socket;
+ * both should only be reachable by the user running git-watchtower.
+ * On Linux, connect() to a Unix socket requires read+execute on the
+ * containing directory, so 0o700 is sufficient defense-in-depth even
+ * when the socket file itself ends up world-readable due to umask.
+ *
+ * mkdirSync's mode argument only applies when the directory is being
+ * created — it has no effect on a pre-existing dir. We chmod after
+ * the create check so installs that ran before this fix get migrated
+ * to the tighter mode on next launch.
  */
 function ensureDir() {
   if (!fs.existsSync(WATCHTOWER_DIR)) {
-    fs.mkdirSync(WATCHTOWER_DIR, { recursive: true });
+    fs.mkdirSync(WATCHTOWER_DIR, { recursive: true, mode: 0o700 });
+  }
+  try {
+    fs.chmodSync(WATCHTOWER_DIR, 0o700);
+  } catch (e) {
+    // chmod may fail on Windows or filesystems without POSIX perms; the
+    // permission semantics don't apply there anyway, so silently skip.
   }
 }
 

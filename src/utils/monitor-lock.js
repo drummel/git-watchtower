@@ -52,8 +52,16 @@ function lockFilePath(repoRoot) {
 }
 
 function ensureDir() {
+  // 0o700 keeps lock files (which contain pids and the cwd of running
+  // git-watchtower instances) unreadable to other local users. See
+  // src/server/coordinator.js for the rationale and Windows note.
   if (!fs.existsSync(WATCHTOWER_DIR)) {
-    fs.mkdirSync(WATCHTOWER_DIR, { recursive: true });
+    fs.mkdirSync(WATCHTOWER_DIR, { recursive: true, mode: 0o700 });
+  }
+  try {
+    fs.chmodSync(WATCHTOWER_DIR, 0o700);
+  } catch (e) {
+    // chmod may fail on Windows / non-POSIX filesystems; skip silently.
   }
 }
 
