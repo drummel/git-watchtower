@@ -1,3 +1,11 @@
+## [2.1.16](https://github.com/drummel/git-watchtower/compare/v2.1.15...v2.1.16) (2026-04-29)
+
+
+### Bug Fixes
+
+* chmod IPC socket to 0o600 after bind ([d57159e](https://github.com/drummel/git-watchtower/commit/d57159e82ff38205883b21211722adab316b7739))
+* restrict ~/.watchtower directory to owner-only (0o700) ([0d9e204](https://github.com/drummel/git-watchtower/commit/0d9e204a22759013ed238538e1222a1618f04372))
+
 ## [2.1.15](https://github.com/drummel/git-watchtower/compare/v2.1.14...v2.1.15) (2026-04-28)
 
 
