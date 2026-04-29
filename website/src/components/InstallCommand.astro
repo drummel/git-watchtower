@@ -1,11 +1,12 @@
 ---
 const { command = 'npm install -g git-watchtower' } = Astro.props;
+const multiline = command.includes('\n');
 ---
 
 <div class="install-command">
   <button
     type="button"
-    class="install-command-inner"
+    class:list={['install-command-inner', { 'install-command-inner--multiline': multiline }]}
     data-install-command={command}
     data-copy-state="idle"
     aria-label={`Copy command: ${command}`}

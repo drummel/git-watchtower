@@ -432,6 +432,28 @@ body::after {
   outline-offset: 3px;
 }
 
+.install-command-inner--multiline {
+  align-items: flex-start;
+  padding: 0.85rem 0.7rem 0.85rem 1.1rem;
+  max-width: min(100%, 720px);
+}
+
+.install-command-inner--multiline .install-prompt {
+  line-height: 1.6;
+  padding-top: 0;
+}
+
+.install-command-inner--multiline .install-text {
+  white-space: pre;
+  line-height: 1.6;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.install-command-inner--multiline .install-copy {
+  margin-top: -2px;
+}
+
 .install-prompt {
   color: #5cea5c;
   font-family: var(--sl-font-system-mono);
@@ -449,6 +471,7 @@ body::after {
   border: none;
   color: #e6edf3;
   letter-spacing: -0.005em;
+  white-space: nowrap;
 }
 
 .install-copy {
@@ -513,6 +536,124 @@ body::after {
 .downloads-badge-wrap {
   text-align: center;
   margin-block: 0 3rem;
+}
+
+/* ============================================
+   Install Method Tabs
+   ============================================ */
+
+.install-tabs {
+  margin-block: 0 0.85rem;
+}
+
+.install-tabs-list {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.15rem;
+  margin: 0 auto 1.15rem;
+  padding: 0;
+}
+
+.install-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 2.4rem;
+  min-height: 2.4rem;
+  max-height: 2.4rem;
+  margin: 0;
+  padding: 0 1.35rem;
+  font-family: var(--sl-font);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.005em;
+  vertical-align: middle;
+  border: none;
+  background: transparent;
+  color: var(--sl-color-gray-3, #7d8590);
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  appearance: none;
+  -webkit-appearance: none;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.install-tab::after {
+  content: '';
+  position: absolute;
+  left: 1.35rem;
+  right: 1.35rem;
+  bottom: 0;
+  height: 2px;
+  background: #5cea5c;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  box-shadow: 0 0 10px rgba(92, 234, 92, 0.45);
+  pointer-events: none;
+}
+
+.install-tab:hover {
+  color: #e6edf3;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.install-tab[aria-selected='true'] {
+  color: #e6edf3;
+}
+
+.install-tab[aria-selected='true']::after {
+  transform: scaleX(1);
+}
+
+:root[data-theme='light'] .install-tab {
+  color: var(--sl-color-gray-4, #6b7280);
+}
+
+:root[data-theme='light'] .install-tab:hover {
+  color: var(--sl-color-text, #1f2937);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+:root[data-theme='light'] .install-tab[aria-selected='true'] {
+  color: var(--sl-color-text, #1f2937);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-tab::after {
+    transition: none;
+  }
+}
+
+.install-tab:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.install-tab-panel[hidden] {
+  display: none;
+}
+
+/* Left-aligned variant for in-doc placement */
+.install-tabs[data-align='start'] {
+  margin-block: 1.5rem 2rem;
+}
+
+.install-tabs[data-align='start'] .install-tabs-list {
+  justify-content: flex-start;
+}
+
+.install-tabs[data-align='start'] .install-command {
+  text-align: left;
 }
 
 /* ============================================
