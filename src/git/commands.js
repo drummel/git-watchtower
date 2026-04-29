@@ -100,18 +100,14 @@ async function execGit(args, options = {}) {
 }
 
 /**
- * Execute a git command, collapsing any failure into a null result.
- *
- * Callers use this when they want "the output, or nothing": the fallback
- * pattern `execGitOptional(A) || execGitOptional(B)` relies on this, as does
- * every caller that treats a missing result as "no data to show." This does
- * conflate "branch has no commits" (empty stdout, non-null result) with
- * "git errored" (null result) — if you need to distinguish those, use
- * execGit() and handle the throw yourself.
+ * Like execGit but returns null instead of throwing on failure. Use for
+ * the `execGitOptional(A) || execGitOptional(B)` fallback pattern. Note
+ * this conflates "command succeeded with empty stdout" (non-null result)
+ * with "command errored" (null) — use execGit if you need to distinguish.
  *
  * @param {string[]} command - Git arguments
  * @param {Object} [options] - Execution options
- * @returns {Promise<{stdout: string, stderr: string}|null>} Result, or null if git failed
+ * @returns {Promise<{stdout: string, stderr: string}|null>}
  */
 async function execGitOptional(command, options = {}) {
   try {
