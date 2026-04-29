@@ -846,7 +846,7 @@ async function restartServerProcess() {
   // new process tried to bind a port the old one still held.
   try {
     await stopServerProcess();
-  } catch (_) { /* stopServerProcess never rejects in practice; best-effort */ }
+  } catch (_) {}
   if (isShuttingDown) return;
   startServerProcess();
   render();
@@ -3517,10 +3517,10 @@ async function startWebDashboard(openBrowser) {
       webStateInterval = null;
     }
     if (webDashboard) {
-      try { webDashboard.stop(); } catch (_) { /* web server may not have bound yet — nothing to stop */ }
+      try { webDashboard.stop(); } catch (_) {}
     }
     if (coordinator) {
-      try { coordinator.stop(); } catch (_) { /* coordinator may not have started its IPC server */ }
+      try { coordinator.stop(); } catch (_) {}
     }
     removeLock();
     removeSocket();
@@ -3578,25 +3578,25 @@ function restartProcess() {
   // stdio is inherited — so any stray listener here will race with the child
   // (keystrokes consumed twice, render() drawing frames on top of the child's
   // UI, Ctrl+C intercepted by both, etc.).
-  try { process.stdin.removeAllListeners('data'); } catch (_) { /* stdin may be detached */ }
-  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused */ }
-  try { process.stdout.removeAllListeners('resize'); } catch (_) { /* stdout may be detached */ }
-  try { process.removeAllListeners('SIGWINCH'); } catch (_) { /* no SIGWINCH handler registered */ }
-  try { process.removeAllListeners('SIGINT'); } catch (_) { /* no SIGINT handler registered */ }
-  try { process.removeAllListeners('SIGTERM'); } catch (_) { /* no SIGTERM handler registered */ }
+  try { process.stdin.removeAllListeners('data'); } catch (_) {}
+  try { process.stdin.pause(); } catch (_) {}
+  try { process.stdout.removeAllListeners('resize'); } catch (_) {}
+  try { process.removeAllListeners('SIGWINCH'); } catch (_) {}
+  try { process.removeAllListeners('SIGINT'); } catch (_) {}
+  try { process.removeAllListeners('SIGTERM'); } catch (_) {}
 
   // Stop every scheduler that can trigger a render while we're waiting on the
   // child. periodicUpdateCheck in particular will fire render() on completion
   // and would draw over the replacement's frames.
   if (pollIntervalId) {
-    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive */ }
+    try { clearTimeout(pollIntervalId); } catch (_) {}
     pollIntervalId = null;
   }
   if (periodicUpdateCheck) {
-    try { periodicUpdateCheck.stop(); } catch (_) { /* interval may already be cleared */ }
+    try { periodicUpdateCheck.stop(); } catch (_) {}
   }
   if (fileWatcher) {
-    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed */ }
+    try { fileWatcher.close(); } catch (_) {}
     fileWatcher = null;
   }
 
@@ -3612,7 +3612,7 @@ function restartProcess() {
   // child can acquire it. The parent stays alive waiting on child.on('close'),
   // so without this the child sees the parent as an active owner and refuses.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have already been unlinked */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) {}
     monitorLockFile = null;
   }
 
@@ -3669,23 +3669,23 @@ function cleanupResources() {
 
   // Restore terminal first so the user sees a clean prompt even if a
   // later step throws.
-  try { write(ansi.showCursor); } catch (_) { /* stdout may be closed during crash cleanup */ }
-  try { write(ansi.restoreScreen); } catch (_) { /* stdout may be closed during crash cleanup */ }
-  try { restoreTerminalTitle(); } catch (_) { /* stdout may be closed during crash cleanup */ }
-  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) { /* stdin may already be unraw or detached */ }
-  try { process.stdin.pause(); } catch (_) { /* stdin may already be paused or destroyed */ }
+  try { write(ansi.showCursor); } catch (_) {}
+  try { write(ansi.restoreScreen); } catch (_) {}
+  try { restoreTerminalTitle(); } catch (_) {}
+  try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch (_) {}
+  try { process.stdin.pause(); } catch (_) {}
 
   if (pollIntervalId) {
-    try { clearTimeout(pollIntervalId); } catch (_) { /* defensive — clearTimeout normally won't throw */ }
+    try { clearTimeout(pollIntervalId); } catch (_) {}
     pollIntervalId = null;
   }
 
   if (periodicUpdateCheck) {
-    try { periodicUpdateCheck.stop(); } catch (_) { /* interval handle may already be cleared */ }
+    try { periodicUpdateCheck.stop(); } catch (_) {}
   }
 
   if (fileWatcher) {
-    try { fileWatcher.close(); } catch (_) { /* watcher may already be closed by OS or previous cleanup */ }
+    try { fileWatcher.close(); } catch (_) {}
     fileWatcher = null;
   }
 
@@ -3693,10 +3693,10 @@ function cleanupResources() {
   if (SERVER_MODE === 'static') {
     try {
       clients.forEach((client) => {
-        try { client.end(); } catch (_) { /* SSE client socket already closed */ }
+        try { client.end(); } catch (_) {}
       });
       clients.clear();
-    } catch (_) { /* clients set may have mutated mid-iteration during shutdown */ }
+    } catch (_) {}
   }
 
   // User's dev-server process (command mode). Capture the close promise so
@@ -3706,16 +3706,16 @@ function cleanupResources() {
   // orphan (it was spawned in its own process group on Unix).
   let serverStopPromise = Promise.resolve();
   if (SERVER_MODE === 'command') {
-    try { serverStopPromise = stopServerProcess(); } catch (_) { /* dev-server child may already be gone */ }
+    try { serverStopPromise = stopServerProcess(); } catch (_) {}
   }
 
   // Web dashboard + worker/coordinator (unlinks lock file + IPC socket)
-  try { stopWebDashboard(); } catch (_) { /* web dashboard may never have been started */ }
+  try { stopWebDashboard(); } catch (_) {}
 
   // Per-repo monitor lock — release last so the slot stays reserved for the
   // entire lifetime of this process, including any errors in the steps above.
   if (monitorLockFile) {
-    try { monitorLock.release(monitorLockFile); } catch (_) { /* lock file may have been unlinked externally */ }
+    try { monitorLock.release(monitorLockFile); } catch (_) {}
     monitorLockFile = null;
   }
 
@@ -3742,7 +3742,7 @@ async function shutdown() {
   // FORCE_KILL_GRACE_MS SIGKILL escalation inside stopServerProcess).
   // Without this the escalation timer gets dropped by process.exit() below
   // and a dev server that ignored SIGTERM survives as a detached orphan.
-  try { await serverStopPromise; } catch (_) { /* best-effort */ }
+  try { await serverStopPromise; } catch (_) {}
 
   // Flush telemetry
   telemetry.capture('session_ended', {
@@ -3774,7 +3774,7 @@ process.on('exit', () => {
 const stdioPipeErrorHandler = createPipeErrorHandler({
   onEpipe: () => {
     isShuttingDown = true;
-    try { cleanupResources(); } catch (_) { /* best-effort during pipe-close */ }
+    try { cleanupResources(); } catch (_) {}
     process.exit(0);
   },
   onOther: (err) => {
@@ -3793,12 +3793,12 @@ process.on('uncaughtException', async (err) => {
   // if telemetry shutdown hangs or throws.
   const serverStopPromise = cleanupResources();
 
-  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  try { telemetry.captureError(err); } catch (_) {}
   console.error('Uncaught exception:', err);
-  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  try { await telemetry.shutdown(); } catch (_) {}
   // Wait for the dev-server SIGKILL escalation before exiting — otherwise
   // process.exit() drops the pending timer and a stuck server orphans.
-  try { await serverStopPromise; } catch (_) { /* best-effort */ }
+  try { await serverStopPromise; } catch (_) {}
   process.exit(1);
 });
 
@@ -3813,12 +3813,12 @@ process.on('unhandledRejection', async (reason) => {
   const serverStopPromise = cleanupResources();
 
   const err = reason instanceof Error ? reason : new Error(String(reason));
-  try { telemetry.captureError(err); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  try { telemetry.captureError(err); } catch (_) {}
   console.error('Unhandled rejection:', reason);
-  try { await telemetry.shutdown(); } catch (_) { /* telemetry must never prevent crash cleanup */ }
+  try { await telemetry.shutdown(); } catch (_) {}
   // Wait for the dev-server SIGKILL escalation before exiting — otherwise
   // process.exit() drops the pending timer and a stuck server orphans.
-  try { await serverStopPromise; } catch (_) { /* best-effort */ }
+  try { await serverStopPromise; } catch (_) {}
   process.exit(1);
 });
 
