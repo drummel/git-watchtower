@@ -24,7 +24,7 @@ describe('constants', () => {
   });
 
   it('should have sensible defaults', () => {
-    assert.strictEqual(DEFAULTS.server.mode, 'static');
+    assert.strictEqual(DEFAULTS.server.mode, 'none');
     assert.strictEqual(DEFAULTS.server.port, 3000);
     assert.strictEqual(DEFAULTS.gitPollInterval, 5000);
     assert.strictEqual(DEFAULTS.visibleBranches, 7);
@@ -43,7 +43,7 @@ describe('getDefaultConfig', () => {
     const config = getDefaultConfig();
 
     assert.ok(config.server);
-    assert.strictEqual(config.server.mode, 'static');
+    assert.strictEqual(config.server.mode, 'none');
     assert.strictEqual(config.server.port, 3000);
     assert.strictEqual(config.server.staticDir, 'public');
     assert.strictEqual(config.server.command, '');
@@ -276,7 +276,9 @@ describe('migrateConfig', () => {
 
     const result = migrateConfig(oldConfig);
 
-    assert.strictEqual(result.server.mode, 'static'); // Default
+    // Legacy configs without noServer predate the 'none' default and were
+    // written under the old 'static' default — preserve that.
+    assert.strictEqual(result.server.mode, 'static');
     assert.strictEqual(result.server.port, 4000);
     assert.strictEqual(result.server.staticDir, 'build');
     assert.strictEqual(result.gitPollInterval, 10000);
