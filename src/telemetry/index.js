@@ -104,4 +104,6 @@ module.exports = {
   hasBeenPrompted: config.hasBeenPrompted,
   loadTelemetryConfig: config.loadTelemetryConfig,
   saveTelemetryConfig: config.saveTelemetryConfig,
+  getLastSeenUpdateVersion: config.getLastSeenUpdateVersion,
+  setLastSeenUpdateVersion: config.setLastSeenUpdateVersion,
 };

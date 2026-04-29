@@ -23,6 +23,7 @@ const {
 } = require('../ui/ansi');
 const { formatTimeAgo, formatTimeCompact } = require('../utils/time');
 const { isBaseBranch } = require('../git/pr');
+const { detectInstallSource, getUpdateCommand } = require('../utils/install-source');
 const { version: PACKAGE_VERSION } = require('../../package.json');
 
 // ---------------------------------------------------------------------------
@@ -1482,7 +1483,7 @@ function renderUpdateModal(state, write) {
 
   const latestVersion = state.updateAvailable;
   const currentVer = PACKAGE_VERSION;
-  const updateCmd = 'npm i -g git-watchtower';
+  const updateCmd = getUpdateCommand(detectInstallSource());
 
   const options = [
     'Update & restart',
@@ -1500,11 +1501,12 @@ function renderUpdateModal(state, write) {
   lines.push(`Current version:  v${currentVer}`);
   lines.push(`Latest version:   v${latestVersion}`);
   lines.push('');
+  // Command on its own plaintext line so a triple-click selects it cleanly.
+  lines.push(updateCmd);
+  lines.push('');
 
   if (state.updateInProgress) {
     lines.push('Updating...');
-    lines.push('');
-    lines.push(`  ${updateCmd}`);
     lines.push('');
     lines.push('Please wait...');
   } else {
@@ -1517,7 +1519,7 @@ function renderUpdateModal(state, write) {
     lines.push('[Enter] Select  [Esc] Dismiss');
   }
 
-  const optionStartIdx = state.updateInProgress ? -1 : 5;
+  const optionStartIdx = state.updateInProgress ? -1 : 7;
   const height = lines.length + 2;
 
   // Draw magenta double-border box

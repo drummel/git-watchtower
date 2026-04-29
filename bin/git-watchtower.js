@@ -76,6 +76,7 @@ const { openInBrowser: openUrl } = require('../src/utils/browser');
 const { playSound: playSoundEffect } = require('../src/utils/sound');
 const { parseArgs: parseCliArgs, applyCliArgsToConfig: mergeCliArgs, getHelpText, PACKAGE_VERSION } = require('../src/cli/args');
 const { checkForUpdate, startPeriodicUpdateCheck } = require('../src/utils/version-check');
+const { detectInstallSource, getUpdateCommand } = require('../src/utils/install-source');
 const { parseRemoteUrl, buildBranchUrl, detectPlatform, buildWebUrl, extractSessionUrl } = require('../src/git/remote');
 const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBaseBranch } = require('../src/git/pr');
 
@@ -2828,12 +2829,24 @@ function setupKeyboardInput() {
       }
       if (key === '\r' || key === '\n') {
         const selectedIdx = store.get('updateModalSelectedIndex') || 0;
+        const installSource = detectInstallSource();
+        const updateCmd = getUpdateCommand(installSource);
         if (selectedIdx === 0) {
-          // Update & restart — run npm i -g git-watchtower, then re-exec
+          // Update & restart — for npm/homebrew we shell out to the matching
+          // package manager, then re-exec. For source/unknown installs there
+          // is no automated upgrade, so degrade to surfacing the command.
+          if (installSource !== 'npm' && installSource !== 'homebrew') {
+            store.setState({ updateModalVisible: false, updateModalSelectedIndex: 0 });
+            showFlash(`Run: ${updateCmd}`);
+            return;
+          }
+          const [cmdBin, ...cmdArgs] = installSource === 'homebrew'
+            ? ['brew', 'upgrade', 'git-watchtower']
+            : ['npm', 'i', '-g', 'git-watchtower'];
           store.setState({ updateInProgress: true });
           render();
           const { spawn } = require('child_process');
-          const child = spawn('npm', ['i', '-g', 'git-watchtower'], {
+          const child = spawn(cmdBin, cmdArgs, {
             stdio: 'ignore',
             detached: false,
             shell: process.platform === 'win32',
@@ -2845,21 +2858,21 @@ function setupKeyboardInput() {
               addLog('Successfully updated git-watchtower! Restarting...', 'update');
               restartProcess();
             } else {
-              addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
-              showFlash('Update failed. Try manually: npm i -g git-watchtower');
+              addLog(`Update failed (exit code ${code}). Run manually: ${updateCmd}`, 'error');
+              showFlash(`Update failed. Try manually: ${updateCmd}`);
             }
             render();
           });
           child.on('error', (err) => {
             store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
-            addLog(`Update failed: ${err.message}. Run manually: npm i -g git-watchtower`, 'error');
-            showFlash('Update failed. Try manually: npm i -g git-watchtower');
+            addLog(`Update failed: ${err.message}. Run manually: ${updateCmd}`, 'error');
+            showFlash(`Update failed. Try manually: ${updateCmd}`);
             render();
           });
         } else {
           // Show update command — dismiss modal with flash showing the command
           store.setState({ updateModalVisible: false, updateModalSelectedIndex: 0 });
-          showFlash('Run: npm i -g git-watchtower');
+          showFlash(`Run: ${updateCmd}`);
         }
         return;
       }
@@ -3289,10 +3302,20 @@ async function handleWebAction(action, payload) {
         break;
       case 'checkUpdate':
         if (payload && payload.install) {
+          const installSrc = detectInstallSource();
+          const updateCmdStr = getUpdateCommand(installSrc);
+          if (installSrc !== 'npm' && installSrc !== 'homebrew') {
+            sendResult(false, `Auto-update unavailable. Run: ${updateCmdStr}`);
+            addLog(`Auto-update unavailable for ${installSrc} install. Run manually: ${updateCmdStr}`, 'update');
+            break;
+          }
           store.setState({ updateInProgress: true });
           render();
           const { spawn: spawnUpdate } = require('child_process');
-          const updateChild = spawnUpdate('npm', ['i', '-g', 'git-watchtower'], {
+          const [updBin, ...updArgs] = installSrc === 'homebrew'
+            ? ['brew', 'upgrade', 'git-watchtower']
+            : ['npm', 'i', '-g', 'git-watchtower'];
+          const updateChild = spawnUpdate(updBin, updArgs, {
             stdio: 'ignore',
             detached: false,
           });
@@ -3305,7 +3328,7 @@ async function handleWebAction(action, payload) {
               restartProcess();
             } else {
               sendResult(false, `Update failed (exit code ${code})`);
-              addLog(`Update failed (exit code ${code}). Run manually: npm i -g git-watchtower`, 'error');
+              addLog(`Update failed (exit code ${code}). Run manually: ${updateCmdStr}`, 'error');
               render();
             }
           });
@@ -3892,7 +3915,10 @@ async function start() {
   const config = await ensureConfig(cliArgs);
   applyConfig(config);
 
-  // Telemetry: set version early so consent events include $lib_version
+  // Telemetry: set version early so consent events include $lib_version.
+  // Warm the install-source detector so the result is cached before any
+  // events fire — every subsequent queueEvent() call reuses it.
+  const installSource = detectInstallSource();
   telemetry.setVersion(PACKAGE_VERSION);
   await telemetry.promptIfNeeded(promptYesNo);
   telemetry.init({ version: PACKAGE_VERSION });
@@ -3904,6 +3930,7 @@ async function start() {
     server_mode: SERVER_MODE,
     has_config: !!loadConfig(),
     casino_mode: config.casinoMode || false,
+    install_source: installSource,
   });
 
   // Set up casino mode render callback for animations
@@ -4040,8 +4067,14 @@ async function start() {
   // Check for newer version on npm (non-blocking, silent on failure)
   checkForUpdate().then((latestVersion) => {
     if (latestVersion) {
-      store.setState({ updateAvailable: latestVersion, updateModalVisible: true });
-      addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
+      const lastSeen = telemetry.getLastSeenUpdateVersion();
+      const shouldAutoPop = lastSeen !== latestVersion;
+      const upgradeCmd = getUpdateCommand(detectInstallSource());
+      store.setState({ updateAvailable: latestVersion, updateModalVisible: shouldAutoPop });
+      if (shouldAutoPop) {
+        try { telemetry.setLastSeenUpdateVersion(latestVersion); } catch (_) { /* persistence is best-effort */ }
+      }
+      addLog(`New version available: ${latestVersion} \u2192 ${upgradeCmd}`, 'update');
       render();
     }
   }).catch(() => { /* npm registry unreachable — periodic check will try again in 4h */ });
@@ -4053,8 +4086,10 @@ async function start() {
     store.setState({ updateAvailable: latestVersion });
     if (!alreadyKnown) {
       // First time discovering an update during this session — show modal
+      const upgradeCmd = getUpdateCommand(detectInstallSource());
       store.setState({ updateModalVisible: true });
-      addLog(`New version available: ${latestVersion} \u2192 npm i -g git-watchtower`, 'update');
+      try { telemetry.setLastSeenUpdateVersion(latestVersion); } catch (_) { /* persistence is best-effort */ }
+      addLog(`New version available: ${latestVersion} \u2192 ${upgradeCmd}`, 'update');
     }
     render();
   });

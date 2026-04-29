@@ -7,6 +7,7 @@
 
 const https = require('https');
 const { isTelemetryEnabled, getOrCreateDistinctId } = require('./config');
+const { detectInstallSource } = require('../utils/install-source');
 
 const POSTHOG_API_KEY = 'phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG';
 const POSTHOG_HOST = 'us.i.posthog.com';
@@ -78,6 +79,7 @@ function queueEvent(event, properties, overrideDistinctId) {
       ...properties,
       $lib: 'git-watchtower',
       $lib_version: appVersion,
+      install_source: detectInstallSource(),
     },
     timestamp: new Date().toISOString(),
   });
@@ -179,6 +181,7 @@ function captureAlways(event, userDistinctId, properties = {}) {
           ...properties,
           $lib: 'git-watchtower',
           $lib_version: appVersion,
+          install_source: detectInstallSource(),
         },
         timestamp: new Date().toISOString(),
       }],
