@@ -255,9 +255,9 @@ Usage:
   git-watchtower [options]
 
 Server Options:
-  -m, --mode <mode>       Server mode: static, command, or none
+  -m, --mode <mode>       Server mode: static, command, or none (default: none)
   -p, --port <port>       Server port (default: 3000)
-  -n, --no-server         Shorthand for --mode none
+  -n, --no-server         Shorthand for --mode none (default)
   --static-dir <dir>      Directory for static file serving (default: public)
   -c, --command <cmd>     Command to run in command mode (e.g., "npm run dev")
   --restart-on-switch     Restart server on branch switch (default)
@@ -287,9 +287,9 @@ General:
   -h, --help              Show this help message
 
 Server Modes:
-  static   Serve static files with live reload (default)
+  none     Branch monitoring only (default)
+  static   Serve static files with live reload
   command  Run your own dev server (Next.js, Vite, Nuxt, etc.)
-  none     Branch monitoring only
 
 Configuration:
   On first run, Git Watchtower will prompt you to configure settings.

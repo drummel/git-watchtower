@@ -48,7 +48,7 @@ const SERVER_MODES = ['static', 'command', 'none'];
  */
 const DEFAULTS = {
   server: {
-    mode: /** @type {ServerMode} */ ('static'),
+    mode: /** @type {ServerMode} */ ('none'),
     staticDir: 'public',
     command: '',
     port: 3000,
@@ -291,12 +291,12 @@ function migrateConfig(config) {
     return validateConfig(config);
   }
 
-  // Convert old format to new
+  // Convert old format to new. Legacy configs predate the 'none' default,
+  // so preserve the old behavior: noServer maps to 'none', anything else
+  // implies the user wanted the static server that used to be the default.
   const newConfig = getDefaultConfig();
 
-  if (config.noServer) {
-    newConfig.server.mode = 'none';
-  }
+  newConfig.server.mode = config.noServer ? 'none' : 'static';
   if (config.port !== undefined) {
     newConfig.server.port = validatePort(config.port);
   }
