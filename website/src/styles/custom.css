@@ -432,6 +432,28 @@ body::after {
   outline-offset: 3px;
 }
 
+.install-command-inner--multiline {
+  align-items: flex-start;
+  padding: 0.85rem 0.7rem 0.85rem 1.1rem;
+  max-width: min(100%, 720px);
+}
+
+.install-command-inner--multiline .install-prompt {
+  line-height: 1.6;
+  padding-top: 0;
+}
+
+.install-command-inner--multiline .install-text {
+  white-space: pre;
+  line-height: 1.6;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.install-command-inner--multiline .install-copy {
+  margin-top: -2px;
+}
+
 .install-prompt {
   color: #5cea5c;
   font-family: var(--sl-font-system-mono);
@@ -519,34 +541,81 @@ body::after {
    Install Method Tabs
    ============================================ */
 
-.install-tabs { margin-block: 0 0.65rem; }
+.install-tabs {
+  margin-block: 0 0.85rem;
+}
 
 .install-tabs-list {
-  display: flex; justify-content: center; gap: 0.35rem; margin-bottom: 0.85rem;
+  display: flex;
+  justify-content: center;
+  gap: 0.15rem;
+  margin: 0 auto 1.15rem;
+  padding: 0;
 }
 
 .install-tab {
+  position: relative;
   font-family: var(--sl-font);
-  font-size: 0.82rem; font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase;
-  padding: 0.45rem 0.95rem;
-  border-radius: 6px; border: 1px solid transparent;
-  background: transparent; color: var(--sl-color-gray-3, #9aa4b2);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  padding: 0.5rem 1rem 0.65rem;
+  border: none;
+  background: transparent;
+  color: var(--sl-color-gray-3, #7d8590);
   cursor: pointer;
-  transition: color .15s, background-color .15s, border-color .15s;
+  border-radius: 4px 4px 0 0;
+  transition:
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.install-tab::after {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: -1px;
+  height: 2px;
+  background: #5cea5c;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  box-shadow: 0 0 10px rgba(92, 234, 92, 0.45);
+  pointer-events: none;
 }
 
 .install-tab:hover {
-  color: var(--sl-color-accent-high);
-  background: rgba(92, 234, 92, 0.06);
+  color: #e6edf3;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .install-tab[aria-selected='true'] {
-  color: #052e16; background: #7cf27c;
+  color: #e6edf3;
+}
+
+.install-tab[aria-selected='true']::after {
+  transform: scaleX(1);
+}
+
+:root[data-theme='light'] .install-tab {
+  color: var(--sl-color-gray-4, #6b7280);
+}
+
+:root[data-theme='light'] .install-tab:hover {
+  color: var(--sl-color-text, #1f2937);
+  background: rgba(0, 0, 0, 0.03);
 }
 
 :root[data-theme='light'] .install-tab[aria-selected='true'] {
-  background: var(--sl-color-accent);
+  color: var(--sl-color-text, #1f2937);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-tab::after {
+    transition: none;
+  }
 }
 
 .install-tab:focus-visible {
@@ -554,7 +623,9 @@ body::after {
   outline-offset: 3px;
 }
 
-.install-tab-panel[hidden] { display: none; }
+.install-tab-panel[hidden] {
+  display: none;
+}
 
 /* ============================================
    Docs CTA Button
