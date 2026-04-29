@@ -471,6 +471,7 @@ body::after {
   border: none;
   color: #e6edf3;
   letter-spacing: -0.005em;
+  white-space: nowrap;
 }
 
 .install-copy {
