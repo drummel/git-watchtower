@@ -307,6 +307,20 @@ class Coordinator {
       });
 
       this.ipcServer.listen(this.socketPath, () => {
+        // Defense-in-depth: tighten the socket file's own perms after
+        // bind. Node's net.Server.listen() creates the socket file with
+        // perms derived from umask, which on shared workstations
+        // (umask 0022) yields 0o755 — world-readable. Linux ignores
+        // socket-file perms for connect() (the directory's perms are
+        // authoritative), but BSD honours them and other tooling may
+        // surface them in audit reports. Setting 0o600 explicitly
+        // matches the 0o700 directory perms set in ensureDir().
+        try {
+          fs.chmodSync(this.socketPath, 0o600);
+        } catch (e) {
+          // Non-POSIX filesystem or Windows — perm semantics don't
+          // apply, skip silently.
+        }
         resolve();
       });
     });
