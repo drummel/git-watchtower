@@ -1,3 +1,10 @@
+## [2.2.1](https://github.com/drummel/git-watchtower/compare/v2.2.0...v2.2.1) (2026-04-29)
+
+
+### Bug Fixes
+
+* prepend `brew update` to homebrew upgrade command ([6338922](https://github.com/drummel/git-watchtower/commit/6338922667fc634cc44c26d6b7ce4f563d3913f2))
+
 # [2.2.0](https://github.com/drummel/git-watchtower/compare/v2.1.17...v2.2.0) (2026-04-29)
 
 
