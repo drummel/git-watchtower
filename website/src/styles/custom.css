@@ -516,6 +516,47 @@ body::after {
 }
 
 /* ============================================
+   Install Method Tabs
+   ============================================ */
+
+.install-tabs { margin-block: 0 0.65rem; }
+
+.install-tabs-list {
+  display: flex; justify-content: center; gap: 0.35rem; margin-bottom: 0.85rem;
+}
+
+.install-tab {
+  font-family: var(--sl-font);
+  font-size: 0.82rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 0.45rem 0.95rem;
+  border-radius: 6px; border: 1px solid transparent;
+  background: transparent; color: var(--sl-color-gray-3, #9aa4b2);
+  cursor: pointer;
+  transition: color .15s, background-color .15s, border-color .15s;
+}
+
+.install-tab:hover {
+  color: var(--sl-color-accent-high);
+  background: rgba(92, 234, 92, 0.06);
+}
+
+.install-tab[aria-selected='true'] {
+  color: #052e16; background: #7cf27c;
+}
+
+:root[data-theme='light'] .install-tab[aria-selected='true'] {
+  background: var(--sl-color-accent);
+}
+
+.install-tab:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
+}
+
+.install-tab-panel[hidden] { display: none; }
+
+/* ============================================
    Docs CTA Button
    ============================================ */
 

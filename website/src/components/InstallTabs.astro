@@ -1,0 +1,88 @@
+---
+import InstallCommand from './InstallCommand.astro';
+
+const tabs = [
+  { id: 'homebrew', label: 'Homebrew', command: 'brew install drummel/git-watchtower/git-watchtower' },
+  { id: 'npm', label: 'npm', command: 'npm install -g git-watchtower' },
+  { id: 'source', label: 'Source', command: 'git clone https://github.com/drummel/git-watchtower.git && cd git-watchtower && npm install && npm link' },
+];
+---
+
+<div class="install-tabs">
+  <div class="install-tabs-list" role="tablist" aria-label="Installation method">
+    {tabs.map((tab, i) => (
+      <button
+        type="button"
+        role="tab"
+        id={`install-tab-${tab.id}`}
+        class="install-tab"
+        aria-selected={i === 0 ? 'true' : 'false'}
+        aria-controls={`install-panel-${tab.id}`}
+        tabindex={i === 0 ? 0 : -1}
+        data-install-tab={tab.id}
+      >
+        {tab.label}
+      </button>
+    ))}
+  </div>
+  {tabs.map((tab, i) => (
+    <div
+      role="tabpanel"
+      id={`install-panel-${tab.id}`}
+      class="install-tab-panel"
+      aria-labelledby={`install-tab-${tab.id}`}
+      data-install-panel={tab.id}
+      hidden={i !== 0}
+    >
+      <InstallCommand command={tab.command} />
+    </div>
+  ))}
+</div>
+
+<script>
+  function setupInstallTabs() {
+    const containers = document.querySelectorAll<HTMLElement>('.install-tabs');
+    containers.forEach((container) => {
+      if (container.dataset.tabsBound === 'true') return;
+      container.dataset.tabsBound = 'true';
+
+      const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[data-install-tab]'));
+      const panels = Array.from(container.querySelectorAll<HTMLElement>('[data-install-panel]'));
+
+      function activate(index: number, focus = true) {
+        tabs.forEach((tab, i) => {
+          const selected = i === index;
+          tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+          tab.tabIndex = selected ? 0 : -1;
+          if (selected && focus) tab.focus();
+        });
+        panels.forEach((panel, i) => {
+          if (i === index) panel.removeAttribute('hidden');
+          else panel.setAttribute('hidden', '');
+        });
+      }
+
+      tabs.forEach((tab, i) => {
+        tab.addEventListener('click', () => activate(i, false));
+        tab.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            activate((i + 1) % tabs.length);
+          } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            activate((i - 1 + tabs.length) % tabs.length);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            activate(0);
+          } else if (e.key === 'End') {
+            e.preventDefault();
+            activate(tabs.length - 1);
+          }
+        });
+      });
+    });
+  }
+
+  setupInstallTabs();
+  document.addEventListener('astro:page-load', setupInstallTabs);
+</script>
