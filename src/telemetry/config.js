@@ -30,8 +30,18 @@ function getConfigPath() {
 }
 
 /**
- * Load telemetry config from disk
- * @returns {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string } | null}
+ * @typedef {object} UserConfig
+ * @property {boolean} [telemetryEnabled]
+ * @property {string} [distinctId]
+ * @property {string} [promptedAt]
+ * @property {string} [lastSeenUpdateVersion]
+ */
+
+/**
+ * Load user config from disk. The same file persists telemetry preferences
+ * and update-modal state — fields are individually optional because the
+ * file may exist before the telemetry consent prompt has run.
+ * @returns {UserConfig | null}
  */
 function loadTelemetryConfig() {
   try {
@@ -55,7 +65,7 @@ function loadTelemetryConfig() {
  * handles the missing case by minting a fresh UUID if the user later
  * opts in.
  *
- * @param {{ telemetryEnabled: boolean, distinctId?: string, promptedAt: string }} config
+ * @param {UserConfig} config
  */
 function saveTelemetryConfig(config) {
   const dir = getConfigDir();
