@@ -56,7 +56,7 @@ describe('classifyPath', () => {
 
 describe('getUpdateCommand', () => {
   it('returns brew command for homebrew', () => {
-    assert.equal(getUpdateCommand('homebrew'), 'brew upgrade git-watchtower');
+    assert.equal(getUpdateCommand('homebrew'), 'brew update && brew upgrade git-watchtower');
   });
 
   it('returns npm command for npm', () => {
