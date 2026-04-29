@@ -5,7 +5,22 @@ description: Git Watchtower supports three server modes to fit your workflow.
 
 Git Watchtower supports three server modes to fit your workflow. Set the mode during the configuration wizard, in `.watchtowerrc.json`, or via CLI flags.
 
-## Static Site Mode (Default)
+## No Server Mode (Default)
+
+Branch monitoring only. No dev server is started. This is the default for new installs — opt into one of the server modes below once you know which one fits your workflow.
+
+```bash
+git-watchtower --no-server
+# or
+git-watchtower --mode none
+```
+
+Use this when:
+- Watching AI agents push to multiple branches
+- You have your own dev server running separately
+- You only need branch monitoring and notifications
+
+## Static Site Mode
 
 Serves static files with automatic live reload. Good for static HTML/CSS/JS sites, projects without a build step, and quick prototyping.
 
@@ -61,18 +76,3 @@ git-watchtower --mode command --command "npm run dev"
 | `R` | Restart the dev server |
 
 The server restarts automatically when you switch branches (configurable with `--restart-on-switch` / `--no-restart-on-switch`).
-
-## No Server Mode
-
-Branch monitoring only. No dev server is started.
-
-```bash
-git-watchtower --no-server
-# or
-git-watchtower --mode none
-```
-
-Use this when:
-- Watching AI agents push to multiple branches
-- You have your own dev server running separately
-- You only need branch monitoring and notifications
