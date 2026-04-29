@@ -1,0 +1,36 @@
+name: Bump Homebrew formula
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to bump (e.g. v2.1.17)'
+        required: true
+
+jobs:
+  bump:
+    name: Bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve version
+        id: v
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump formula
+        uses: mislav/bump-homebrew-formula-action@v3
+        with:
+          formula-name: git-watchtower
+          formula-path: Formula/git-watchtower.rb
+          homebrew-tap: drummel/homebrew-git-watchtower
+          tag-name: ${{ steps.v.outputs.tag }}
+          download-url: https://registry.npmjs.org/git-watchtower/-/git-watchtower-${{ steps.v.outputs.version }}.tgz
+          commit-message: |
+            {{formulaName}} {{version}}
+        env:
+          COMMITTER_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
