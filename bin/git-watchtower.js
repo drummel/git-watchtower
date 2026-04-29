@@ -576,6 +576,18 @@ async function checkCliAuth(cmd) {
 }
 
 // Bulk-fetch PR statuses for all branches (parsing delegated to src/git/pr.js)
+//
+// PR_LIST_LIMIT is the cap passed to `gh pr list` / `glab mr list`. The
+// previous values (200 for gh, glab's default of 30) silently truncated
+// on any active OSS repo — branches whose PR was outside the most recent
+// N rendered with no inline indicator and never sorted as merged.
+// 1000 covers virtually any real-world repo while still keeping the
+// single API call fast (gh streams JSON, no pagination overhead). If
+// your repo somehow exceeds 1000 active PRs, the truncation is back —
+// but at that scale the inline indicator is the smallest of your UX
+// concerns.
+const PR_LIST_LIMIT = '1000';
+
 async function fetchAllPrStatuses() {
   if (!cachedEnv) return null;
   const { platform, hasGh, ghAuthed, hasGlab, glabAuthed } = cachedEnv;
@@ -584,7 +596,7 @@ async function fetchAllPrStatuses() {
     try {
       const { stdout } = await execCli('gh', [
         'pr', 'list', '--state', 'all',
-        '--json', 'headRefName,number,title,state', '--limit', '200',
+        '--json', 'headRefName,number,title,state', '--limit', PR_LIST_LIMIT,
       ]);
       return parseGitHubPrList(JSON.parse(stdout));
     } catch (e) { /* gh error */ }
@@ -594,6 +606,7 @@ async function fetchAllPrStatuses() {
     try {
       const { stdout } = await execCli('glab', [
         'mr', 'list', '--state', 'all', '--output', 'json',
+        '--per-page', PR_LIST_LIMIT,
       ]);
       return parseGitLabMrList(JSON.parse(stdout));
     } catch (e) { /* glab error */ }
