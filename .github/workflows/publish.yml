@@ -68,6 +68,10 @@ jobs:
 
       - name: Run Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT (SEMANTIC_RELEASE_TOKEN) instead of the default GITHUB_TOKEN
+          # so the release event published here can trigger downstream workflows
+          # (notably bump-homebrew.yml). Events fired by GITHUB_TOKEN are
+          # suppressed by GitHub's recursive-workflow protection.
+          GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
         run: npx semantic-release
