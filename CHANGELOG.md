@@ -1,3 +1,15 @@
+# [2.2.0](https://github.com/drummel/git-watchtower/compare/v2.1.17...v2.2.0) (2026-04-29)
+
+
+### Bug Fixes
+
+* widen UserConfig type to include lastSeenUpdateVersion ([a29f700](https://github.com/drummel/git-watchtower/commit/a29f7005ecda48a581b1c5e77ed0babe383a38ed))
+
+
+### Features
+
+* install-source-aware update modal and PostHog tagging ([f2d02ac](https://github.com/drummel/git-watchtower/commit/f2d02accfb301e61ea4f5677225597ba531c6063))
+
 ## [2.1.17](https://github.com/drummel/git-watchtower/compare/v2.1.16...v2.1.17) (2026-04-29)
 
 
