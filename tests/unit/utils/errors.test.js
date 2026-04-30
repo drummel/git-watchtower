@@ -216,19 +216,6 @@ describe('ServerError', () => {
     assert.strictEqual(error.code, 'SERVER_ERROR');
   });
 
-  it('should create port in use error', () => {
-    const error = ServerError.portInUse(3000);
-    assert.strictEqual(error.code, 'PORT_IN_USE');
-    assert.ok(error.message.includes('3000'));
-    assert.strictEqual(error.details.port, 3000);
-  });
-
-  it('should create process crashed error', () => {
-    const error = ServerError.processCrashed('npm run dev', 1);
-    assert.strictEqual(error.code, 'PROCESS_CRASHED');
-    assert.strictEqual(error.details.exitCode, 1);
-  });
-
   it('should create start failed error', () => {
     const error = ServerError.startFailed('npm run dev', 'command not found');
     assert.strictEqual(error.code, 'START_FAILED');

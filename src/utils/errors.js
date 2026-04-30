@@ -253,33 +253,6 @@ class ServerError extends AppError {
   }
 
   /**
-   * Create ServerError for port in use
-   * @param {number} port - The port that's in use
-   * @returns {ServerError}
-   */
-  static portInUse(port) {
-    return new ServerError(
-      `Port ${port} is already in use`,
-      'PORT_IN_USE',
-      { port }
-    );
-  }
-
-  /**
-   * Create ServerError for process crash
-   * @param {string} command - The command that crashed
-   * @param {number} exitCode - Exit code
-   * @returns {ServerError}
-   */
-  static processCrashed(command, exitCode) {
-    return new ServerError(
-      `Server process crashed with exit code ${exitCode}`,
-      'PROCESS_CRASHED',
-      { command, exitCode }
-    );
-  }
-
-  /**
    * Create ServerError for start failure
    * @param {string} command - The command that failed to start
    * @param {string} reason - Failure reason
