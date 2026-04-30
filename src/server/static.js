@@ -56,14 +56,22 @@ const LIVE_RELOAD_SCRIPT = `
 
 /**
  * Inject live reload script into HTML content.
+ *
+ * Splits on the LAST `</body>` rather than the first. String.prototype.replace
+ * with a string argument only replaces the first match, which mis-injects
+ * the script when the page has a literal `</body>` earlier in the document —
+ * e.g. inside a `<pre>` or `<code>` block on a docs site rendering HTML
+ * samples. The browser only honours the last `</body>` as the actual close,
+ * so that's where the script needs to land.
+ *
  * @param {string} html - HTML content
- * @returns {string} HTML with live reload script injected before </body>
+ * @returns {string} HTML with live reload script injected before the closing </body>
  */
 function injectLiveReload(html) {
-  if (html.includes('</body>')) {
-    return html.replace('</body>', LIVE_RELOAD_SCRIPT);
-  }
-  return html;
+  const closeTag = '</body>';
+  const idx = html.lastIndexOf(closeTag);
+  if (idx === -1) return html;
+  return html.slice(0, idx) + LIVE_RELOAD_SCRIPT + html.slice(idx + closeTag.length);
 }
 
 /**
