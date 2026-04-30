@@ -862,7 +862,7 @@ let pollIntervalId = null;
 const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
 
 // Error detection utilities imported from src/utils/errors.js
-const { ErrorHandler, isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
+const { isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
 const { Mutex, sleep } = require('../src/utils/async');
 
 // Keyboard handling utilities imported from src/ui/keybindings.js
