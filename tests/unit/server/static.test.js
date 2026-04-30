@@ -81,6 +81,24 @@ describe('injectLiveReload', () => {
   it('should handle empty string', () => {
     assert.equal(injectLiveReload(''), '');
   });
+
+  it('should inject before the last </body>, not an earlier literal match', () => {
+    // A docs site rendering an HTML sample inside <pre><code> contains a
+    // literal "</body>" before the actual closing tag. The previous
+    // implementation used String.replace (string arg, no /g) which replaces
+    // only the first match — mis-injecting the script inside the code block.
+    const html = '<html><body><pre><code></body></code></pre><h1>End</h1></body></html>';
+    const result = injectLiveReload(html);
+
+    const scriptIdx = result.indexOf('EventSource');
+    const codeBlockEnd = result.indexOf('</pre>');
+    assert.ok(
+      scriptIdx > codeBlockEnd,
+      'script must be injected after the <pre> block, not inside it',
+    );
+    // And the document should still terminate cleanly
+    assert.ok(result.endsWith('</body></html>'));
+  });
 });
 
 describe('parseDiffStats', () => {
