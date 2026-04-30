@@ -1,3 +1,10 @@
+## [2.2.2](https://github.com/drummel/git-watchtower/compare/v2.2.1...v2.2.2) (2026-04-30)
+
+
+### Bug Fixes
+
+* inject live reload before the last </body>, not the first ([5f856dc](https://github.com/drummel/git-watchtower/commit/5f856dc3995365991764a48984a5e71279228416))
+
 ## [2.2.1](https://github.com/drummel/git-watchtower/compare/v2.2.0...v2.2.1) (2026-04-29)
 
 
