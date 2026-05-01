@@ -44,7 +44,7 @@ describe('getDashboardJs', () => {
     assert.ok(js.includes('function render()'), 'Should have main render function');
     assert.ok(js.includes('function renderBranches()'), 'Should have renderBranches');
     assert.ok(js.includes('function renderActivityLog()'), 'Should have renderActivityLog');
-    assert.ok(js.includes('function renderSessionStats()'), 'Should have renderSessionStats');
+    assert.ok(js.includes('function renderDashboardStats()'), 'Should have renderDashboardStats');
     assert.ok(js.includes('function renderPrefsBar()'), 'Should have renderPrefsBar');
   });
 

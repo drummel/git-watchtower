@@ -650,4 +650,222 @@ describe('dashboard JS — DOM behavior', () => {
       }
     });
   });
+
+  describe('Casino mode', () => {
+    it('should not have casino-active class when state.casinoModeEnabled is false', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(
+        !env.document.body.classList.contains('casino-active'),
+        'body should not be casino-active by default'
+      );
+    });
+
+    it('should add casino-active class to body when state.casinoModeEnabled flips on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      assert.ok(
+        env.document.body.classList.contains('casino-active'),
+        'body should pick up casino-active when state flips on'
+      );
+    });
+
+    it('should remove casino-active class when state.casinoModeEnabled flips off', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(
+        !env.document.body.classList.contains('casino-active'),
+        'body should drop casino-active when state flips off'
+      );
+    });
+
+    it('should POST a toggleCasino action when c is pressed', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({}));
+
+      env.pressKey('c');
+
+      const xhr = env.getXhr('/api/action');
+      assert.ok(xhr, 'pressing c should fire an action POST');
+      const body = JSON.parse(xhr._body);
+      assert.equal(body.action, 'toggleCasino');
+    });
+
+    it('should fill the dashboard-stats bar with casino numbers when casino is on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats({
+          totalLinesAdded: 42,
+          totalLinesDeleted: 7,
+          totalLines: 49,
+          totalPolls: 5,
+          netWinnings: 44,
+          houseEdge: 73,
+          luckMeter: 88,
+          dopamineHits: 12,
+          sessionDuration: '3m',
+          vibesQuality: '\u{1f680}',
+          consecutivePolls: 0,
+        }),
+      }));
+
+      const bar = env.document.getElementById('dashboard-stats');
+      assert.ok(bar.className.includes('casino-mode'), 'bar should re-skin to casino-mode');
+      const text = bar.textContent;
+      assert.ok(text.includes('+42'), 'should show lines added');
+      assert.ok(text.includes('-7'), 'should show lines deleted');
+      assert.ok(text.includes('$49'), 'should show total lines as dollars');
+      assert.ok(text.includes('$5'), 'should show poll cost');
+      assert.ok(text.includes('+$44'), 'should show net winnings with sign');
+      assert.ok(text.includes('73%'), 'should show house edge');
+      assert.ok(text.includes('88%'), 'should show luck meter');
+      assert.ok(text.includes('12'), 'should show dopamine hits');
+    });
+
+    it('should fall back to plain session stats when casino is off', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats(),
+      }));
+      env.pushSSE(makeState({ casinoModeEnabled: false, casinoStats: null }));
+
+      const bar = env.document.getElementById('dashboard-stats');
+      assert.ok(!bar.className.includes('casino-mode'), 'bar should drop casino-mode skin');
+      assert.ok(bar.textContent.includes('Session'), 'bar should show plain Session stats');
+    });
+
+    it('should anchor the bar with a Session Stats title in default mode', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+
+      const bar = env.document.getElementById('dashboard-stats');
+      const title = bar.querySelector('.stats-title');
+      assert.ok(title, 'should have a .stats-title pill');
+      assert.ok(title.textContent.includes('Session Stats'), 'title should label the bar');
+    });
+
+    it('should switch the title to Casino Stats when casino is on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+
+      const title = env.document.querySelector('#dashboard-stats .stats-title');
+      assert.ok(title, 'should still have a title in casino mode');
+      assert.ok(title.textContent.includes('Casino Stats'), 'title should label the bar in casino mode');
+    });
+
+    it('should split the bar into a left identity group and a right readouts group', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+
+      const groups = env.document.querySelectorAll('#dashboard-stats .stats-group');
+      assert.equal(groups.length, 2, 'should render exactly two groups (left identity, right readouts)');
+      // Left group must include the title; right group must not.
+      assert.ok(groups[0].querySelector('.stats-title'), 'left group hosts the title');
+      assert.ok(!groups[1].querySelector('.stats-title'), 'right group is title-free');
+    });
+
+    it('should swap the header icon between castle and slot machine', (t) => {
+      const env = setup(t);
+      const icon = env.document.getElementById('header-icon');
+
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(icon.textContent.includes('\u{1f3f0}'), 'castle when off');
+
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      assert.ok(icon.textContent.includes('\u{1f3b0}'), 'slot machine when on');
+
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(icon.textContent.includes('\u{1f3f0}'), 'castle restored when off again');
+    });
+
+    it('should activate slot reels when polling status flips to fetching', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats(), pollingStatus: 'idle' }));
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats(), pollingStatus: 'fetching' }));
+
+      const reels = env.document.getElementById('casino-reels');
+      assert.ok(reels.className.includes('spinning'), 'reels should be spinning');
+    });
+
+    it('should not start spinning if casino mode is off', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'idle' }));
+      env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'fetching' }));
+
+      const reels = env.document.getElementById('casino-reels');
+      assert.ok(!reels.className.includes('spinning'), 'reels should not spin when mode is off');
+    });
+
+    it('should render the four marquee edge strips when casino is on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+
+      const edges = env.document.querySelectorAll('.casino-edge');
+      assert.equal(edges.length, 4, 'should have top/bottom/left/right strips');
+      const sides = Array.from(edges).map((e) => e.className.replace('casino-edge', '').trim()).sort();
+      assert.deepEqual(sides, ['bottom', 'left', 'right', 'top']);
+    });
+
+    // Regression for the bug that hid casino mode in production: the SSE
+    // handler wraps render() in try/catch, and renderActivityLog /
+    // renderSessionStats both used `const` where a loop reassigned them,
+    // so any state push with branches OR an activity log threw a
+    // TypeError before reconcileCasinoMode ran. Casino-active never made
+    // it onto the body and nothing visible appeared. Lock down that
+    // realistic state still gets the body class.
+    it('should still apply casino-active when state has branches and activity log', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats(),
+        branches: [
+          { name: 'main', commit: 'abc1234', subject: 'Initial commit', date: new Date().toISOString(), isLocal: true, hasRemote: true },
+          { name: 'feature-x', commit: 'def5678', subject: 'Add feature', date: new Date().toISOString(), isLocal: true, hasRemote: true, justUpdated: true },
+        ],
+        currentBranch: 'main',
+        activityLog: [
+          { message: 'Watchtower started', type: 'info', timestamp: new Date().toISOString() },
+          { message: 'Branch updated', type: 'success', timestamp: new Date().toISOString() },
+        ],
+      }));
+
+      assert.ok(
+        env.document.body.classList.contains('casino-active'),
+        'casino-active must apply even when render() touches branches+log code paths'
+      );
+    });
+  });
 });
+
+/**
+ * Realistic-shaped casinoStats stub matching what casino.getStats() returns.
+ * Lets tests override individual fields without restating the whole payload.
+ */
+function stubCasinoStats(overrides) {
+  return Object.assign({
+    totalLinesAdded: 0,
+    totalLinesDeleted: 0,
+    totalLines: 0,
+    totalPolls: 0,
+    pollsWithUpdates: 0,
+    bigWins: 0,
+    jackpots: 0,
+    megaJackpots: 0,
+    consecutivePolls: 0,
+    nearMisses: 0,
+    sessionStart: Date.now(),
+    lastHitTime: null,
+    sessionDuration: '0m',
+    hitRate: 0,
+    timeSinceLastHit: 'Never',
+    luckMeter: 50,
+    houseEdge: 70,
+    vibesQuality: '\u{1f60e}',
+    dopamineHits: 0,
+    netWinnings: 0,
+  }, overrides || {});
+}

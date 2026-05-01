@@ -12,9 +12,22 @@ function getDashboardHtml() {
   return `
 <div class="header">
   <div class="header-left">
-    <span class="header-title">&#x1f3f0; Git Watchtower</span>
+    <span class="header-title">
+      <span class="header-icon" id="header-icon">&#x1f3f0;</span>
+      <span class="header-text">Git Watchtower</span>
+    </span>
     <span class="header-version" id="version"></span>
     <span class="header-project" id="project-name">-</span>
+  </div>
+  <!-- Slot reels live in the header so they fit inside the blue banner
+       without dropping over the branch list. Hidden until casino-active. -->
+  <div class="casino-reels-header" id="casino-reels">
+    <div class="casino-reel" data-reel="0">&#x1f352;</div>
+    <div class="casino-reel" data-reel="1">&#x1f34b;</div>
+    <div class="casino-reel" data-reel="2">&#x1f34a;</div>
+    <div class="casino-reel" data-reel="3">&#x1f347;</div>
+    <div class="casino-reel" data-reel="4">&#x1f3b0;</div>
+    <div class="casino-reel-label" id="casino-reel-label"></div>
   </div>
   <div class="header-right">
     <button class="notif-btn" id="notif-btn" title="Enable desktop notifications">notifications</button>
@@ -39,9 +52,13 @@ function getDashboardHtml() {
 
   <div class="side-panel" id="side-panel">
     <div class="panel-header">Activity Log <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar">&#x25b6;</button></div>
-    <div class="session-stats-card" id="session-stats-card"></div>
     <div class="activity-log" id="activity-log"></div>
   </div>
+
+  <!-- Permanent stats row, sits above the keyboard-shortcut footer.
+       Hosts grounded session stats by default; the same element re-skins
+       to casino-style winnings when state.casinoModeEnabled flips on. -->
+  <div class="dashboard-stats" id="dashboard-stats"></div>
 
   <div class="footer" id="footer">
     <span><kbd>j</kbd><kbd>k</kbd> navigate</span>
@@ -55,29 +72,22 @@ function getDashboardHtml() {
     <span><kbd>S</kbd> stash</span>
     <span><kbd>d</kbd> cleanup</span>
     <span><kbd>h</kbd> history</span>
+    <span><kbd>c</kbd> casino</span>
     <span><kbd>Esc</kbd> close</span>
-    <span class="stats-bar" id="stats-bar"></span>
   </div>
 </div>
 
-<!-- Casino Mode overlay layer. Everything inside is hidden by default and
-     only becomes visible when body has the .casino-active class (driven by
-     state.casinoModeEnabled). Pointer-events are off so it never blocks
-     clicks on the real dashboard underneath. -->
+<!-- Casino Mode overlay layer — viewport-edge effects only. The reels
+     and stats live inline in the dashboard now (header / bottom bar);
+     this layer is just the marquee strips and the centred win/loss
+     banners. Pointer-events stay off so it never blocks clicks. -->
 <div class="casino-layer" id="casino-layer">
-  <div class="casino-marquee" id="casino-marquee"></div>
-  <div class="casino-reels" id="casino-reels">
-    <div class="casino-reel" data-reel="0">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="1">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="2">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="3">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="4">&#x1f3b0;</div>
-    <div class="casino-reel-label" id="casino-reel-label"></div>
-  </div>
+  <div class="casino-edge top"></div>
+  <div class="casino-edge bottom"></div>
+  <div class="casino-edge left"></div>
+  <div class="casino-edge right"></div>
   <div class="casino-overlay" id="casino-win-overlay"></div>
   <div class="casino-overlay loss" id="casino-loss-overlay"></div>
-  <div class="casino-badge" id="casino-badge">&#x1f3b0; MAX ADDICTION &#x1f3b0;</div>
-  <div class="casino-stats-panel" id="casino-stats-panel"></div>
 </div>
 
 <div class="flash" id="flash"></div>

@@ -247,6 +247,40 @@ describe('WebDashboardServer', () => {
       assert.equal(state.switchHistory.length, 1);
       assert.equal(state.switchHistory[0].from, 'main');
     });
+
+    it('should expose casinoModeEnabled flag', () => {
+      server = new WebDashboardServer({ store });
+      assert.equal(server.getSerializableState().casinoModeEnabled, false);
+
+      store.setState({ casinoModeEnabled: true });
+      assert.equal(server.getSerializableState().casinoModeEnabled, true);
+    });
+
+    it('should omit casinoStats when casino mode is off', () => {
+      store.setState({ casinoModeEnabled: false });
+      server = new WebDashboardServer({ store });
+      assert.equal(server.getSerializableState().casinoStats, null);
+    });
+
+    it('should include casinoStats when casino mode is on', () => {
+      store.setState({ casinoModeEnabled: true });
+      server = new WebDashboardServer({ store });
+      const cs = server.getSerializableState().casinoStats;
+
+      assert.ok(cs, 'casinoStats should be present when enabled');
+      // The shape comes straight from src/casino/index.js#getStats — guard
+      // the fields the web UI reads so a casino refactor surfaces here.
+      assert.equal(typeof cs.totalLinesAdded, 'number');
+      assert.equal(typeof cs.totalLinesDeleted, 'number');
+      assert.equal(typeof cs.totalLines, 'number');
+      assert.equal(typeof cs.totalPolls, 'number');
+      assert.equal(typeof cs.netWinnings, 'number');
+      assert.equal(typeof cs.houseEdge, 'number');
+      assert.equal(typeof cs.luckMeter, 'number');
+      assert.equal(typeof cs.dopamineHits, 'number');
+      assert.equal(typeof cs.sessionDuration, 'string');
+      assert.equal(typeof cs.vibesQuality, 'string');
+    });
   });
 
   describe('start and stop', () => {
@@ -1338,62 +1372,46 @@ describe('getWebDashboardHtml', () => {
   });
 
   // ── Session Stats ───────────────────────────────────────────
+  // The dashboard-stats bar above the keyboard footer hosts session
+  // metrics in normal mode and casino winnings when casino is on.
   describe('session stats', () => {
-    it('should include stats bar in footer', () => {
+    it('should include dashboard-stats bar in layout', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('stats-bar'));
+      assert.ok(html.includes('dashboard-stats'));
     });
 
-    it('should include renderSessionStats function', () => {
+    it('should include renderDashboardStats function', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('function renderSessionStats'));
+      assert.ok(html.includes('function renderDashboardStats'));
     });
 
-    it('should display session duration', () => {
+    it('should reference the session-stats fields the bar reads', () => {
       const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('sessionDuration'));
-      assert.ok(html.includes('Session:'));
-    });
-
-    it('should display lines changed', () => {
-      const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('linesAdded'));
       assert.ok(html.includes('linesDeleted'));
-      assert.ok(html.includes('Lines:'));
-    });
-
-    it('should display poll count and hit rate', () => {
-      const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('totalPolls'));
       assert.ok(html.includes('hitRate'));
-      assert.ok(html.includes('Polls:'));
-    });
-
-    it('should display last update time', () => {
-      const html = getWebDashboardHtml(4000);
       assert.ok(html.includes('lastUpdate'));
-      assert.ok(html.includes('Last update:'));
     });
 
-    it('should display active and stale branch counts', () => {
+    it('should label the row with grounded session stats by default', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('activeBranches'));
-      assert.ok(html.includes('staleBranches'));
-      assert.ok(html.includes('Active:'));
-      assert.ok(html.includes('Stale:'));
+      assert.ok(html.includes('Session'));
+      assert.ok(html.includes('Lines'));
+      assert.ok(html.includes('Polls'));
+      assert.ok(html.includes('Branches'));
     });
 
-    it('should include stats bar CSS styles', () => {
+    it('should include dashboard-stats CSS styles', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('.stats-bar'));
-      assert.ok(html.includes('.stat-item'));
-      assert.ok(html.includes('.stat-value'));
-      assert.ok(html.includes('.stat-label'));
+      assert.ok(html.includes('.dashboard-stats'));
+      assert.ok(html.includes('.dashboard-stats.casino-mode'));
     });
 
-    it('should call renderSessionStats on state update', () => {
+    it('should call renderDashboardStats on state update', () => {
       const html = getWebDashboardHtml(4000);
-      assert.ok(html.includes('renderSessionStats()'));
+      assert.ok(html.includes('renderDashboardStats()'));
     });
   });
 
