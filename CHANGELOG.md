@@ -1,3 +1,10 @@
+## [2.2.3](https://github.com/drummel/git-watchtower/compare/v2.2.2...v2.2.3) (2026-05-01)
+
+
+### Bug Fixes
+
+* reject --port and --web-port set to the same value ([5c2e642](https://github.com/drummel/git-watchtower/commit/5c2e64248bb7af03b88e5dc5185d72cae79b3ce2))
+
 ## [2.2.2](https://github.com/drummel/git-watchtower/compare/v2.2.1...v2.2.2) (2026-04-30)
 
 
