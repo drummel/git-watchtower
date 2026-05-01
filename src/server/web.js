@@ -37,6 +37,21 @@ const MAX_PORT_RETRIES = 20;
 const SSE_KEEPALIVE_INTERVAL = 15000;
 
 /**
+ * Actions the web dashboard is allowed to POST to /api/action. Every entry
+ * here MUST be matched by a `case` in `handleWebAction` in bin/git-watchtower.js
+ * — `tests/unit/server/web.test.js` enforces that link so a future addition
+ * to the whitelist can't silently no-op the way `stash` / `stashPop` /
+ * `deleteBranches` did before they were implemented.
+ */
+const ALLOWED_ACTIONS = Object.freeze([
+  'switchBranch', 'pull', 'fetch', 'undo',
+  'toggleSound', 'preview',
+  'restartServer', 'reloadBrowsers', 'toggleCasino',
+  'openBrowser',
+  'stash', 'stashPop', 'deleteBranches', 'checkUpdate',
+]);
+
+/**
  * @typedef {Object} WebDashboardOptions
  * @property {number} [port=4000] - Port to listen on
  * @property {import('../state/store').Store} store - State store instance
@@ -515,16 +530,7 @@ class WebDashboardServer {
           return;
         }
 
-        // Whitelist allowed actions
-        const allowedActions = [
-          'switchBranch', 'pull', 'fetch', 'undo',
-          'toggleSound', 'preview',
-          'restartServer', 'reloadBrowsers', 'toggleCasino',
-          'openBrowser',
-          'stash', 'stashPop', 'deleteBranches', 'checkUpdate',
-        ];
-
-        if (!allowedActions.includes(action)) {
+        if (!ALLOWED_ACTIONS.includes(action)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Unknown action: ' + action }));
           return;
@@ -596,4 +602,5 @@ module.exports = {
   WebDashboardServer,
   DEFAULT_WEB_PORT,
   STATE_PUSH_INTERVAL,
+  ALLOWED_ACTIONS,
 };
