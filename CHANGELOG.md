@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/drummel/git-watchtower/compare/v2.3.0...v2.3.1) (2026-05-01)
+
+
+### Bug Fixes
+
+* route web actions to the targeted project, not the coordinator's repo ([d1ea3d2](https://github.com/drummel/git-watchtower/commit/d1ea3d2de494b52954779e9318baa469c9fa48e3))
+
 # [2.3.0](https://github.com/drummel/git-watchtower/compare/v2.2.3...v2.3.0) (2026-05-01)
 
 
