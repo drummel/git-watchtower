@@ -951,17 +951,19 @@ function getDashboardCss() {
   body.casino-active .casino-layer { opacity: 1; }
 
   /* Marquee: neon border that cycles hues around the viewport. Pure CSS
-     so we don't burn a JS timer for something a single keyframe can do. */
+     so we don't burn a JS timer for something a single keyframe can do.
+     The padding-box layer is transparent — only the border-box gradient
+     paints — so the dashboard stays visible underneath. */
   .casino-marquee {
     position: absolute;
     inset: 0;
     border: 4px solid transparent;
     border-radius: 0;
     box-shadow:
-      inset 0 0 24px rgba(255, 64, 180, 0.45),
-      inset 0 0 60px rgba(255, 220, 64, 0.2);
+      inset 0 0 18px rgba(255, 64, 180, 0.35),
+      inset 0 0 38px rgba(255, 220, 64, 0.12);
     background:
-      linear-gradient(var(--bg), var(--bg)) padding-box,
+      linear-gradient(transparent, transparent) padding-box,
       conic-gradient(
         from 0deg,
         #ff2d7a, #ffd400, #30ff9c, #29d4ff, #b070ff, #ff2d7a
