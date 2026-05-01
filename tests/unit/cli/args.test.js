@@ -266,6 +266,33 @@ describe('parseArgs', () => {
     });
   });
 
+  describe('--port / --web-port collision', () => {
+    it('should reject when both flags share the same value', () => {
+      const result = parseArgs(['--port', '4000', '--web-port', '4000']);
+      assert.equal(result.port, 4000);
+      assert.equal(result.webPort, 4000);
+      assert.equal(result.errors.length, 1);
+      assert.match(result.errors[0], /cannot share the same value/);
+    });
+
+    it('should accept different values for the two flags', () => {
+      const result = parseArgs(['--port', '3000', '--web-port', '4000']);
+      assert.equal(result.port, 3000);
+      assert.equal(result.webPort, 4000);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should not error if only --port is set', () => {
+      const result = parseArgs(['--port', '4000']);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should not error if only --web-port is set', () => {
+      const result = parseArgs(['--web-port', '4000']);
+      assert.equal(result.errors.length, 0);
+    });
+  });
+
   describe('--init', () => {
     it('should set init flag', () => {
       const result = parseArgs(['--init']);
