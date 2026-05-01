@@ -123,8 +123,6 @@ module.exports = {
   sanitizeBranchName: gitBranch.sanitizeBranchName,
   getCurrentBranch: gitBranch.getCurrentBranch,
   getAllBranches: gitBranch.getAllBranches,
-  detectBranchChanges: gitBranch.detectBranchChanges,
-  checkout: gitBranch.checkout,
   getPreviewData: gitBranch.getPreviewData,
   generateSparkline: gitBranch.generateSparkline,
   getLocalBranches: gitBranch.getLocalBranches,
@@ -153,7 +151,6 @@ module.exports = {
   deleteConfig: configLoader.deleteConfig,
 
   // Server process management
-  ProcessManager: serverProcess.ProcessManager,
   parseCommand: serverProcess.parseCommand,
 
   // Web dashboard server
