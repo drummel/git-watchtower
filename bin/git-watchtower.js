@@ -3340,6 +3340,84 @@ async function handleWebAction(action, payload) {
           });
         }
         break;
+      case 'stash': {
+        // If a switch/pull is queued behind a dirty working tree, run the
+        // existing stash-and-retry flow so the original operation completes
+        // after the stash. Otherwise just stash standalone.
+        if (pendingDirtyOperation) {
+          const op = pendingDirtyOperation;
+          await stashAndRetry();
+          const label = op.type === 'switch' ? `stashed and switched to ${op.branch}` : 'stashed and pulled';
+          sendResult(true, label);
+        } else {
+          const stashResult = await gitStash({ message: 'git-watchtower: stashed from web dashboard' });
+          if (stashResult.success) {
+            addLog('Changes stashed (from web)', 'success');
+            telemetry.capture('stash_performed');
+            await pollGitChanges();
+            sendResult(true, 'Changes stashed');
+          } else {
+            const msg = stashResult.error ? stashResult.error.message : 'Could not stash';
+            addLog(`Stash failed (from web): ${msg}`, 'error');
+            sendResult(false, msg);
+          }
+          render();
+        }
+        break;
+      }
+      case 'stashPop': {
+        const popResult = await gitStashPop();
+        if (popResult.success) {
+          addLog('Stash popped (from web)', 'success');
+          await pollGitChanges();
+          sendResult(true, 'Stash popped');
+        } else {
+          const msg = popResult.error ? popResult.error.message : 'Could not pop stash';
+          addLog(`Stash pop failed (from web): ${msg}`, 'error');
+          sendResult(false, msg);
+        }
+        render();
+        break;
+      }
+      case 'deleteBranches': {
+        const branches = Array.isArray(payload.branches) ? payload.branches : [];
+        const force = payload.force === true;
+        if (branches.length === 0) {
+          sendResult(false, 'No branches specified');
+          break;
+        }
+        addLog(
+          `Cleaning up ${branches.length} branch${branches.length === 1 ? '' : 'es'}${force ? ' (force)' : ''} (from web)...`,
+          'update'
+        );
+        render();
+        const cleanupResult = await deleteGoneBranches(branches, { force });
+        for (const name of cleanupResult.deleted) {
+          addLog(`Deleted branch: ${name}`, 'success');
+        }
+        for (const f of cleanupResult.failed) {
+          addLog(`Failed to delete ${f.name}: ${f.error}`, 'error');
+        }
+        if (cleanupResult.deleted.length > 0) {
+          telemetry.capture('cleanup_branches_deleted', { count: cleanupResult.deleted.length });
+          await pollGitChanges();
+        }
+        if (cleanupResult.failed.length === 0 && cleanupResult.deleted.length > 0) {
+          sendResult(true, `Deleted ${cleanupResult.deleted.length} branch${cleanupResult.deleted.length === 1 ? '' : 'es'}`);
+        } else if (cleanupResult.deleted.length > 0) {
+          sendResult(
+            false,
+            `Deleted ${cleanupResult.deleted.length}, failed ${cleanupResult.failed.length}`
+          );
+        } else {
+          sendResult(
+            false,
+            `Failed to delete ${cleanupResult.failed.length} branch${cleanupResult.failed.length === 1 ? '' : 'es'}`
+          );
+        }
+        render();
+        break;
+      }
     }
   } catch (err) {
     addLog(`Web action error: ${err.message}`, 'error');

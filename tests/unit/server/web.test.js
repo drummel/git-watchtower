@@ -5,10 +5,13 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const {
   WebDashboardServer,
   DEFAULT_WEB_PORT,
   STATE_PUSH_INTERVAL,
+  ALLOWED_ACTIONS,
 } = require('../../../src/server/web');
 const { Store } = require('../../../src/state/store');
 
@@ -1103,6 +1106,51 @@ describe('WebDashboardServer', () => {
       assert.equal(sendCommandCalls, 0, 'no routing without a known local project ID');
     });
   });
+});
+
+describe('ALLOWED_ACTIONS contract with bin/git-watchtower handler', () => {
+  // Regression for the bug where `stash`, `stashPop`, and `deleteBranches`
+  // were on the whitelist but had no `case` in handleWebAction — every POST
+  // returned `{ ok: true }` while the action silently no-op'd. Loading the
+  // bin source as text and asserting a `case 'X':` exists for every
+  // whitelisted action is brittle text-matching, but it's the cheapest way
+  // to enforce the invariant without refactoring the entire bin handler
+  // into a testable module.
+  const binPath = path.join(__dirname, '..', '..', '..', 'bin', 'git-watchtower.js');
+  const binSource = fs.readFileSync(binPath, 'utf8');
+
+  // Narrow to the handleWebAction function body so we don't pick up unrelated
+  // `case 'X':` matches in the keyboard handler etc.
+  function extractHandlerSource() {
+    const start = binSource.indexOf('async function handleWebAction');
+    assert.ok(start !== -1, 'handleWebAction not found in bin');
+    // Brace-match until the matching closing brace.
+    let depth = 0;
+    let inFn = false;
+    for (let i = start; i < binSource.length; i++) {
+      const ch = binSource[i];
+      if (ch === '{') { depth++; inFn = true; }
+      else if (ch === '}') {
+        depth--;
+        if (inFn && depth === 0) return binSource.slice(start, i + 1);
+      }
+    }
+    throw new Error('handleWebAction body never closed');
+  }
+
+  const handlerSource = extractHandlerSource();
+
+  for (const action of ALLOWED_ACTIONS) {
+    it(`bin handleWebAction has a case for "${action}"`, () => {
+      // Allow either `case 'foo':` or `case 'foo': {` style.
+      const re = new RegExp(`case\\s+['"]${action}['"]\\s*:`);
+      assert.ok(
+        re.test(handlerSource),
+        `Action "${action}" is whitelisted in src/server/web.js but has no case in bin/git-watchtower.js handleWebAction. ` +
+          `This used to ship as a silent no-op — every POST returned ok:true while doing nothing.`
+      );
+    });
+  }
 });
 
 describe('getWebDashboardHtml', () => {
