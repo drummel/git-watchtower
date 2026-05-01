@@ -1,3 +1,10 @@
+## [2.3.2](https://github.com/drummel/git-watchtower/compare/v2.3.1...v2.3.2) (2026-05-01)
+
+
+### Bug Fixes
+
+* implement stash, stashPop, and deleteBranches web actions ([5af29f7](https://github.com/drummel/git-watchtower/commit/5af29f70a1e21d3f34ee8b7ba7ec3e59fd2e339f))
+
 ## [2.3.1](https://github.com/drummel/git-watchtower/compare/v2.3.0...v2.3.1) (2026-05-01)
 
 
