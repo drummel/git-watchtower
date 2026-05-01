@@ -743,17 +743,55 @@ describe('dashboard JS — DOM behavior', () => {
       env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats(), pollingStatus: 'fetching' }));
 
       const reels = env.document.getElementById('casino-reels');
-      assert.ok(reels.className.includes('active'), 'reels should be active');
       assert.ok(reels.className.includes('spinning'), 'reels should be spinning');
     });
 
-    it('should not activate reels if casino mode is off', (t) => {
+    it('should not start spinning if casino mode is off', (t) => {
       const env = setup(t);
       env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'idle' }));
       env.pushSSE(makeState({ casinoModeEnabled: false, pollingStatus: 'fetching' }));
 
       const reels = env.document.getElementById('casino-reels');
-      assert.ok(!reels.className.includes('active'), 'reels should stay hidden when mode is off');
+      assert.ok(!reels.className.includes('spinning'), 'reels should not spin when mode is off');
+    });
+
+    it('should render the four marquee edge strips when casino is on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+
+      const edges = env.document.querySelectorAll('.casino-edge');
+      assert.equal(edges.length, 4, 'should have top/bottom/left/right strips');
+      const sides = Array.from(edges).map((e) => e.className.replace('casino-edge', '').trim()).sort();
+      assert.deepEqual(sides, ['bottom', 'left', 'right', 'top']);
+    });
+
+    // Regression for the bug that hid casino mode in production: the SSE
+    // handler wraps render() in try/catch, and renderActivityLog /
+    // renderSessionStats both used `const` where a loop reassigned them,
+    // so any state push with branches OR an activity log threw a
+    // TypeError before reconcileCasinoMode ran. Casino-active never made
+    // it onto the body and nothing visible appeared. Lock down that
+    // realistic state still gets the body class.
+    it('should still apply casino-active when state has branches and activity log', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats(),
+        branches: [
+          { name: 'main', commit: 'abc1234', subject: 'Initial commit', date: new Date().toISOString(), isLocal: true, hasRemote: true },
+          { name: 'feature-x', commit: 'def5678', subject: 'Add feature', date: new Date().toISOString(), isLocal: true, hasRemote: true, justUpdated: true },
+        ],
+        currentBranch: 'main',
+        activityLog: [
+          { message: 'Watchtower started', type: 'info', timestamp: new Date().toISOString() },
+          { message: 'Branch updated', type: 'success', timestamp: new Date().toISOString() },
+        ],
+      }));
+
+      assert.ok(
+        env.document.body.classList.contains('casino-active'),
+        'casino-active must apply even when render() touches branches+log code paths'
+      );
     });
   });
 });

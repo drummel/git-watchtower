@@ -65,18 +65,21 @@ function getDashboardHtml() {
      state.casinoModeEnabled). Pointer-events are off so it never blocks
      clicks on the real dashboard underneath. -->
 <div class="casino-layer" id="casino-layer">
-  <div class="casino-marquee" id="casino-marquee"></div>
+  <div class="casino-edge top"></div>
+  <div class="casino-edge bottom"></div>
+  <div class="casino-edge left"></div>
+  <div class="casino-edge right"></div>
+  <div class="casino-badge" id="casino-badge">&#x1f3b0; MAX ADDICTION &#x1f3b0;</div>
   <div class="casino-reels" id="casino-reels">
-    <div class="casino-reel" data-reel="0">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="1">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="2">&#x1f3b0;</div>
-    <div class="casino-reel" data-reel="3">&#x1f3b0;</div>
+    <div class="casino-reel" data-reel="0">&#x1f352;</div>
+    <div class="casino-reel" data-reel="1">&#x1f34b;</div>
+    <div class="casino-reel" data-reel="2">&#x1f34a;</div>
+    <div class="casino-reel" data-reel="3">&#x1f347;</div>
     <div class="casino-reel" data-reel="4">&#x1f3b0;</div>
     <div class="casino-reel-label" id="casino-reel-label"></div>
   </div>
   <div class="casino-overlay" id="casino-win-overlay"></div>
   <div class="casino-overlay loss" id="casino-loss-overlay"></div>
-  <div class="casino-badge" id="casino-badge">&#x1f3b0; MAX ADDICTION &#x1f3b0;</div>
   <div class="casino-stats-panel" id="casino-stats-panel"></div>
 </div>
 

@@ -525,6 +525,8 @@ ${pureFnBlock}
     if (casino.lossFlashTimer) { clearInterval(casino.lossFlashTimer); casino.lossFlashTimer = null; }
     casino.winFlashFrames = 0;
     casino.lossFlashFrames = 0;
+    // Reels stay in DOM but drop the dynamic state classes — the casino
+    // layer's opacity transition handles hiding them visually.
     const reels = document.getElementById('casino-reels');
     if (reels) reels.className = 'casino-reels';
     const win = document.getElementById('casino-win-overlay');
@@ -546,7 +548,7 @@ ${pureFnBlock}
     }
     const reels = document.getElementById('casino-reels');
     if (!reels) return;
-    reels.className = 'casino-reels active spinning';
+    reels.className = 'casino-reels spinning';
     const label = document.getElementById('casino-reel-label');
     if (label) label.textContent = '';
     casino.reelSpinTimer = setInterval(() => {
@@ -569,7 +571,7 @@ ${pureFnBlock}
       const isJackpot = winLevel.key === 'jackpot' || winLevel.key === 'mega';
       const sym = isJackpot ? '7⃣' : CASINO_SYMBOLS[Math.floor(Math.random() * (CASINO_SYMBOLS.length - 1))];
       for (let i = 0; i < 5; i++) casinoSetReelSymbol(i, sym);
-      reels.className = 'casino-reels active result win';
+      reels.className = 'casino-reels result win';
       label.textContent = winLevel.label.replace(/^[^A-Z0-9]+/, '').trim() || 'WIN';
       label.style.color = winLevel.color;
       // Fire the centered banner.
@@ -584,7 +586,7 @@ ${pureFnBlock}
       for (let i = 0; i < 5; i++) {
         casinoSetReelSymbol(i, CASINO_SYMBOLS[(casino.reelFrame + i * 3) % CASINO_SYMBOLS.length]);
       }
-      reels.className = 'casino-reels active result';
+      reels.className = 'casino-reels result';
       label.textContent = '\u{1f634} NOTHING';
       label.style.color = '#8b949e';
       casino.reelResultClearTimer = setTimeout(() => {
@@ -708,6 +710,10 @@ ${pureFnBlock}
   function render() {
     if (!state) return;
 
+    // Apply casino mode FIRST so a later renderer throwing (the SSE
+    // handler wraps render() in try/catch) can't swallow casino effects.
+    reconcileCasinoMode();
+
     // Header — hide project name pill when tabs are showing it
     const projectEl = document.getElementById('project-name');
     const hasTabs = state.projects && state.projects.length > 1;
@@ -740,7 +746,6 @@ ${pureFnBlock}
     renderSessionStats();
     renderSessionStatsCard();
     renderPrefsBar();
-    reconcileCasinoMode();
 
     // Auto-show update notification (once per session)
     if (state.updateAvailable && !ui.updateNotificationShown && !anyModalOpen()) {
@@ -888,7 +893,7 @@ ${pureFnBlock}
     let html = '';
     for (let i = 0; i < log.length; i++) {
       const entry = log[i];
-      const t = '';
+      let t = '';
       if (entry.timestamp) {
         const d = new Date(entry.timestamp);
         t = isNaN(d.getTime()) ? '' : d.toLocaleTimeString();
@@ -1220,8 +1225,8 @@ ${pureFnBlock}
     if (!state || !state.sessionStats) return;
     const s = state.sessionStats;
     const bar = document.getElementById('stats-bar');
-    const activeBranches = 0;
-    const staleBranches = 0;
+    let activeBranches = 0;
+    let staleBranches = 0;
     if (state.branches) {
       for (let i = 0; i < state.branches.length; i++) {
         const b = state.branches[i];
