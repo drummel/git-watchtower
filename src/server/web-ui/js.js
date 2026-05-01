@@ -1226,13 +1226,19 @@ ${pureFnBlock}
       else stale++;
     }
     const stat = (k, v) => '<span class="stat"><span class="stat-k">' + k + '</span><span class="stat-v">' + v + '</span></span>';
-    let html = '';
-    html += stat('Session', escHtml(s.sessionDuration || '0m'));
-    html += stat('Lines', '<span class="added">+' + fmtCompact(s.linesAdded || 0) + '</span> <span class="sep">/</span> <span class="deleted">-' + fmtCompact(s.linesDeleted || 0) + '</span>');
-    html += stat('Polls', (s.totalPolls || 0) + ' <span class="sep">·</span> <span class="accent">' + (s.hitRate || 0) + '%</span> hit');
-    if (s.lastUpdate) html += stat('Last hit', escHtml(s.lastUpdate));
-    html += stat('Branches', active + ' <span class="sep">active</span> <span class="sep">·</span> ' + stale + ' <span class="sep">stale</span>');
-    return html;
+    // Left = identity / what session this is.
+    let left = '<div class="stats-group">';
+    left += '<span class="stats-title">\u{1f4ca} Session Stats</span>';
+    left += stat('Duration', escHtml(s.sessionDuration || '0m'));
+    left += stat('Branches', active + ' <span class="sep">active</span> <span class="sep">·</span> ' + stale + ' <span class="sep">stale</span>');
+    left += '</div>';
+    // Right = live activity readouts.
+    let right = '<div class="stats-group">';
+    right += stat('Lines', '<span class="added">+' + fmtCompact(s.linesAdded || 0) + '</span> <span class="sep">/</span> <span class="deleted">-' + fmtCompact(s.linesDeleted || 0) + '</span>');
+    right += stat('Polls', (s.totalPolls || 0) + ' <span class="sep">·</span> <span class="accent">' + (s.hitRate || 0) + '%</span> hit');
+    if (s.lastUpdate) right += stat('Last hit', escHtml(s.lastUpdate));
+    right += '</div>';
+    return left + right;
   }
 
   function renderCasinoStatsRow(cs) {
@@ -1240,17 +1246,23 @@ ${pureFnBlock}
     const netSign = cs.netWinnings >= 0 ? '+' : '';
     const stat = (k, v) => '<span class="stat"><span class="stat-k">' + k + '</span><span class="stat-v">' + v + '</span></span>';
     const dollar = '$';  // avoid bare $ in generated JS — see js.dom.test.js
-    let html = '';
-    html += stat('\u{1f4dd} Lines', '<span class="pos">+' + (cs.totalLinesAdded || 0) + '</span> <span class="sep">/</span> <span class="neg">-' + (cs.totalLinesDeleted || 0) + '</span> <span class="sep">=</span> <span class="gold">' + dollar + (cs.totalLines || 0) + '</span>');
-    html += stat('\u{1f4b8} Cost', '<span class="neg">' + dollar + (cs.totalPolls || 0) + '</span>');
-    html += stat('\u{1f4b0} Net', '<span class="' + netClass + '">' + netSign + dollar + (cs.netWinnings || 0) + '</span>');
-    html += stat('\u{1f3b0} Edge', '<span class="neon">' + (cs.houseEdge || 0) + '%</span>');
-    html += stat('\u{1f60e} Vibes', escHtml(cs.vibesQuality || ''));
-    html += stat('\u{1f3b2} Luck', '<span class="gold">' + (cs.luckMeter || 0) + '%</span>');
-    html += stat('\u{1f9e0} Hits', '<span class="pos">' + (cs.dopamineHits || 0) + '</span>');
-    if (cs.consecutivePolls > 1) html += stat('\u{1f525} Streak', '<span class="gold">' + cs.consecutivePolls + 'x</span>');
-    html += stat('⏱ Session', escHtml(cs.sessionDuration || ''));
-    return html;
+    // Left = identity + the underlying churn that drove the winnings.
+    let left = '<div class="stats-group">';
+    left += '<span class="stats-title">\u{1f3b0} Casino Stats</span>';
+    left += stat('Session', escHtml(cs.sessionDuration || ''));
+    left += stat('\u{1f4dd} Lines', '<span class="pos">+' + (cs.totalLinesAdded || 0) + '</span> <span class="sep">/</span> <span class="neg">-' + (cs.totalLinesDeleted || 0) + '</span> <span class="sep">=</span> <span class="gold">' + dollar + (cs.totalLines || 0) + '</span>');
+    left += '</div>';
+    // Right = the gambling readouts (fast-changing, attention-grabbing).
+    let right = '<div class="stats-group">';
+    right += stat('\u{1f4b8} Cost', '<span class="neg">' + dollar + (cs.totalPolls || 0) + '</span>');
+    right += stat('\u{1f4b0} Net', '<span class="' + netClass + '">' + netSign + dollar + (cs.netWinnings || 0) + '</span>');
+    right += stat('\u{1f3b0} Edge', '<span class="neon">' + (cs.houseEdge || 0) + '%</span>');
+    right += stat('\u{1f3b2} Luck', '<span class="gold">' + (cs.luckMeter || 0) + '%</span>');
+    right += stat('\u{1f60e} Vibes', escHtml(cs.vibesQuality || ''));
+    right += stat('\u{1f9e0} Hits', '<span class="pos">' + (cs.dopamineHits || 0) + '</span>');
+    if (cs.consecutivePolls > 1) right += stat('\u{1f525} Streak', '<span class="gold">' + cs.consecutivePolls + 'x</span>');
+    right += '</div>';
+    return left + right;
   }
 
   // ── Error Toast with Stash Hint ────────────────────────────────

@@ -907,11 +907,34 @@ function getDashboardCss() {
     border-top: 1px solid var(--border);
     display: flex;
     flex-wrap: wrap;
-    gap: 18px;
+    gap: 8px 24px;
     align-items: center;
+    justify-content: space-between;
     font-size: 11px;
     color: var(--text-dim);
     transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .dashboard-stats .stats-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+  }
+  /* Title pill anchors the bar — makes it obvious these are global
+     session metrics, not row-specific. */
+  .dashboard-stats .stats-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .dashboard-stats .stat {
     display: inline-flex;
@@ -936,11 +959,17 @@ function getDashboardCss() {
   .dashboard-stats .stat-v .deleted { color: var(--red); }
   .dashboard-stats .stat-v .sep     { color: var(--text-muted); }
   .dashboard-stats .stat-v .accent  { color: var(--accent); }
-  /* Casino skin: same row, neon-pulsed. */
+  /* Casino skin: same row, neon-pulsed, brighter title. */
   .dashboard-stats.casino-mode {
     background: linear-gradient(90deg, #1a0a24 0%, #2a0a36 50%, #1a0a24 100%);
     border-top: 2px solid #ff2d7a;
     box-shadow: inset 0 0 24px rgba(255, 45, 122, 0.25);
+  }
+  .dashboard-stats.casino-mode .stats-title {
+    color: #ffd400;
+    background: rgba(177, 0, 150, 0.4);
+    border-color: #ff2d7a;
+    text-shadow: 0 0 6px rgba(255, 220, 64, 0.6);
   }
   .dashboard-stats.casino-mode .stat-k { color: #ffd400; }
   .dashboard-stats.casino-mode .stat-v { color: var(--text); }

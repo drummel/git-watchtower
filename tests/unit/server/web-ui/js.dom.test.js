@@ -738,6 +738,36 @@ describe('dashboard JS — DOM behavior', () => {
       assert.ok(bar.textContent.includes('Session'), 'bar should show plain Session stats');
     });
 
+    it('should anchor the bar with a Session Stats title in default mode', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+
+      const bar = env.document.getElementById('dashboard-stats');
+      const title = bar.querySelector('.stats-title');
+      assert.ok(title, 'should have a .stats-title pill');
+      assert.ok(title.textContent.includes('Session Stats'), 'title should label the bar');
+    });
+
+    it('should switch the title to Casino Stats when casino is on', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+
+      const title = env.document.querySelector('#dashboard-stats .stats-title');
+      assert.ok(title, 'should still have a title in casino mode');
+      assert.ok(title.textContent.includes('Casino Stats'), 'title should label the bar in casino mode');
+    });
+
+    it('should split the bar into a left identity group and a right readouts group', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+
+      const groups = env.document.querySelectorAll('#dashboard-stats .stats-group');
+      assert.equal(groups.length, 2, 'should render exactly two groups (left identity, right readouts)');
+      // Left group must include the title; right group must not.
+      assert.ok(groups[0].querySelector('.stats-title'), 'left group hosts the title');
+      assert.ok(!groups[1].querySelector('.stats-title'), 'right group is title-free');
+    });
+
     it('should swap the header icon between castle and slot machine', (t) => {
       const env = setup(t);
       const icon = env.document.getElementById('header-icon');
