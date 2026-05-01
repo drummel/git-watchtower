@@ -1,3 +1,17 @@
+# [2.3.0](https://github.com/drummel/git-watchtower/compare/v2.2.3...v2.3.0) (2026-05-01)
+
+
+### Bug Fixes
+
+* make casino mode actually visible in the web dashboard ([0c5bb30](https://github.com/drummel/git-watchtower/commit/0c5bb30c376fbfe3575f244b7f4df8cb2fde09df))
+* stop casino marquee from painting over the dashboard ([b130b23](https://github.com/drummel/git-watchtower/commit/b130b237bb2cda8d834cacc11680234f24fcdaf1))
+
+
+### Features
+
+* anchor the stats bar with a title pill and split-justified groups ([f78aad6](https://github.com/drummel/git-watchtower/commit/f78aad6e2fc80612c6a5e66820bd35e2700df322))
+* rework casino mode to live inline in the dashboard ([c9d2ccf](https://github.com/drummel/git-watchtower/commit/c9d2ccf09143e90f5038f35fca4a1a9ac2c61220)), closes [#stats-bar](https://github.com/drummel/git-watchtower/issues/stats-bar)
+
 ## [2.2.3](https://github.com/drummel/git-watchtower/compare/v2.2.2...v2.2.3) (2026-05-01)
 
 
