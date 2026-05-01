@@ -63,9 +63,11 @@ function getDashboardCss() {
     border-bottom: 1px solid rgba(255,255,255,0.08);
     user-select: none;
     box-shadow: 0 1px 8px rgba(0,0,0,0.3);
+    /* position:relative so .casino-reels-header (absolute) anchors here. */
     position: relative;
     z-index: 10;
   }
+  .header-icon { display: inline-block; }
   .header-left {
     display: flex;
     align-items: center;
@@ -113,7 +115,10 @@ function getDashboardCss() {
   .layout {
     display: grid;
     grid-template-columns: 1fr 320px;
-    grid-template-rows: 1fr auto;
+    /* Row 1: branch panel + sidebar.
+       Row 2: dashboard-stats (full-width).
+       Row 3: keyboard-shortcut footer (full-width). */
+    grid-template-rows: 1fr auto auto;
     height: calc(100vh - 49px);
     min-height: 0;
     gap: 0;
@@ -759,24 +764,6 @@ function getDashboardCss() {
   .info-label { color: var(--text-muted); font-weight: 500; }
   .info-value { color: var(--text); font-family: var(--font-mono); }
 
-  /* ── Session Stats (footer) ──────────────────────────────────── */
-  .stats-bar {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    font-size: 11px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    flex-wrap: wrap;
-  }
-  .stats-bar .stat-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-  .stats-bar .stat-value { color: var(--text-dim); font-weight: 600; }
-  .stats-bar .stat-label { font-family: var(--font); }
-
   /* ── Cleanup Modal ───────────────────────────────────────────── */
   .cleanup-branch-list {
     display: flex;
@@ -909,41 +896,63 @@ function getDashboardCss() {
   .pref-btn:hover { background: var(--bg-surface-hover); color: var(--text-dim); border-color: var(--text-muted); }
   .pref-btn.active { background: var(--accent-dim); color: #fff; border-color: var(--accent-dim); }
 
-  /* ── Session Stats Card (sidebar) ─────────────────────────────── */
-  .session-stats-card {
-    padding: 10px 16px 12px;
-    border-bottom: 1px solid var(--border-subtle);
+  /* ── Dashboard Stats Bar (always-on, above the keyboard footer) ──
+     This is the canonical place for live session stats. The same
+     element re-skins to "casino winnings" when state.casinoModeEnabled
+     flips on, so users get the same row in both modes. */
+  .dashboard-stats {
+    grid-column: 1 / -1;
+    padding: 8px 20px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: center;
     font-size: 11px;
     color: var(--text-dim);
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 4px 10px;
-    background: var(--bg);
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
   }
-  .session-stats-card .stat-k {
+  .dashboard-stats .stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .dashboard-stats .stat-k {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.6px;
     font-size: 10px;
     font-weight: 600;
-    align-self: center;
   }
-  .session-stats-card .stat-v {
+  .dashboard-stats .stat-v {
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 12px;
-    text-align: right;
+    font-weight: 600;
   }
-  .session-stats-card .stat-v .sep { color: var(--text-muted); }
-  .session-stats-card .stat-v .added { color: var(--green); }
-  .session-stats-card .stat-v .deleted { color: var(--red); }
-  .session-stats-card .stat-v .accent { color: var(--accent); }
+  .dashboard-stats .stat-v .added   { color: var(--green); }
+  .dashboard-stats .stat-v .deleted { color: var(--red); }
+  .dashboard-stats .stat-v .sep     { color: var(--text-muted); }
+  .dashboard-stats .stat-v .accent  { color: var(--accent); }
+  /* Casino skin: same row, neon-pulsed. */
+  .dashboard-stats.casino-mode {
+    background: linear-gradient(90deg, #1a0a24 0%, #2a0a36 50%, #1a0a24 100%);
+    border-top: 2px solid #ff2d7a;
+    box-shadow: inset 0 0 24px rgba(255, 45, 122, 0.25);
+  }
+  .dashboard-stats.casino-mode .stat-k { color: #ffd400; }
+  .dashboard-stats.casino-mode .stat-v { color: var(--text); }
+  .dashboard-stats.casino-mode .stat-v .pos  { color: #3fb950; }
+  .dashboard-stats.casino-mode .stat-v .neg  { color: #f85149; }
+  .dashboard-stats.casino-mode .stat-v .gold { color: #ffd400; }
+  .dashboard-stats.casino-mode .stat-v .neon { color: #29d4ff; }
 
   /* ── Casino Mode ────────────────────────────────────────────────
-     Strategy: solid, simple, hard-to-miss primitives. Gradient-border
-     tricks parsed inconsistently and rendered invisible in some
-     browsers; replaced with four edge strips + filled panels so what
-     you write is what you see. */
+     Edge strips, header reskin, header reels, win/loss overlays. The
+     stats live in .dashboard-stats above; nothing floats over the
+     dashboard content anymore. */
 
   .casino-layer {
     position: fixed;
@@ -966,6 +975,7 @@ function getDashboardCss() {
     background: #ff2d7a;
     box-shadow: 0 0 18px rgba(255, 45, 122, 0.7);
     animation: casino-edge-pulse 0.9s ease-in-out infinite;
+    overflow: hidden;
   }
   .casino-edge.top    { top: 0; left: 0; right: 0; height: 8px; }
   .casino-edge.bottom { bottom: 0; left: 0; right: 0; height: 8px; animation-delay: 0.45s; }
@@ -979,90 +989,116 @@ function getDashboardCss() {
     100% { background: #ff2d7a; box-shadow: 0 0 18px rgba(255, 45, 122, 0.7); }
   }
 
-  /* Chase-light stripe overlaid on the top and bottom strips. */
-  .casino-edge.top::after,
-  .casino-edge.bottom::after {
+  /* Chase-light stripes — horizontal pattern on top/bottom, vertical
+     pattern on left/right, all flowing in opposite directions so the
+     marquee reads as a closed loop. */
+  .casino-edge::after {
     content: '';
     position: absolute;
     inset: 0;
+  }
+  .casino-edge.top::after,
+  .casino-edge.bottom::after {
     background-image: repeating-linear-gradient(
       90deg,
       rgba(255, 255, 255, 0.85) 0 8px,
       transparent 8px 24px
     );
     background-size: 24px 100%;
-    animation: casino-chase 0.9s linear infinite;
+    animation: casino-chase-x 0.9s linear infinite;
   }
   .casino-edge.bottom::after { animation-direction: reverse; }
-  @keyframes casino-chase { to { background-position: 24px 0; } }
-
-  /* Flashing "MAX ADDICTION" header badge — top centre, large, opaque. */
-  .casino-badge {
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 6px 18px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: #fff200;
-    background: #b10096;
-    border: 2px solid #ffd400;
-    box-shadow: 0 0 18px rgba(255, 45, 122, 0.8);
-    animation: casino-badge-flash 0.5s steps(2, end) infinite;
-    z-index: 2;
+  .casino-edge.left::after,
+  .casino-edge.right::after {
+    background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.85) 0 8px,
+      transparent 8px 24px
+    );
+    background-size: 100% 24px;
+    animation: casino-chase-y 0.9s linear infinite;
   }
-  @keyframes casino-badge-flash {
-    0%, 100% { background: #b10096; color: #fff200; border-color: #ffd400; }
-    50%      { background: #ffd400; color: #b10096; border-color: #ff2d7a; }
+  .casino-edge.right::after { animation-direction: reverse; }
+  @keyframes casino-chase-x { to { background-position: 24px 0; } }
+  @keyframes casino-chase-y { to { background-position: 0 24px; } }
+
+  /* Header reskin: rainbow text + animated icon + slot reels in-place. */
+  body.casino-active .header-text {
+    background: linear-gradient(
+      90deg,
+      #ff2d7a, #ffd400, #30ff9c, #29d4ff, #b070ff, #ff2d7a
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: casino-rainbow-slide 3s linear infinite;
+    /* Drop shadow with a coloured tint compensates for transparent fill. */
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+  }
+  @keyframes casino-rainbow-slide {
+    to { background-position: 200% 0; }
+  }
+  body.casino-active .header-icon {
+    display: inline-block;
+    animation: casino-icon-spin 2.4s linear infinite;
+  }
+  @keyframes casino-icon-spin {
+    0%, 100% { filter: hue-rotate(0deg) drop-shadow(0 0 4px rgba(255, 220, 64, 0.6)); }
+    50%      { filter: hue-rotate(180deg) drop-shadow(0 0 6px rgba(255, 45, 122, 0.8)); }
   }
 
-  /* Slot reels — always visible while casino is on, just below the badge. */
-  .casino-reels {
+  /* Slot reels — sit centred inside the header banner, hidden until
+     casino mode is on. Sized small enough to fit in the existing
+     header height without disturbing surrounding controls. */
+  .casino-reels-header {
     position: absolute;
-    top: 60px;
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     display: flex;
-    gap: 6px;
-    padding: 10px 14px 22px;
-    background: #1a0a24;
-    border: 2px solid #ff2d7a;
-    border-radius: 12px;
-    box-shadow:
-      0 10px 24px rgba(0, 0, 0, 0.6),
-      0 0 22px rgba(255, 45, 122, 0.55);
+    gap: 4px;
+    padding: 4px 8px;
+    background: rgba(20, 8, 30, 0.9);
+    border: 1px solid #ff2d7a;
+    border-radius: 8px;
+    box-shadow: 0 0 14px rgba(255, 45, 122, 0.55);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s;
+    z-index: 1;
+  }
+  body.casino-active .casino-reels-header {
+    opacity: 1;
+    visibility: visible;
   }
   .casino-reel {
-    width: 40px;
-    height: 40px;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 16px;
     line-height: 1;
     background: #fff;
-    border-radius: 6px;
-    box-shadow:
-      inset 0 -6px 10px rgba(0, 0, 0, 0.1),
-      inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.1);
   }
-  .casino-reels.spinning .casino-reel {
+  .casino-reels-header.spinning .casino-reel {
     animation: casino-reel-blur 0.1s linear infinite;
   }
-  .casino-reels.spinning .casino-reel[data-reel="1"] { animation-delay: 0.03s; }
-  .casino-reels.spinning .casino-reel[data-reel="2"] { animation-delay: 0.06s; }
-  .casino-reels.spinning .casino-reel[data-reel="3"] { animation-delay: 0.09s; }
-  .casino-reels.spinning .casino-reel[data-reel="4"] { animation-delay: 0.12s; }
+  .casino-reels-header.spinning .casino-reel[data-reel="1"] { animation-delay: 0.03s; }
+  .casino-reels-header.spinning .casino-reel[data-reel="2"] { animation-delay: 0.06s; }
+  .casino-reels-header.spinning .casino-reel[data-reel="3"] { animation-delay: 0.09s; }
+  .casino-reels-header.spinning .casino-reel[data-reel="4"] { animation-delay: 0.12s; }
   @keyframes casino-reel-blur {
-    0%   { transform: translateY(-2px); filter: blur(0.6px); }
-    50%  { transform: translateY(2px);  filter: blur(0.6px); }
-    100% { transform: translateY(-2px); filter: blur(0.6px); }
+    0%   { transform: translateY(-1.5px); filter: blur(0.6px); }
+    50%  { transform: translateY(1.5px);  filter: blur(0.6px); }
+    100% { transform: translateY(-1.5px); filter: blur(0.6px); }
   }
-  .casino-reels.win .casino-reel {
+  .casino-reels-header.win .casino-reel {
     animation: casino-reel-winflash 0.24s steps(2, end) infinite;
   }
   @keyframes casino-reel-winflash {
@@ -1071,22 +1107,22 @@ function getDashboardCss() {
   }
   .casino-reel-label {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 4px);
     left: 50%;
     transform: translateX(-50%);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 1.2px;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: #ffd400;
     white-space: nowrap;
-    text-shadow: 0 0 10px currentColor;
+    text-shadow: 0 0 8px currentColor;
     opacity: 0;
     transition: opacity 0.2s;
   }
-  .casino-reels.result .casino-reel-label { opacity: 1; }
+  .casino-reels-header.result .casino-reel-label { opacity: 1; }
 
-  /* Centered win / loss overlay flashing banner — solid colours. */
+  /* Centred win / loss overlay banner — solid, opaque, hard to miss. */
   .casino-overlay {
     position: absolute;
     top: 45%;
@@ -1104,7 +1140,7 @@ function getDashboardCss() {
     box-shadow:
       0 0 40px rgba(255, 45, 122, 0.7),
       0 0 80px rgba(255, 220, 64, 0.4);
-    text-shadow: 0 2px 0 rgba(0,0,0,0.3);
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
@@ -1144,55 +1180,6 @@ function getDashboardCss() {
     font-size: 26px;
     border-color: #ff2d2d;
   }
-
-  /* Floating stats panel — top right, solid filled background.
-     Sits inside the safe area between the marquee strip and badge. */
-  .casino-stats-panel {
-    position: absolute;
-    right: 24px;
-    top: 70px;
-    width: 320px;
-    padding: 14px 16px;
-    background: #150821;
-    border: 2px solid #ff2d7a;
-    border-radius: 10px;
-    box-shadow:
-      0 0 22px rgba(255, 45, 122, 0.55),
-      0 12px 28px rgba(0, 0, 0, 0.7);
-    color: var(--text);
-    font-size: 12px;
-    pointer-events: auto;
-    z-index: 2;
-  }
-  .casino-stats-panel .cstats-title {
-    font-weight: 800;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    font-size: 11px;
-    color: #ffd400;
-    margin-bottom: 8px;
-    text-align: center;
-    text-shadow: 0 0 8px rgba(255, 220, 64, 0.6);
-  }
-  .casino-stats-panel .cstats-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 3px 0;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
-    font-family: var(--font-mono);
-  }
-  .casino-stats-panel .cstats-row:last-child { border-bottom: none; }
-  .casino-stats-panel .cstats-k {
-    color: var(--text-dim);
-    font-family: var(--font);
-    font-size: 11px;
-  }
-  .casino-stats-panel .cstats-v { font-weight: 700; }
-  .casino-stats-panel .cstats-v.pos  { color: #3fb950; }
-  .casino-stats-panel .cstats-v.neg  { color: #f85149; }
-  .casino-stats-panel .cstats-v.gold { color: #ffd400; }
-  .casino-stats-panel .cstats-v.neon { color: #29d4ff; }
 
   @media (max-width: 900px) {
   }

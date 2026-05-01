@@ -528,7 +528,7 @@ ${pureFnBlock}
     // Reels stay in DOM but drop the dynamic state classes — the casino
     // layer's opacity transition handles hiding them visually.
     const reels = document.getElementById('casino-reels');
-    if (reels) reels.className = 'casino-reels';
+    if (reels) reels.className = 'casino-reels-header';
     const win = document.getElementById('casino-win-overlay');
     if (win) win.className = 'casino-overlay';
     const loss = document.getElementById('casino-loss-overlay');
@@ -548,7 +548,7 @@ ${pureFnBlock}
     }
     const reels = document.getElementById('casino-reels');
     if (!reels) return;
-    reels.className = 'casino-reels spinning';
+    reels.className = 'casino-reels-header spinning';
     const label = document.getElementById('casino-reel-label');
     if (label) label.textContent = '';
     casino.reelSpinTimer = setInterval(() => {
@@ -571,7 +571,7 @@ ${pureFnBlock}
       const isJackpot = winLevel.key === 'jackpot' || winLevel.key === 'mega';
       const sym = isJackpot ? '7⃣' : CASINO_SYMBOLS[Math.floor(Math.random() * (CASINO_SYMBOLS.length - 1))];
       for (let i = 0; i < 5; i++) casinoSetReelSymbol(i, sym);
-      reels.className = 'casino-reels result win';
+      reels.className = 'casino-reels-header result win';
       label.textContent = winLevel.label.replace(/^[^A-Z0-9]+/, '').trim() || 'WIN';
       label.style.color = winLevel.color;
       // Fire the centered banner.
@@ -579,19 +579,19 @@ ${pureFnBlock}
       // Let the flashing linger a beat, then settle.
       casino.reelResultClearTimer = setTimeout(() => {
         casino.reelResultClearTimer = null;
-        reels.className = 'casino-reels';
+        reels.className = 'casino-reels-header';
       }, isJackpot ? 4000 : 2400);
     } else {
       // No updates — show a random losing line and auto-fade.
       for (let i = 0; i < 5; i++) {
         casinoSetReelSymbol(i, CASINO_SYMBOLS[(casino.reelFrame + i * 3) % CASINO_SYMBOLS.length]);
       }
-      reels.className = 'casino-reels result';
+      reels.className = 'casino-reels-header result';
       label.textContent = '\u{1f634} NOTHING';
       label.style.color = '#8b949e';
       casino.reelResultClearTimer = setTimeout(() => {
         casino.reelResultClearTimer = null;
-        reels.className = 'casino-reels';
+        reels.className = 'casino-reels-header';
       }, 2000);
     }
   }
@@ -654,40 +654,19 @@ ${pureFnBlock}
     return { hadUpdates, totalLines };
   }
 
-  function renderCasinoStats() {
-    const panel = document.getElementById('casino-stats-panel');
-    if (!panel) return;
-    const cs = state && state.casinoStats;
-    if (!cs) { panel.innerHTML = ''; return; }
-    const netClass = cs.netWinnings >= 0 ? 'pos' : 'neg';
-    const netSign = cs.netWinnings >= 0 ? '+' : '';
-    let html = '<div class="cstats-title">\u{1f3b0} CASINO WINNINGS \u{1f3b0}</div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4dd} Line Changes</span><span class="cstats-v"><span class="pos">+' + (cs.totalLinesAdded || 0) + '</span> / <span class="neg">-' + (cs.totalLinesDeleted || 0) + '</span> = <span class="gold">$' + (cs.totalLines || 0) + '</span></span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4b8} Poll Cost</span><span class="cstats-v neg">$' + (cs.totalPolls || 0) + '</span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f4b0} Net Earnings</span><span class="cstats-v ' + netClass + '">' + netSign + '$' + (cs.netWinnings || 0) + '</span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f3b0} House Edge</span><span class="cstats-v neon">' + (cs.houseEdge || 0) + '%</span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f60e} Vibes</span><span class="cstats-v">' + escHtml(cs.vibesQuality || '') + '</span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f3b2} Luck</span><span class="cstats-v gold">' + (cs.luckMeter || 0) + '%</span></div>';
-    html += '<div class="cstats-row"><span class="cstats-k">\u{1f9e0} Dopamine Hits</span><span class="cstats-v pos">' + (cs.dopamineHits || 0) + '</span></div>';
-    if (cs.consecutivePolls > 1) {
-      html += '<div class="cstats-row"><span class="cstats-k">\u{1f525} Streak</span><span class="cstats-v gold">' + cs.consecutivePolls + 'x</span></div>';
-    }
-    html += '<div class="cstats-row"><span class="cstats-k">⏱ Session</span><span class="cstats-v">' + escHtml(cs.sessionDuration || '') + '</span></div>';
-    panel.innerHTML = html;
-  }
-
   // Apply/tear down casino mode based on state.casinoModeEnabled.
+  // Stats rendering is handled by renderDashboardStats — this function
+  // only owns the body class flip, header icon swap, and timer cleanup.
   function reconcileCasinoMode() {
     if (!state) return;
     const enabled = !!state.casinoModeEnabled;
     document.body.classList.toggle('casino-active', enabled);
+    const icon = document.getElementById('header-icon');
+    if (icon) icon.innerHTML = enabled ? '\u{1f3b0}' : '\u{1f3f0}';
     if (!enabled && ui.prevCasinoEnabled) {
       casinoCleanup();
     }
     ui.prevCasinoEnabled = enabled;
-    // Always rerender — when state.casinoStats is null the function clears
-    // the panel, which keeps DOM state consistent with the toggle.
-    renderCasinoStats();
   }
 
   // Drive reel spin/stop from the polling status transition, and fire win
@@ -743,8 +722,7 @@ ${pureFnBlock}
 
     renderBranches();
     renderActivityLog();
-    renderSessionStats();
-    renderSessionStatsCard();
+    renderDashboardStats();
     renderPrefsBar();
 
     // Auto-show update notification (once per session)
@@ -1220,60 +1198,59 @@ ${pureFnBlock}
 
   function hideUpdate() { updateModal.hide(); }
 
-  // ── Session Stats ──────────────────────────────────────────────
-  function renderSessionStats() {
-    if (!state || !state.sessionStats) return;
-    const s = state.sessionStats;
-    const bar = document.getElementById('stats-bar');
-    let activeBranches = 0;
-    let staleBranches = 0;
-    if (state.branches) {
-      for (let i = 0; i < state.branches.length; i++) {
-        const b = state.branches[i];
-        // Consider stale if no updates and not current
-        if (b.justUpdated || b.name === state.currentBranch) {
-          activeBranches++;
-        } else {
-          staleBranches++;
-        }
-      }
+  // ── Dashboard Stats Bar ────────────────────────────────────────
+  // Permanent row above the keyboard footer. Default: grounded session
+  // metrics. When casino mode is on the same row re-skins to "casino
+  // winnings" — same DOM, different content + .casino-mode class.
+  function renderDashboardStats() {
+    const bar = document.getElementById('dashboard-stats');
+    if (!bar) return;
+    if (state && state.casinoModeEnabled && state.casinoStats) {
+      bar.className = 'dashboard-stats casino-mode';
+      bar.innerHTML = renderCasinoStatsRow(state.casinoStats);
+    } else {
+      bar.className = 'dashboard-stats';
+      bar.innerHTML = renderSessionStatsRow();
     }
-    let html = '';
-    html += '<span class="stat-item"><span class="stat-label">Session:</span> <span class="stat-value">' + escHtml(s.sessionDuration || '0m') + '</span></span>';
-    html += '<span class="stat-item"><span class="stat-label">Lines:</span> <span class="stat-value">+' + (s.linesAdded || 0) + '/-' + (s.linesDeleted || 0) + '</span></span>';
-    html += '<span class="stat-item"><span class="stat-label">Polls:</span> <span class="stat-value">' + (s.totalPolls || 0) + '</span> <span class="stat-label">(' + (s.hitRate || 0) + '% hit)</span></span>';
-    if (s.lastUpdate) {
-      html += '<span class="stat-item"><span class="stat-label">Last update:</span> <span class="stat-value">' + escHtml(s.lastUpdate) + '</span></span>';
-    }
-    html += '<span class="stat-item"><span class="stat-label">Active:</span> <span class="stat-value">' + activeBranches + '</span> <span class="stat-label">Stale:</span> <span class="stat-value">' + staleBranches + '</span></span>';
-    bar.innerHTML = html;
   }
 
-  // ── Session Stats Card (sidebar) ───────────────────────────────
-  // Lives at the top of the activity log. Real, grounded numbers the
-  // dashboard always shows — not dependent on casino mode.
-  function renderSessionStatsCard() {
-    const card = document.getElementById('session-stats-card');
-    if (!card) return;
+  function renderSessionStatsRow() {
     const s = state && state.sessionStats;
-    if (!s) { card.innerHTML = ''; return; }
+    if (!s) return '';
     const branches = (state && state.branches) || [];
-    let activeCount = 0;
-    let staleCount = 0;
+    let active = 0;
+    let stale = 0;
     for (let i = 0; i < branches.length; i++) {
       const b = branches[i];
-      if (b.justUpdated || b.name === state.currentBranch) activeCount++;
-      else staleCount++;
+      if (b.justUpdated || b.name === state.currentBranch) active++;
+      else stale++;
     }
+    const stat = (k, v) => '<span class="stat"><span class="stat-k">' + k + '</span><span class="stat-v">' + v + '</span></span>';
     let html = '';
-    html += '<span class="stat-k">Session</span><span class="stat-v">' + escHtml(s.sessionDuration || '0m') + '</span>';
-    html += '<span class="stat-k">Lines</span><span class="stat-v"><span class="added">+' + fmtCompact(s.linesAdded || 0) + '</span> <span class="sep">/</span> <span class="deleted">-' + fmtCompact(s.linesDeleted || 0) + '</span></span>';
-    html += '<span class="stat-k">Polls</span><span class="stat-v">' + (s.totalPolls || 0) + ' <span class="sep">·</span> <span class="accent">' + (s.hitRate || 0) + '%</span> hit</span>';
-    if (s.lastUpdate) {
-      html += '<span class="stat-k">Last hit</span><span class="stat-v">' + escHtml(s.lastUpdate) + '</span>';
-    }
-    html += '<span class="stat-k">Branches</span><span class="stat-v">' + activeCount + ' <span class="sep">active</span> <span class="sep">·</span> ' + staleCount + ' <span class="sep">stale</span></span>';
-    card.innerHTML = html;
+    html += stat('Session', escHtml(s.sessionDuration || '0m'));
+    html += stat('Lines', '<span class="added">+' + fmtCompact(s.linesAdded || 0) + '</span> <span class="sep">/</span> <span class="deleted">-' + fmtCompact(s.linesDeleted || 0) + '</span>');
+    html += stat('Polls', (s.totalPolls || 0) + ' <span class="sep">·</span> <span class="accent">' + (s.hitRate || 0) + '%</span> hit');
+    if (s.lastUpdate) html += stat('Last hit', escHtml(s.lastUpdate));
+    html += stat('Branches', active + ' <span class="sep">active</span> <span class="sep">·</span> ' + stale + ' <span class="sep">stale</span>');
+    return html;
+  }
+
+  function renderCasinoStatsRow(cs) {
+    const netClass = cs.netWinnings >= 0 ? 'pos' : 'neg';
+    const netSign = cs.netWinnings >= 0 ? '+' : '';
+    const stat = (k, v) => '<span class="stat"><span class="stat-k">' + k + '</span><span class="stat-v">' + v + '</span></span>';
+    const dollar = '$';  // avoid bare $ in generated JS — see js.dom.test.js
+    let html = '';
+    html += stat('\u{1f4dd} Lines', '<span class="pos">+' + (cs.totalLinesAdded || 0) + '</span> <span class="sep">/</span> <span class="neg">-' + (cs.totalLinesDeleted || 0) + '</span> <span class="sep">=</span> <span class="gold">' + dollar + (cs.totalLines || 0) + '</span>');
+    html += stat('\u{1f4b8} Cost', '<span class="neg">' + dollar + (cs.totalPolls || 0) + '</span>');
+    html += stat('\u{1f4b0} Net', '<span class="' + netClass + '">' + netSign + dollar + (cs.netWinnings || 0) + '</span>');
+    html += stat('\u{1f3b0} Edge', '<span class="neon">' + (cs.houseEdge || 0) + '%</span>');
+    html += stat('\u{1f60e} Vibes', escHtml(cs.vibesQuality || ''));
+    html += stat('\u{1f3b2} Luck', '<span class="gold">' + (cs.luckMeter || 0) + '%</span>');
+    html += stat('\u{1f9e0} Hits', '<span class="pos">' + (cs.dopamineHits || 0) + '</span>');
+    if (cs.consecutivePolls > 1) html += stat('\u{1f525} Streak', '<span class="gold">' + cs.consecutivePolls + 'x</span>');
+    html += stat('⏱ Session', escHtml(cs.sessionDuration || ''));
+    return html;
   }
 
   // ── Error Toast with Stash Hint ────────────────────────────────

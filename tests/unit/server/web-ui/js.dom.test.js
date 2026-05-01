@@ -693,7 +693,7 @@ describe('dashboard JS — DOM behavior', () => {
       assert.equal(body.action, 'toggleCasino');
     });
 
-    it('should populate the CASINO WINNINGS panel from state.casinoStats', (t) => {
+    it('should fill the dashboard-stats bar with casino numbers when casino is on', (t) => {
       const env = setup(t);
       env.pushSSE(makeState({
         casinoModeEnabled: true,
@@ -712,9 +712,9 @@ describe('dashboard JS — DOM behavior', () => {
         }),
       }));
 
-      const panel = env.document.getElementById('casino-stats-panel');
-      const text = panel.textContent;
-      assert.ok(text.includes('CASINO WINNINGS'), 'panel should render the title');
+      const bar = env.document.getElementById('dashboard-stats');
+      assert.ok(bar.className.includes('casino-mode'), 'bar should re-skin to casino-mode');
+      const text = bar.textContent;
       assert.ok(text.includes('+42'), 'should show lines added');
       assert.ok(text.includes('-7'), 'should show lines deleted');
       assert.ok(text.includes('$49'), 'should show total lines as dollars');
@@ -725,7 +725,7 @@ describe('dashboard JS — DOM behavior', () => {
       assert.ok(text.includes('12'), 'should show dopamine hits');
     });
 
-    it('should empty the WINNINGS panel when casinoStats is null', (t) => {
+    it('should fall back to plain session stats when casino is off', (t) => {
       const env = setup(t);
       env.pushSSE(makeState({
         casinoModeEnabled: true,
@@ -733,8 +733,23 @@ describe('dashboard JS — DOM behavior', () => {
       }));
       env.pushSSE(makeState({ casinoModeEnabled: false, casinoStats: null }));
 
-      const panel = env.document.getElementById('casino-stats-panel');
-      assert.equal(panel.innerHTML, '', 'panel should empty when stats are null');
+      const bar = env.document.getElementById('dashboard-stats');
+      assert.ok(!bar.className.includes('casino-mode'), 'bar should drop casino-mode skin');
+      assert.ok(bar.textContent.includes('Session'), 'bar should show plain Session stats');
+    });
+
+    it('should swap the header icon between castle and slot machine', (t) => {
+      const env = setup(t);
+      const icon = env.document.getElementById('header-icon');
+
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(icon.textContent.includes('\u{1f3f0}'), 'castle when off');
+
+      env.pushSSE(makeState({ casinoModeEnabled: true, casinoStats: stubCasinoStats() }));
+      assert.ok(icon.textContent.includes('\u{1f3b0}'), 'slot machine when on');
+
+      env.pushSSE(makeState({ casinoModeEnabled: false }));
+      assert.ok(icon.textContent.includes('\u{1f3f0}'), 'castle restored when off again');
     });
 
     it('should activate slot reels when polling status flips to fetching', (t) => {
