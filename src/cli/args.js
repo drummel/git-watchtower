@@ -169,6 +169,19 @@ function parseArgs(argv, options = {}) {
       result.errors.push(`Unknown option: ${args[i]}`);
     }
   }
+
+  // Cross-validation: if both --port and --web-port are explicit on the
+  // CLI, they must differ. The web dashboard's EADDRINUSE-retry loop
+  // would silently bump the web port to the next free slot, hiding the
+  // misconfiguration — and the user thinks they're hitting :4000 when
+  // it's actually :4001. Surface the conflict at parse time instead.
+  if (result.port !== null && result.webPort !== null && result.port === result.webPort) {
+    result.errors.push(
+      `--port and --web-port cannot share the same value (${result.port}). ` +
+      `Pick a different value for one of them.`,
+    );
+  }
+
   return result;
 }
 
