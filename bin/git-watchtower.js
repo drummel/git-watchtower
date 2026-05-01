@@ -3407,6 +3407,13 @@ async function startWebDashboard(openBrowser) {
       sessionStats: sessionStats.getStats(),
     }),
     onAction: handleWebAction,
+    // Route actions for non-local project tabs through the coordinator so
+    // the targeted worker handles them in its own process. Without this,
+    // every action runs against the coordinator's repo regardless of which
+    // tab the user clicked.
+    sendCommand: (pId, action, payload) => {
+      if (coordinator) coordinator.sendCommand(pId, action, payload);
+    },
   });
   webDashboard.setLocalProjectId(projectId);
 

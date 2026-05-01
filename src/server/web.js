@@ -40,7 +40,10 @@ const SSE_KEEPALIVE_INTERVAL = 15000;
  * @typedef {Object} WebDashboardOptions
  * @property {number} [port=4000] - Port to listen on
  * @property {import('../state/store').Store} store - State store instance
- * @property {function} [onAction] - Callback for web UI actions
+ * @property {function} [onAction] - Callback for actions targeting the local project
+ * @property {function} [sendCommand] - Routes (projectId, action, payload) to a remote
+ *   project's worker. When omitted, every action is dispatched locally — preserves
+ *   single-project behaviour for callers (and tests) that don't run a coordinator.
  * @property {function} [getExtraState] - Returns additional state to merge
  */
 
@@ -56,6 +59,7 @@ class WebDashboardServer {
     this.port = options.port || DEFAULT_WEB_PORT;
     this.store = options.store;
     this.onAction = options.onAction || (() => {});
+    this.sendCommand = options.sendCommand || null;
     this.getExtraState = options.getExtraState || (() => ({}));
 
     /** @type {Set<import('http').ServerResponse>} */
@@ -526,12 +530,23 @@ class WebDashboardServer {
           return;
         }
 
-        // Include projectId if provided (for multi-project routing)
+        // Multi-project routing: when the request targets a project that is
+        // not the coordinator's own (the user is on a different tab in the
+        // dashboard), forward to that project's worker via sendCommand
+        // instead of running the action against the coordinator's repo.
         const projectId = data.projectId || this.localProjectId;
         payload._projectId = projectId;
 
-        // Dispatch to the main process
-        this.onAction(action, payload);
+        if (
+          projectId &&
+          this.localProjectId &&
+          projectId !== this.localProjectId &&
+          typeof this.sendCommand === 'function'
+        ) {
+          this.sendCommand(projectId, action, payload);
+        } else {
+          this.onAction(action, payload);
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true }));
