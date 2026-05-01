@@ -10,7 +10,6 @@ const { createGitFixture } = require('./git-fixture');
 const {
   getCurrentBranch,
   getAllBranches,
-  checkout,
   getPreviewData,
   generateSparkline,
   getLocalBranches,
@@ -194,75 +193,6 @@ describe('branch.js integration tests', () => {
         () => getAllBranches({ fetch: false, cwd: '/tmp' }),
         (err) => err.code === 'GIT_BRANCH_LIST_FAILED'
       );
-    });
-  });
-
-  describe('checkout', () => {
-    it('should checkout existing local branch', async () => {
-      fixture.createBranch('feature');
-
-      const result = await checkout('feature', { cwd: fixture.path });
-
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(fixture.getCurrentBranch(), 'feature');
-    });
-
-    it('should fail on dirty working directory', async () => {
-      fixture.createBranch('feature');
-      fixture.createFile('uncommitted.txt', 'content', false);
-
-      const result = await checkout('feature', { cwd: fixture.path });
-
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error);
-      assert.strictEqual(result.error.code, 'GIT_DIRTY_WORKDIR');
-    });
-
-    it('should force checkout with dirty working directory', async () => {
-      fixture.createBranch('feature');
-      fixture.createFile('uncommitted.txt', 'content', false);
-      fixture.git('add uncommitted.txt');
-
-      const result = await checkout('feature', {
-        force: true,
-        cwd: fixture.path,
-      });
-
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(fixture.getCurrentBranch(), 'feature');
-    });
-
-    it('should create local branch from remote', async () => {
-      fixture.createRemote('origin');
-
-      // Create a remote-only branch
-      fixture.createBranch('remote-only', true);
-      fixture.createFile('remote.txt', 'content', true, 'Remote commit');
-      fixture.push('remote-only');
-      fixture.checkout('master');
-      fixture.git('branch -D remote-only');
-
-      const result = await checkout('remote-only', {
-        remoteName: 'origin',
-        cwd: fixture.path,
-      });
-
-      assert.strictEqual(result.success, true);
-      assert.strictEqual(fixture.getCurrentBranch(), 'remote-only');
-    });
-
-    it('should fail for invalid branch name', async () => {
-      const result = await checkout('bad..name', { cwd: fixture.path });
-
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error);
-    });
-
-    it('should fail for non-existent branch', async () => {
-      const result = await checkout('nonexistent-branch', { cwd: fixture.path });
-
-      assert.strictEqual(result.success, false);
-      assert.ok(result.error);
     });
   });
 

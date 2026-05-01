@@ -199,81 +199,6 @@ async function getAllBranches(options = {}) {
 }
 
 /**
- * Detect changes between two branch lists
- * @param {Branch[]} oldBranches - Previous branch list
- * @param {Branch[]} newBranches - Current branch list
- * @returns {{added: Branch[], removed: Branch[], updated: Branch[]}}
- */
-function detectBranchChanges(oldBranches, newBranches) {
-  const oldNames = new Map(oldBranches.map((b) => [b.name, b]));
-  const newNames = new Map(newBranches.map((b) => [b.name, b]));
-
-  const added = newBranches.filter((b) => !oldNames.has(b.name));
-  const removed = oldBranches.filter((b) => !newNames.has(b.name));
-  const updated = newBranches.filter((b) => {
-    const old = oldNames.get(b.name);
-    return old && old.commit !== b.commit;
-  });
-
-  return { added, removed, updated };
-}
-
-/**
- * Check out a branch
- * @param {string} branchName - Branch to check out
- * @param {Object} [options] - Options
- * @param {string} [options.remoteName='origin'] - Remote name
- * @param {boolean} [options.force=false] - Force checkout (discard changes)
- * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
- */
-async function checkout(branchName, options = {}) {
-  const { remoteName = 'origin', force = false, cwd } = options;
-
-  try {
-    // Validate branch name
-    const safeName = sanitizeBranchName(branchName);
-
-    // Check for uncommitted changes (unless force)
-    if (!force && (await hasUncommittedChanges(cwd))) {
-      return {
-        success: false,
-        error: new GitError(
-          'Cannot switch: uncommitted changes in working directory',
-          'GIT_DIRTY_WORKDIR'
-        ),
-      };
-    }
-
-    // Check if local branch exists
-    const { stdout: localBranches } = await execGit(['branch', '--list'], { cwd });
-    const hasLocal = localBranches
-      .split('\n')
-      .some((b) => b.trim().replace(/^\* /, '') === safeName);
-
-    if (hasLocal) {
-      // Local branch exists - just check out
-      if (force) {
-        await execGit(['checkout', '--', '.'], { cwd });
-        await execGit(['checkout', safeName], { cwd });
-      } else {
-        await execGit(['checkout', safeName], { cwd });
-      }
-    } else {
-      // Create local branch from remote
-      await execGit(['checkout', '-b', safeName, `${remoteName}/${safeName}`], { cwd });
-    }
-
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof GitError ? error : GitError.fromExecError(error, 'checkout'),
-    };
-  }
-}
-
-/**
  * Get preview data for a branch
  * @param {string} branchName - Branch name
  * @param {Object} [options] - Options
@@ -449,8 +374,6 @@ module.exports = {
   sanitizeBranchName,
   getCurrentBranch,
   getAllBranches,
-  detectBranchChanges,
-  checkout,
   getPreviewData,
   generateSparkline,
   getLocalBranches,

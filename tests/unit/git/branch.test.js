@@ -7,7 +7,6 @@ const assert = require('node:assert');
 const {
   isValidBranchName,
   sanitizeBranchName,
-  detectBranchChanges,
 } = require('../../../src/git/branch');
 const { ValidationError } = require('../../../src/utils/errors');
 
@@ -109,117 +108,5 @@ describe('sanitizeBranchName', () => {
       assert.strictEqual(error.field, 'branchName');
       assert.strictEqual(error.value, 'bad..name');
     }
-  });
-});
-
-describe('detectBranchChanges', () => {
-  const createBranch = (name, commit = 'abc123') => ({
-    name,
-    commit,
-    subject: 'Test commit',
-    date: new Date(),
-    isLocal: true,
-    hasRemote: false,
-    hasUpdates: false,
-  });
-
-  it('should detect added branches', () => {
-    const oldBranches = [createBranch('main')];
-    const newBranches = [createBranch('main'), createBranch('feature')];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 1);
-    assert.strictEqual(changes.added[0].name, 'feature');
-    assert.strictEqual(changes.removed.length, 0);
-    assert.strictEqual(changes.updated.length, 0);
-  });
-
-  it('should detect removed branches', () => {
-    const oldBranches = [createBranch('main'), createBranch('feature')];
-    const newBranches = [createBranch('main')];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 0);
-    assert.strictEqual(changes.removed.length, 1);
-    assert.strictEqual(changes.removed[0].name, 'feature');
-    assert.strictEqual(changes.updated.length, 0);
-  });
-
-  it('should detect updated branches', () => {
-    const oldBranches = [createBranch('main', 'old123')];
-    const newBranches = [createBranch('main', 'new456')];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 0);
-    assert.strictEqual(changes.removed.length, 0);
-    assert.strictEqual(changes.updated.length, 1);
-    assert.strictEqual(changes.updated[0].name, 'main');
-    assert.strictEqual(changes.updated[0].commit, 'new456');
-  });
-
-  it('should detect multiple changes simultaneously', () => {
-    const oldBranches = [
-      createBranch('main', 'old'),
-      createBranch('develop'),
-      createBranch('removed-branch'),
-    ];
-    const newBranches = [
-      createBranch('main', 'new'),
-      createBranch('develop'),
-      createBranch('new-branch'),
-    ];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 1);
-    assert.strictEqual(changes.added[0].name, 'new-branch');
-    assert.strictEqual(changes.removed.length, 1);
-    assert.strictEqual(changes.removed[0].name, 'removed-branch');
-    assert.strictEqual(changes.updated.length, 1);
-    assert.strictEqual(changes.updated[0].name, 'main');
-  });
-
-  it('should handle empty old list (all branches are new)', () => {
-    const oldBranches = [];
-    const newBranches = [createBranch('main'), createBranch('develop')];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 2);
-    assert.strictEqual(changes.removed.length, 0);
-    assert.strictEqual(changes.updated.length, 0);
-  });
-
-  it('should handle empty new list (all branches removed)', () => {
-    const oldBranches = [createBranch('main'), createBranch('develop')];
-    const newBranches = [];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 0);
-    assert.strictEqual(changes.removed.length, 2);
-    assert.strictEqual(changes.updated.length, 0);
-  });
-
-  it('should handle no changes', () => {
-    const oldBranches = [createBranch('main', 'abc'), createBranch('develop', 'def')];
-    const newBranches = [createBranch('main', 'abc'), createBranch('develop', 'def')];
-
-    const changes = detectBranchChanges(oldBranches, newBranches);
-
-    assert.strictEqual(changes.added.length, 0);
-    assert.strictEqual(changes.removed.length, 0);
-    assert.strictEqual(changes.updated.length, 0);
-  });
-
-  it('should handle both empty lists', () => {
-    const changes = detectBranchChanges([], []);
-
-    assert.strictEqual(changes.added.length, 0);
-    assert.strictEqual(changes.removed.length, 0);
-    assert.strictEqual(changes.updated.length, 0);
   });
 });
