@@ -976,6 +976,133 @@ describe('WebDashboardServer', () => {
       assert.equal(received.payload.install, true);
     });
   });
+
+  describe('multi-project action routing', () => {
+    let local;
+    let remote;
+
+    function httpPost(port, urlPath, data) {
+      return new Promise((resolve, reject) => {
+        const body = JSON.stringify(data);
+        const req = http.request(`http://127.0.0.1:${port}${urlPath}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'Connection': 'close',
+          },
+        }, (res) => {
+          let respBody = '';
+          res.on('data', (chunk) => { respBody += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, body: respBody }));
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+      });
+    }
+
+    afterEach(() => {
+      if (local) { local.stop(); local = null; }
+      if (remote) { remote.stop(); remote = null; }
+    });
+
+    it('runs the action locally when projectId matches localProjectId', async () => {
+      let onActionCalls = 0;
+      let sendCommandCalls = 0;
+      local = new WebDashboardServer({
+        store,
+        port: 19890,
+        onAction: () => { onActionCalls++; },
+        sendCommand: () => { sendCommandCalls++; },
+      });
+      local.setLocalProjectId('local-1');
+      await local.start();
+
+      const res = await httpPost(local.port, '/api/action', {
+        action: 'switchBranch',
+        payload: { branch: 'main' },
+        projectId: 'local-1',
+      });
+
+      assert.equal(res.status, 200);
+      assert.equal(onActionCalls, 1, 'local action should call onAction');
+      assert.equal(sendCommandCalls, 0, 'local action must not be routed via sendCommand');
+    });
+
+    it('routes via sendCommand when projectId targets a remote project', async () => {
+      let onActionCalls = 0;
+      let routed = null;
+      local = new WebDashboardServer({
+        store,
+        port: 19891,
+        onAction: () => { onActionCalls++; },
+        sendCommand: (pId, action, payload) => { routed = { pId, action, payload }; },
+      });
+      local.setLocalProjectId('local-1');
+      await local.start();
+
+      const res = await httpPost(local.port, '/api/action', {
+        action: 'switchBranch',
+        payload: { branch: 'feature' },
+        projectId: 'remote-2',
+      });
+
+      assert.equal(res.status, 200);
+      assert.equal(onActionCalls, 0, 'remote action must not run locally');
+      assert.ok(routed, 'sendCommand should have been invoked');
+      assert.equal(routed.pId, 'remote-2');
+      assert.equal(routed.action, 'switchBranch');
+      assert.equal(routed.payload.branch, 'feature');
+      // Server still stamps _projectId so the receiving worker's handler can
+      // see which tab the request came from.
+      assert.equal(routed.payload._projectId, 'remote-2');
+    });
+
+    it('falls back to local onAction when no sendCommand callback is wired (single-project mode)', async () => {
+      let received = null;
+      local = new WebDashboardServer({
+        store,
+        port: 19892,
+        onAction: (action, payload) => { received = { action, payload }; },
+        // sendCommand intentionally omitted — preserves single-project behaviour
+      });
+      local.setLocalProjectId('local-1');
+      await local.start();
+
+      const res = await httpPost(local.port, '/api/action', {
+        action: 'fetch',
+        projectId: 'remote-2',
+      });
+
+      assert.equal(res.status, 200);
+      assert.ok(received, 'should fall back to onAction when no router is configured');
+      assert.equal(received.action, 'fetch');
+      assert.equal(received.payload._projectId, 'remote-2');
+    });
+
+    it('runs locally when no localProjectId has been set (standalone web server)', async () => {
+      let onActionCalls = 0;
+      let sendCommandCalls = 0;
+      local = new WebDashboardServer({
+        store,
+        port: 19893,
+        onAction: () => { onActionCalls++; },
+        sendCommand: () => { sendCommandCalls++; },
+      });
+      // setLocalProjectId NOT called — server isn't part of a coordinator group
+      await local.start();
+
+      const res = await httpPost(local.port, '/api/action', {
+        action: 'pull',
+        projectId: 'something',
+      });
+
+      assert.equal(res.status, 200);
+      assert.equal(onActionCalls, 1);
+      assert.equal(sendCommandCalls, 0, 'no routing without a known local project ID');
+    });
+  });
 });
 
 describe('getWebDashboardHtml', () => {
