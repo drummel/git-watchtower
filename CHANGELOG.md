@@ -1,3 +1,10 @@
+## [2.3.5](https://github.com/drummel/git-watchtower/compare/v2.3.4...v2.3.5) (2026-05-02)
+
+
+### Bug Fixes
+
+* apply the correct "connected" class to the SSE connection dot ([72437df](https://github.com/drummel/git-watchtower/commit/72437dfa0ea9fe4b1b00fc1975545accdc4d097e))
+
 ## [2.3.4](https://github.com/drummel/git-watchtower/compare/v2.3.3...v2.3.4) (2026-05-02)
 
 
