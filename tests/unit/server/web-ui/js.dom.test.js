@@ -773,6 +773,34 @@ describe('dashboard JS — DOM behavior', () => {
     });
   });
 
+  describe('Connection status indicator', () => {
+    // Regression for the bug where `updateConnectionStatus` set
+    // `dot.className = 'connection-dot ui.connected'` — a literal
+    // string with the variable NAME instead of the value, plus a
+    // dot in the middle. The CSS rule is `.connection-dot.connected`,
+    // so the green/glow style never applied even when SSE was healthy.
+    it('applies the "connected" CSS class when the SSE stream opens', (t) => {
+      const env = setup(t); // harness fires onopen during setup
+      const dot = env.document.getElementById('connection-dot');
+      assert.ok(
+        dot.classList.contains('connected'),
+        'connection-dot should carry the "connected" class so the green/glow style matches'
+      );
+      assert.ok(
+        !dot.classList.contains('disconnected'),
+        'should not still carry the "disconnected" class after onopen'
+      );
+      // The CSS expects `.connection-dot.connected`, which requires the
+      // raw class token to be exactly "connected" — guard against the
+      // original typo `'connection-dot ui.connected'` (one token,
+      // dot-in-the-middle, never matches).
+      assert.ok(
+        !dot.classList.contains('ui.connected'),
+        'should not have the literal "ui.connected" token (regression for the original bug)'
+      );
+    });
+  });
+
   describe('Casino mode', () => {
     it('should not have casino-active class when state.casinoModeEnabled is false', (t) => {
       const env = setup(t);
