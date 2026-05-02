@@ -1087,7 +1087,7 @@ ${pureFnBlock}
     const msg = pendingBranch
       ? 'You have uncommitted changes. Stash them before switching to <strong>' + escHtml(pendingBranch) + '</strong>?'
       : 'Stash all uncommitted changes in the working directory?';
-    const html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">' + msg + '</div>';
+    let html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:16px;">' + msg + '</div>';
     html += '<div class="confirm-actions">';
     html += '<button class="confirm-btn" id="stash-cancel">Cancel</button>';
     html += '<button class="confirm-btn primary" id="stash-confirm">Stash &amp; Continue</button>';
