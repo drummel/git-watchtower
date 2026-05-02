@@ -1,3 +1,10 @@
+## [2.3.4](https://github.com/drummel/git-watchtower/compare/v2.3.3...v2.3.4) (2026-05-02)
+
+
+### Bug Fixes
+
+* render the cleanup modal without throwing on const reassignment ([c06ec9a](https://github.com/drummel/git-watchtower/commit/c06ec9ae27ceae13587891524543dde5748c36c4)), closes [#198](https://github.com/drummel/git-watchtower/issues/198)
+
 ## [2.3.3](https://github.com/drummel/git-watchtower/compare/v2.3.2...v2.3.3) (2026-05-02)
 
 
