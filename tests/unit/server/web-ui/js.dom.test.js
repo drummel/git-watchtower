@@ -592,6 +592,49 @@ describe('dashboard JS — DOM behavior', () => {
       env.pushSSE(makeState({ branches: [], updateAvailable: '2.0.0' }));
       assert.ok(!env.isModalOpen('update-overlay'), 'Update modal should NOT open while info modal is open');
     });
+
+    // Regression for the bug where `showStashDialog` did `const html = …`
+    // followed by `html += …`, which throws TypeError: Assignment to
+    // constant variable. The throw fired BEFORE `stashModal.show()`, so
+    // the modal never opened and pressing 'S' silently did nothing.
+    // Asserting only `isModalOpen` would not catch this — the existing
+    // cleanup test gives a false positive because the throw happens
+    // AFTER show(). Always assert the modal also rendered its content
+    // and wired up its action buttons.
+    it('should open the stash dialog with rendered content and working buttons', (t) => {
+      const errors = [];
+      const env = setup(t);
+      env.window.addEventListener('error', (e) => errors.push(e.error || e.message));
+      env.pushSSE(makeState({ branches: [] }));
+
+      env.pressKey('S');
+
+      assert.deepEqual(errors, [], 'showStashDialog should not throw');
+      assert.ok(env.isModalOpen('stash-overlay'), 'Stash modal should open on S');
+      const content = env.document.getElementById('stash-content');
+      assert.ok(
+        content.innerHTML.includes('Stash all uncommitted changes'),
+        'modal body should render the stash prompt'
+      );
+      assert.ok(
+        env.document.getElementById('stash-cancel'),
+        'Cancel button should be rendered'
+      );
+      const confirmBtn = env.document.getElementById('stash-confirm');
+      assert.ok(confirmBtn, 'Confirm button should be rendered');
+
+      // Click Confirm — should fire a `stash` action POST.
+      const xhrCountBefore = env.xhrRequests.length;
+      confirmBtn.click();
+      const stashXhr = env.getXhr('/api/action');
+      assert.ok(stashXhr, 'Confirm click should POST to /api/action');
+      const body = JSON.parse(stashXhr._body);
+      assert.equal(body.action, 'stash', 'POST body should target the stash action');
+      assert.ok(env.xhrRequests.length > xhrCountBefore, 'should have fired a fresh XHR');
+
+      // Modal should close after confirm.
+      assert.ok(!env.isModalOpen('stash-overlay'), 'modal should close after Confirm');
+    });
   });
 
   describe('KEY_MAP dispatch', () => {
