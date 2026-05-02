@@ -535,6 +535,85 @@ describe('dashboard JS — DOM behavior', () => {
       assert.ok(!env.isModalOpen('cleanup-overlay'), 'Cleanup modal should close on Escape');
     });
 
+    // Regression for the bug where `showCleanup` did `const html = …`
+    // followed by `html = …` (full reassignment) two branches later.
+    // Both branches throw TypeError: Assignment to constant variable.
+    // Unlike the stash dialog the throw fires AFTER `cleanupModal.show()`,
+    // so the existing isModalOpen-only test above is a false positive —
+    // the overlay gets the `active` class but the function then throws
+    // and the modal never advances past "Scanning for branches…".
+    // This test asserts the post-open content actually rendered AND that
+    // no errors were emitted on `window.onerror`.
+    it('should render the empty-state cleanup content without throwing', (t) => {
+      const errors = [];
+      const env = setup(t);
+      env.window.addEventListener('error', (e) => errors.push(e.error || e.message));
+      // No branches with !hasRemote → cleanup empty state path
+      env.pushSSE(makeState({
+        branches: [
+          { name: 'main', isLocal: true, hasRemote: true, lastCommitDate: '2025-01-01' },
+        ],
+        currentBranch: 'main',
+      }));
+
+      env.pressKey('d');
+
+      assert.deepEqual(errors, [], 'showCleanup should not throw');
+      assert.ok(env.isModalOpen('cleanup-overlay'), 'Cleanup modal should open');
+      const content = env.document.getElementById('cleanup-content').innerHTML;
+      // After showCleanup completes, the empty branch follows the
+      // "no stale branches found" branch — NOT stuck on "Scanning…".
+      assert.ok(
+        content.includes('No stale branches found'),
+        `cleanup modal should advance past "Scanning…" to the empty-state copy; got: ${content.slice(0, 200)}`
+      );
+      assert.ok(
+        env.document.getElementById('cleanup-done'),
+        'OK button should be wired up in the empty state'
+      );
+    });
+
+    it('should render the populated cleanup content with delete buttons', (t) => {
+      const errors = [];
+      const env = setup(t);
+      env.window.addEventListener('error', (e) => errors.push(e.error || e.message));
+      // One stale local branch (isLocal && !hasRemote && != current)
+      env.pushSSE(makeState({
+        branches: [
+          { name: 'main', isLocal: true, hasRemote: true, lastCommitDate: '2025-01-01' },
+          { name: 'feature/old', isLocal: true, hasRemote: false, lastCommitDate: '2025-01-02' },
+        ],
+        currentBranch: 'main',
+      }));
+
+      env.pressKey('d');
+
+      assert.deepEqual(errors, [], 'showCleanup should not throw');
+      assert.ok(env.isModalOpen('cleanup-overlay'), 'Cleanup modal should open');
+      const content = env.document.getElementById('cleanup-content').innerHTML;
+      assert.ok(
+        content.includes('feature/old'),
+        `cleanup modal should list the stale branch; got: ${content.slice(0, 300)}`
+      );
+      assert.ok(
+        env.document.getElementById('cleanup-safe'),
+        'Safe Delete button should be rendered'
+      );
+      assert.ok(
+        env.document.getElementById('cleanup-force'),
+        'Force Delete button should be rendered'
+      );
+
+      // Click Safe Delete — fires a deleteBranches POST.
+      env.document.getElementById('cleanup-safe').click();
+      const xhr = env.getXhr('/api/action');
+      assert.ok(xhr, 'Safe Delete should POST to /api/action');
+      const body = JSON.parse(xhr._body);
+      assert.equal(body.action, 'deleteBranches');
+      assert.deepEqual(body.payload.branches, ['feature/old']);
+      assert.equal(body.payload.force, false);
+    });
+
     it('should close modal when clicking the overlay background', (t) => {
       const env = setup(t);
       env.pushSSE(makeState({ branches: [] }));

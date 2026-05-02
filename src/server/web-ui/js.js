@@ -1107,7 +1107,7 @@ ${pureFnBlock}
   // ── Branch Cleanup ─────────────────────────────────────────────
   function showCleanup() {
     ui.cleanupMode = true;
-    const html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
+    let html = '<div style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Scanning for branches with deleted remotes...</div>';
     document.getElementById('cleanup-content').innerHTML = html;
     cleanupModal.show();
 
