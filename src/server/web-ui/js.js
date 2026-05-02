@@ -300,7 +300,7 @@ function getDashboardJs() {
     const dot = document.getElementById('connection-dot');
     const badge = document.getElementById('status-badge');
     if (ui.connected) {
-      dot.className = 'connection-dot ui.connected';
+      dot.className = 'connection-dot connected';
       badge.className = 'badge badge-online';
       badge.textContent = 'live';
     } else {
