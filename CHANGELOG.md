@@ -1,3 +1,10 @@
+## [2.3.3](https://github.com/drummel/git-watchtower/compare/v2.3.2...v2.3.3) (2026-05-02)
+
+
+### Bug Fixes
+
+* open the stash dialog without throwing on const reassignment ([154819b](https://github.com/drummel/git-watchtower/commit/154819b30f7dc4e822d3fca19834939a96aee09d)), closes [#4](https://github.com/drummel/git-watchtower/issues/4)
+
 ## [2.3.2](https://github.com/drummel/git-watchtower/compare/v2.3.1...v2.3.2) (2026-05-01)
 
 
