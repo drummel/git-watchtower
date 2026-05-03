@@ -282,14 +282,79 @@ const indicators = {
  * Helper functions for working with ANSI codes
  */
 
+// Match any ECMA-48 CSI sequence: ESC [ <params> <intermediates> <final byte>.
+// final byte is in 0x40-0x7E. Covers SGR (m), cursor movement (A-H), erase
+// (J/K), scroll, mode set/reset (h/l), and everything else terminals
+// recognise via CSI.
+// eslint-disable-next-line no-control-regex
+const CSI_RE = /\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g;
+
+// Match CSI sequences that are NOT SGR (final byte 'm' / 0x6D). Used by the
+// render-safe sanitiser to drop dangerous controls while preserving colour.
+// eslint-disable-next-line no-control-regex
+const NON_SGR_CSI_RE = /\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x6c\x6e-\x7e]/g;
+
+// Match OSC sequences: ESC ] ... terminator (BEL or ESC \). These set
+// terminal title, hyperlinks, etc. — all undesirable in untrusted input.
+// eslint-disable-next-line no-control-regex
+const OSC_RE = /\x1b\][\s\S]*?(?:\x07|\x1b\\)/g;
+
+// Match other 2-byte ESC sequences (Fe codes 0x40-0x5F) excluding CSI ([)
+// and OSC (]) which are handled separately above.
+// eslint-disable-next-line no-control-regex
+const ESC_RE = /\x1b[@-Z\\-_]/g;
+
+// Match dangerous C0 control characters. Whitespace (\t, \n, \r) and ESC
+// (\x1b) are excluded — ESC is consumed by the escape-sequence regexes
+// above, and SGR codes preserved by sanitizeForRender contain it. Bell,
+// BS, VT, FF, SO, SI, DEL, etc. all get stripped.
+// eslint-disable-next-line no-control-regex
+const C0_RE = /[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]/g;
+
 /**
- * Strip ANSI codes from a string
+ * Strip ALL ANSI escape sequences and dangerous C0 control characters.
+ * Use this for measuring display width or for fully sanitising untrusted
+ * input that won't be styled (e.g. JSON pushed to the web dashboard).
+ *
+ * Catches CSI (cursor moves, screen clears, SGR colour), OSC (terminal
+ * title), other 2-byte ESC sequences, and dangerous C0 controls (bell,
+ * backspace, etc). Preserves whitespace (\t, \n, \r).
+ *
  * @param {string} str - String potentially containing ANSI codes
  * @returns {string} String with ANSI codes removed
  */
 function stripAnsi(str) {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return String(str)
+    .replace(OSC_RE, '')
+    .replace(CSI_RE, '')
+    .replace(ESC_RE, '')
+    .replace(C0_RE, '')
+    // Final pass: any stray ESC bytes left over from malformed sequences.
+    // Display surfaces that ask for "no escapes" should never see one.
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b/g, '');
+}
+
+/**
+ * Sanitise a string for safe terminal rendering: strip dangerous escape
+ * sequences (cursor moves, screen clears, OSC terminal-title, bell, etc.)
+ * while PRESERVING SGR colour/style codes so legitimate styling we built
+ * ourselves still renders.
+ *
+ * Use this on any string that came from outside (commit subjects, branch
+ * names, git stderr, PR titles) before it flows to the renderer. A
+ * malicious commit subject containing `\x1b[2J` would otherwise clear the
+ * screen on every render.
+ *
+ * @param {string} str - Untrusted string that will be written to a TTY
+ * @returns {string} String with dangerous escapes removed, SGR preserved
+ */
+function sanitizeForRender(str) {
+  return String(str)
+    .replace(OSC_RE, '')
+    .replace(NON_SGR_CSI_RE, '')
+    .replace(ESC_RE, '')
+    .replace(C0_RE, '');
 }
 
 /**
@@ -302,19 +367,27 @@ function visibleLength(str) {
 }
 
 /**
- * Truncate a string to a maximum visible length, preserving ANSI codes
- * @param {string} str - String to truncate
+ * Truncate a string to a maximum visible length, preserving SGR colour
+ * codes but stripping any other escape sequences (cursor movement, screen
+ * clears, OSC, bell, etc.). This guarantees that even short, non-truncated
+ * strings cannot leak terminal-corrupting escapes to the renderer.
+ *
+ * @param {string} str - String to truncate (may contain SGR + dangerous escapes)
  * @param {number} maxLen - Maximum visible length
  * @param {string} [suffix='…'] - Suffix to append if truncated
  * @returns {string} Truncated string
  */
 function truncate(str, maxLen, suffix = '…') {
-  const visible = stripAnsi(str);
+  // Strip dangerous escapes up front so the fast-path can never return a
+  // raw input with cursor/screen-control sequences in it. SGR survives.
+  const safeStr = sanitizeForRender(str);
+  const visible = stripAnsi(safeStr);
   if (visible.length <= maxLen) {
-    return str;
+    return safeStr;
   }
 
-  // Simple approach: strip ANSI, truncate, add suffix and reset
+  // Long-string path: drop ALL escapes (including SGR), truncate, append
+  // ellipsis + reset. Existing behaviour, kept for layout determinism.
   const truncated = visible.slice(0, maxLen - suffix.length);
   return truncated + suffix + ansi.reset;
 }
@@ -497,6 +570,7 @@ module.exports = {
   generateSparkline,
   indicators,
   stripAnsi,
+  sanitizeForRender,
   visibleLength,
   truncate,
   pad,
