@@ -15,6 +15,7 @@ const {
   generateSparkline,
   indicators,
   stripAnsi,
+  sanitizeForRender,
   visibleLength,
   truncate,
   pad,
@@ -244,6 +245,83 @@ describe('stripAnsi', () => {
       'text'
     );
   });
+
+  // Regression for the audit finding that the old regex
+  // /\x1b\[[0-9;]*m/g only caught SGR codes, leaving cursor and screen
+  // control sequences in place — meaning a malicious commit subject
+  // containing `\x1b[2J` could clear the screen on render.
+
+  it('should remove cursor-movement CSI sequences (A-H)', () => {
+    assert.strictEqual(stripAnsi('a\x1b[5Ab\x1b[Hc'), 'abc');
+  });
+
+  it('should remove screen-clear CSI sequences (J/K)', () => {
+    assert.strictEqual(stripAnsi('hi\x1b[2J\x1b[Kbye'), 'hibye');
+  });
+
+  it('should remove CSI mode set/reset (h/l) including DEC private', () => {
+    assert.strictEqual(stripAnsi('a\x1b[?25lb\x1b[?25hc'), 'abc');
+  });
+
+  it('should remove OSC sequences terminated by BEL', () => {
+    // Common terminal-title set: ESC ] 0 ; <title> BEL
+    assert.strictEqual(stripAnsi('before\x1b]0;evil\x07after'), 'beforeafter');
+  });
+
+  it('should remove OSC sequences terminated by ESC \\', () => {
+    assert.strictEqual(stripAnsi('a\x1b]8;;https://x\x1b\\linkb'), 'alinkb');
+  });
+
+  it('should remove dangerous C0 controls (bell, BS, DEL) but keep whitespace', () => {
+    assert.strictEqual(stripAnsi('a\x07b\x08c\x7fd'), 'abcd');
+    assert.strictEqual(stripAnsi('tab\there\nnewline\rcr'), 'tab\there\nnewline\rcr');
+  });
+
+  it('should accept non-string inputs by coercion', () => {
+    assert.strictEqual(stripAnsi(null), 'null');
+    assert.strictEqual(stripAnsi(undefined), 'undefined');
+    assert.strictEqual(stripAnsi(42), '42');
+  });
+});
+
+describe('sanitizeForRender', () => {
+  it('should preserve SGR colour/style codes', () => {
+    const styled = `${ansi.red}hello${ansi.reset}`;
+    assert.strictEqual(sanitizeForRender(styled), styled);
+  });
+
+  it('should preserve 256-colour and RGB SGR codes', () => {
+    const styled = `${ansi.fg256(196)}red${ansi.reset}${ansi.fgRgb(0, 255, 0)}grn${ansi.reset}`;
+    assert.strictEqual(sanitizeForRender(styled), styled);
+  });
+
+  it('should drop cursor-movement CSI while keeping SGR', () => {
+    const input = `${ansi.red}hello${ansi.reset}\x1b[2A\x1b[Hworld`;
+    const expected = `${ansi.red}hello${ansi.reset}world`;
+    assert.strictEqual(sanitizeForRender(input), expected);
+  });
+
+  it('should drop screen-clear sequences', () => {
+    assert.strictEqual(sanitizeForRender('hi\x1b[2Jbye'), 'hibye');
+  });
+
+  it('should drop OSC terminal-title sequences', () => {
+    assert.strictEqual(sanitizeForRender('safe\x1b]0;hijack\x07tail'), 'safetail');
+  });
+
+  it('should drop dangerous C0 controls but keep whitespace', () => {
+    assert.strictEqual(sanitizeForRender('a\x07b\nc\td'), 'ab\nc\td');
+  });
+
+  it('should leave plain strings alone', () => {
+    assert.strictEqual(sanitizeForRender('plain text'), 'plain text');
+  });
+
+  it('should handle empty and non-string input', () => {
+    assert.strictEqual(sanitizeForRender(''), '');
+    assert.strictEqual(sanitizeForRender(null), 'null');
+    assert.strictEqual(sanitizeForRender(undefined), 'undefined');
+  });
 });
 
 describe('visibleLength', () => {
@@ -300,6 +378,54 @@ describe('truncate', () => {
   it('should handle empty string', () => {
     const result = truncate('', 10);
     assert.strictEqual(stripAnsi(result), '');
+  });
+
+  // Regression for the audit finding: truncate's fast-path used to return
+  // `str` unchanged whenever it fit, leaking dangerous escape sequences
+  // straight into the renderer. A malicious commit subject containing
+  // `\x1b[2J` could clear the terminal screen on every render.
+
+  it('should strip cursor-movement escapes even on the short-string fast path', () => {
+    const malicious = 'safe\x1b[2A\x1b[Hpayload';
+    const result = truncate(malicious, 100);
+    assert.ok(!result.includes('\x1b['), `expected no CSI in: ${JSON.stringify(result)}`);
+    assert.strictEqual(result, 'safepayload');
+  });
+
+  it('should strip screen-clear escapes even on the short-string fast path', () => {
+    const evil = '\x1b[2J\x1b[Hgotcha';
+    const result = truncate(evil, 100);
+    assert.ok(!result.includes('\x1b'), `expected no escapes in: ${JSON.stringify(result)}`);
+    assert.strictEqual(result, 'gotcha');
+  });
+
+  it('should strip OSC sequences even on the short-string fast path', () => {
+    const evil = 'before\x1b]0;hijacked\x07after';
+    const result = truncate(evil, 100);
+    assert.ok(!result.includes('\x1b]'), `expected no OSC in: ${JSON.stringify(result)}`);
+    assert.strictEqual(result, 'beforeafter');
+  });
+
+  it('should strip bell/BS/DEL controls even on the short-string fast path', () => {
+    const result = truncate('a\x07b\x08c\x7fd', 100);
+    assert.strictEqual(result, 'abcd');
+  });
+
+  it('should preserve SGR colour codes on the short-string fast path', () => {
+    const styled = `${ansi.red}hi${ansi.reset}`;
+    const result = truncate(styled, 100);
+    assert.strictEqual(result, styled, 'colour codes should survive');
+    assert.strictEqual(stripAnsi(result), 'hi');
+  });
+
+  it('should also strip dangerous escapes in long inputs that hit truncation', () => {
+    // Truncation already strips ANSI in the long-path output; ensure the
+    // pre-truncation sanitisation still catches CSI/OSC properly so the
+    // visible-length math is correct.
+    const evil = 'aaa\x1b[2Jbbbccc\x1b]0;t\x07ddd';
+    const result = truncate(evil, 5);
+    // After sanitisation visible content is "aaabbbcccddd"; 5 chars + ellipsis
+    assert.strictEqual(result, 'aaab…' + ansi.reset);
   });
 });
 

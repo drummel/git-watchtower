@@ -859,7 +859,7 @@ let verySlowFetchWarningShown = false;
 let pollIntervalId = null;
 
 // ANSI escape codes and box drawing imported from src/ui/ansi.js
-const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
+const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, sanitizeForRender, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
 
 // Error detection utilities imported from src/utils/errors.js
 const { isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
@@ -1111,10 +1111,16 @@ function getCasinoMessage(type) {
 function addLog(message, type = 'info') {
   const icons = { info: '○', success: '✓', warning: '●', error: '✗', update: '⟳' };
   const colors = { info: 'white', success: 'green', warning: 'yellow', error: 'red', update: 'cyan' };
-  // Collapse any whitespace (newlines, tabs, CRs) into a single space so that
-  // multi-line content (e.g. git stderr from a failed auto-pull) cannot leak
-  // cursor movement into the rendered box and corrupt the surrounding UI.
-  const safeMessage = String(message == null ? '' : message).replace(/\s+/g, ' ').trim();
+  // Collapse any whitespace (newlines, tabs, CRs) into a single space, then
+  // strip dangerous escape sequences (cursor moves, screen clears, OSC,
+  // bell, etc.). git stderr and remote git output regularly contain ANSI
+  // colour AND raw control codes; without sanitising, a colourised
+  // `git fetch` error or a malicious commit subject can corrupt the
+  // rendered box. SGR colour codes survive — sanitizeForRender preserves
+  // them so any styling we want stays.
+  const safeMessage = sanitizeForRender(
+    String(message == null ? '' : message).replace(/\s+/g, ' ').trim()
+  );
   const entry = {
     message: safeMessage, type,
     timestamp: new Date().toLocaleTimeString(),
