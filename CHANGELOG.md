@@ -1,3 +1,10 @@
+## [2.3.7](https://github.com/drummel/git-watchtower/compare/v2.3.6...v2.3.7) (2026-05-03)
+
+
+### Bug Fixes
+
+* stop installing phantom timers in stopSlotReels after disable ([d3fa50d](https://github.com/drummel/git-watchtower/commit/d3fa50d20ac0dd44d0aef3dbaf07a1613f7a0df4))
+
 ## [2.3.6](https://github.com/drummel/git-watchtower/compare/v2.3.5...v2.3.6) (2026-05-03)
 
 
