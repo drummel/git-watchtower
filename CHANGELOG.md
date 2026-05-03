@@ -1,3 +1,10 @@
+## [2.3.6](https://github.com/drummel/git-watchtower/compare/v2.3.5...v2.3.6) (2026-05-03)
+
+
+### Bug Fixes
+
+* sanitise dangerous ANSI escapes in untrusted strings ([b7fcd5f](https://github.com/drummel/git-watchtower/commit/b7fcd5f9451b335a782a447508e8550a30cb48e8)), closes [#1](https://github.com/drummel/git-watchtower/issues/1)
+
 ## [2.3.5](https://github.com/drummel/git-watchtower/compare/v2.3.4...v2.3.5) (2026-05-02)
 
 
