@@ -336,6 +336,60 @@ describe('disable() slot cleanup', () => {
       'the old disable()ed session\'s 2s timeout fired and clobbered the new spin');
     casino.disable();
   });
+
+  // Regression for the audit finding: the bin's pollGitChanges() captures
+  // `casinoOn` once at the top and continues using the snapshot for the
+  // rest of the poll. If the user toggles casino mode off mid-poll, the
+  // post-poll `stopSlotReels(true, render, winLevel)` call still fires
+  // — and used to install a fresh slotResultInterval that ran for ~3s,
+  // calling render() ~20 times. Display getters were already guarded,
+  // so the user saw nothing, but render() burned redraws.
+  it('stopSlotReels(true, …) called after disable does not invoke renderCallback', async () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    casino.disable();
+
+    // Simulate the bin's race: poll completes after disable and calls
+    // stopSlotReels with hadUpdates=true (the win path that schedules
+    // a 150ms × ~20-frame flash interval).
+    let callbackInvocations = 0;
+    casino.stopSlotReels(
+      true,
+      () => { callbackInvocations++; },
+      { key: 'small', label: 'WIN', color: '\x1b[32m' }
+    );
+
+    // Wait long enough for several frames of the now-non-existent interval.
+    await new Promise((r) => setTimeout(r, 500));
+
+    assert.strictEqual(
+      callbackInvocations,
+      0,
+      'stopSlotReels(true, …) post-disable installed a phantom interval that fired render()'
+    );
+    // Defense-in-depth: also confirm display getters stay clean.
+    assert.strictEqual(casino.isSlotsActive(), false);
+    assert.strictEqual(casino.getSlotReelDisplay(), '');
+    assert.strictEqual(casino.getSlotResultLabel(), null);
+  });
+
+  it('stopSlotReels(false, …) called after disable does not schedule the 2s clear timer', async () => {
+    casino.enable();
+    casino.startSlotReels(() => {});
+    casino.disable();
+
+    let callbackInvocations = 0;
+    casino.stopSlotReels(false, () => { callbackInvocations++; });
+
+    // The no-win path schedules a setTimeout(..., 2000). Wait past it.
+    await new Promise((r) => setTimeout(r, 2050));
+
+    assert.strictEqual(
+      callbackInvocations,
+      0,
+      'stopSlotReels(false, …) post-disable scheduled a phantom 2s clear timer'
+    );
+  });
 });
 
 describe('disable() loss animation cleanup', () => {

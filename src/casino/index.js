@@ -283,6 +283,16 @@ function startSlotReels(renderCallback) {
  * @param {Object|null} winLevel - The win level object from getWinLevel()
  */
 function stopSlotReels(hadUpdates = false, renderCallback = null, winLevel = null) {
+  // No-op when casino mode is off. The bin's polling path captures
+  // `casinoOn` once at the top of pollGitChanges and continues to use that
+  // snapshot for the rest of the cycle, so a poll completing AFTER the
+  // user toggled casino off would otherwise install a fresh
+  // slotResultInterval that fires render() ~20× over the next 3s. The
+  // display getters are already guarded by `casinoEnabled`, so the user
+  // sees nothing — but render() still burns full-screen redraws and the
+  // interval keeps a closure alive. Drop the call cleanly here instead.
+  if (!casinoEnabled) return;
+
   if (slotReelInterval) {
     clearInterval(slotReelInterval);
     slotReelInterval = null;
