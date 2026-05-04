@@ -7,6 +7,7 @@
  */
 
 const { ansi, box } = require('../ui/ansi');
+const sounds = require('./sounds');
 
 // ============================================================================
 // Casino Mode State
@@ -117,6 +118,11 @@ function disable() {
   // tests that re-use the casino module saw the previous test's callback
   // persist into the next setRenderCallback assignment.
   marqueeCallback = null;
+  // Cancel any pending sound timeouts (jackpot bell chains, multi-play
+  // mega-jackpot files) so audio doesn't continue after the user
+  // toggled casino mode off — and so child processes from the file-play
+  // path don't get spawned by a setTimeout that fires after shutdown.
+  sounds.cancelAll();
 }
 
 /**

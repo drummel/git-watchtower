@@ -9,6 +9,44 @@ const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+/**
+ * Pending setTimeout handles for the multi-bell / multi-play chains used
+ * by playJackpot and playMegaJackpot. Tracked so casino.disable() (and
+ * shutdown) can cancel any in-flight chain instead of letting up to ~600
+ * ms of post-disable audio leak through.
+ * @type {Set<NodeJS.Timeout>}
+ */
+const _pendingTimeouts = new Set();
+
+/**
+ * Schedule a callback like setTimeout, but auto-track the handle so it
+ * can be cancelled by cancelAll() and auto-removes itself on fire.
+ * @param {Function} fn
+ * @param {number} delay
+ * @returns {NodeJS.Timeout}
+ * @private
+ */
+function _scheduleTracked(fn, delay) {
+  const handle = setTimeout(() => {
+    _pendingTimeouts.delete(handle);
+    try { fn(); } catch (e) { /* sounds are optional */ }
+  }, delay);
+  _pendingTimeouts.add(handle);
+  return handle;
+}
+
+/**
+ * Cancel every pending sound timeout. Idempotent. Called from
+ * casino.disable() so a jackpot fired moments before the user toggled
+ * casino mode off doesn't keep playing afterward.
+ */
+function cancelAll() {
+  for (const handle of _pendingTimeouts) {
+    clearTimeout(handle);
+  }
+  _pendingTimeouts.clear();
+}
+
 // ============================================================================
 // Sound Configuration
 // ============================================================================
@@ -133,10 +171,11 @@ function playJackpot() {
   if (soundPath) {
     playFile(soundPath, VOLUME.jackpot);
   } else {
-    // Multiple bells for jackpot!
+    // Multiple bells for jackpot! Tracked so casino.disable() can
+    // cancel mid-chain — see _scheduleTracked / cancelAll.
     playBell();
-    setTimeout(playBell, 200);
-    setTimeout(playBell, 400);
+    _scheduleTracked(playBell, 200);
+    _scheduleTracked(playBell, 400);
   }
 }
 
@@ -146,14 +185,14 @@ function playJackpot() {
 function playMegaJackpot() {
   const soundPath = getSoundPath('jackpot');
   if (soundPath) {
-    // Play jackpot sound multiple times
+    // Play jackpot sound multiple times. Tracked for cancellation.
     playFile(soundPath, VOLUME.jackpot);
-    setTimeout(() => playFile(soundPath, VOLUME.jackpot), 300);
-    setTimeout(() => playFile(soundPath, VOLUME.jackpot), 600);
+    _scheduleTracked(() => playFile(soundPath, VOLUME.jackpot), 300);
+    _scheduleTracked(() => playFile(soundPath, VOLUME.jackpot), 600);
   } else {
     // Lots of bells!
     for (let i = 0; i < 5; i++) {
-      setTimeout(playBell, i * 150);
+      _scheduleTracked(playBell, i * 150);
     }
   }
 }
@@ -240,6 +279,7 @@ module.exports = {
   playSpin,
   playLoss,
   playForWinLevel,
+  cancelAll,
   getSoundPath,
   SOUNDS_DIR,
 };
