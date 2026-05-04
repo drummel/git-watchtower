@@ -342,8 +342,69 @@ describe('visibleLength', () => {
     assert.strictEqual(visibleLength(''), 0);
   });
 
-  it('should handle unicode characters', () => {
-    assert.strictEqual(visibleLength('Hello 世界'), 8);
+  it('should handle unicode characters by terminal display width', () => {
+    // CJK ideographs render as 2 columns each: "Hello "(6) + 世(2) + 界(2) = 10.
+    assert.strictEqual(visibleLength('Hello 世界'), 10);
+  });
+
+  // Regression for the audit finding: visibleLength used `str.length`
+  // (UTF-16 code units), so wide characters and emoji misaligned every
+  // sparkline / badge / box border in the renderer.
+
+  it('should count CJK ideographs as 2 columns each', () => {
+    assert.strictEqual(visibleLength('中文'), 4);
+    assert.strictEqual(visibleLength('日本語'), 6);
+  });
+
+  it('should count Hangul syllables as 2 columns each', () => {
+    assert.strictEqual(visibleLength('한글'), 4);
+  });
+
+  it('should count fullwidth forms as 2 columns each', () => {
+    assert.strictEqual(visibleLength('ＡＢＣ'), 6); // U+FF21..FF23
+  });
+
+  it('should count basic emoji as 2 columns', () => {
+    assert.strictEqual(visibleLength('🎉'), 2);
+    assert.strictEqual(visibleLength('hi🎉'), 4);
+  });
+
+  it('should clamp ZWJ emoji clusters to 2 columns regardless of code-point count', () => {
+    // 👨‍👩‍👧 is 5 code points / 13 UTF-16 units / 1 grapheme cluster.
+    // Terminals render it as a single 2-column glyph.
+    assert.strictEqual(visibleLength('👨‍👩‍👧'), 2);
+  });
+
+  it('should treat regional-indicator flag pairs as 2 columns', () => {
+    assert.strictEqual(visibleLength('🇺🇸'), 2);
+  });
+
+  it('should treat emoji + skin-tone modifier as 2 columns', () => {
+    assert.strictEqual(visibleLength('👋🏽'), 2);
+  });
+
+  it('should treat combining marks as 0 columns', () => {
+    // e (1) + combining acute (0) = 1 column total.
+    assert.strictEqual(visibleLength('é'), 1);
+    assert.strictEqual(visibleLength('café'), 4);
+  });
+
+  it('should ignore variation selectors (e.g. emoji presentation FE0F)', () => {
+    // ❤ (U+2764, narrow) + FE0F (emoji presentation, 0-width).
+    // The sequence should NOT be counted as more than the base char.
+    assert.strictEqual(visibleLength('❤️'), 1);
+  });
+
+  it('should still strip ANSI before measuring (combined regression)', () => {
+    assert.strictEqual(visibleLength('\x1b[31m中文\x1b[0m'), 4);
+    assert.strictEqual(visibleLength('\x1b[2J\x1b[H中文'), 4);
+  });
+
+  it('ASCII fast path should still return correct length', () => {
+    // The renderer hits this on every short branch name — make sure the
+    // fast-path agrees with the slow path for plain ASCII.
+    assert.strictEqual(visibleLength('hello-world'), 11);
+    assert.strictEqual(visibleLength(''), 0);
   });
 });
 
@@ -426,6 +487,47 @@ describe('truncate', () => {
     const result = truncate(evil, 5);
     // After sanitisation visible content is "aaabbbcccddd"; 5 chars + ellipsis
     assert.strictEqual(result, 'aaab…' + ansi.reset);
+  });
+
+  // Regression for the audit finding #10: truncate compared raw `.length`
+  // (UTF-16 code units) instead of display width and sliced by code units
+  // mid-grapheme. CJK and emoji branch names overflowed their column budget.
+
+  it('should truncate CJK strings to fit a column budget', () => {
+    // "中文测试" = 4 code units, 8 columns. Budget 4 (incl. ellipsis = 1) → 中(2) + …(1) = 3 cols.
+    const result = truncate('中文测试', 4);
+    assert.ok(visibleLength(result) <= 4, `width ${visibleLength(result)} > 4`);
+    assert.ok(stripAnsi(result).includes('…'));
+    assert.ok(stripAnsi(result).startsWith('中'));
+  });
+
+  it('should not truncate CJK strings that already fit', () => {
+    // "中文" = 4 columns; budget 4 should keep it as-is.
+    const result = truncate('中文', 4);
+    assert.strictEqual(stripAnsi(result), '中文');
+  });
+
+  it('should not split a wide grapheme mid-glyph', () => {
+    // Truncating "中文" to 3 cols should yield "中" (2 cols) + ellipsis,
+    // not half of 文.
+    const result = truncate('中文', 3);
+    assert.strictEqual(stripAnsi(result), '中…');
+  });
+
+  it('should keep emoji clusters intact when they fit, drop them when they do not', () => {
+    // "hi🎉bye" widths: h(1) i(1) 🎉(2) b(1) y(1) e(1) = 7. Budget 5 (incl. ellipsis 1) = 4.
+    // h+i+🎉=4, then ellipsis = 5 cols. Result should be "hi🎉…".
+    const result = truncate('hi🎉bye', 5);
+    assert.strictEqual(stripAnsi(result), 'hi🎉…');
+  });
+
+  it('should treat ZWJ family clusters as 2 cols and never split them', () => {
+    // 👨‍👩‍👧 is a single 2-column cluster. With budget 3 we should fit cluster + ellipsis.
+    const result = truncate('a👨‍👩‍👧b', 3);
+    assert.ok(visibleLength(result) <= 3);
+    // Must NOT contain a half-cluster (one of the constituent code points alone).
+    // Just check no orphan ZWJ at the end.
+    assert.ok(!stripAnsi(result).endsWith('‍'), 'should not orphan a ZWJ');
   });
 });
 
