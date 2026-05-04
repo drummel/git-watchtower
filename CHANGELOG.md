@@ -1,3 +1,10 @@
+## [2.3.13](https://github.com/drummel/git-watchtower/compare/v2.3.12...v2.3.13) (2026-05-04)
+
+
+### Bug Fixes
+
+* set a Content-Security-Policy on the dashboard HTML response ([9abf6c7](https://github.com/drummel/git-watchtower/commit/9abf6c79bfbf6bdcc5b3b114c40451e7af4ae548))
+
 ## [2.3.12](https://github.com/drummel/git-watchtower/compare/v2.3.11...v2.3.12) (2026-05-04)
 
 
