@@ -1,3 +1,10 @@
+## [2.3.8](https://github.com/drummel/git-watchtower/compare/v2.3.7...v2.3.8) (2026-05-04)
+
+
+### Bug Fixes
+
+* stop defeating SSE dedup with random casino stats fields ([3d4e838](https://github.com/drummel/git-watchtower/commit/3d4e8389887e3da849a921006412f04e72582d5c))
+
 ## [2.3.7](https://github.com/drummel/git-watchtower/compare/v2.3.6...v2.3.7) (2026-05-03)
 
 
