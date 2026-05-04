@@ -1,3 +1,10 @@
+## [2.3.9](https://github.com/drummel/git-watchtower/compare/v2.3.8...v2.3.9) (2026-05-04)
+
+
+### Bug Fixes
+
+* stop hardcoding optionStartIdx in renderUpdateModal ([1195dea](https://github.com/drummel/git-watchtower/commit/1195dea4a54df6abe796ac5da9a12751fea558c0))
+
 ## [2.3.8](https://github.com/drummel/git-watchtower/compare/v2.3.7...v2.3.8) (2026-05-04)
 
 
