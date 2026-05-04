@@ -875,6 +875,50 @@ describe('dashboard JS — DOM behavior', () => {
       assert.ok(text.includes('12'), 'should show dopamine hits');
     });
 
+    // Regression for the audit finding #8: the SSE payload no longer ships
+    // luckMeter / houseEdge / vibesQuality (those fields tick on every
+    // call and defeated the lastPushedJson dedup). The dashboard must
+    // recompute them locally so the bar still renders fully even when the
+    // server omits them.
+    it('should still render Edge / Luck / Vibes when casinoStats omits them', (t) => {
+      const env = setup(t);
+      env.pushSSE(makeState({
+        casinoModeEnabled: true,
+        casinoStats: stubCasinoStats({
+          totalLinesAdded: 10,
+          totalLinesDeleted: 3,
+          totalLines: 13,
+          totalPolls: 4,
+          netWinnings: 9,
+          dopamineHits: 6,
+          consecutivePolls: 2,
+          sessionDuration: '1m',
+          // The volatile decorative fields are intentionally omitted
+          // — exercise the client-side fallback that recomputes them.
+          luckMeter: undefined,
+          houseEdge: undefined,
+          vibesQuality: undefined,
+          timeSinceLastHit: undefined,
+        }),
+      }));
+
+      const bar = env.document.getElementById('dashboard-stats');
+      const text = bar.textContent;
+      assert.ok(/\d+%/.test(text), 'Edge or Luck percentages should render with computed values');
+      // Two %s: one for Edge, one for Luck. Both numeric, both 0-100.
+      const percentages = (text.match(/(\d+)%/g) || []).map((p) => parseInt(p, 10));
+      assert.ok(percentages.length >= 2, `expected at least two percentage readouts, got ${percentages.length}: ${percentages.join(',')}`);
+      for (const p of percentages) {
+        assert.ok(p >= 0 && p <= 100, `percentage out of range: ${p}`);
+      }
+      // The bar should still render every value cell (none should be empty).
+      const valueCells = Array.from(bar.querySelectorAll('.stat-v'));
+      assert.ok(valueCells.length >= 5, `expected at least 5 stat values, got ${valueCells.length}`);
+      for (const cell of valueCells) {
+        assert.ok(cell.textContent.length > 0, 'each stat value cell must be non-empty');
+      }
+    });
+
     it('should fall back to plain session stats when casino is off', (t) => {
       const env = setup(t);
       env.pushSSE(makeState({

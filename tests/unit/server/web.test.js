@@ -271,18 +271,48 @@ describe('WebDashboardServer', () => {
       const cs = server.getSerializableState().casinoStats;
 
       assert.ok(cs, 'casinoStats should be present when enabled');
-      // The shape comes straight from src/casino/index.js#getStats — guard
-      // the fields the web UI reads so a casino refactor surfaces here.
+      // The shape comes from src/casino/index.js#getSerializableStats —
+      // STABLE counters and stable derived fields are included.
       assert.equal(typeof cs.totalLinesAdded, 'number');
       assert.equal(typeof cs.totalLinesDeleted, 'number');
       assert.equal(typeof cs.totalLines, 'number');
       assert.equal(typeof cs.totalPolls, 'number');
       assert.equal(typeof cs.netWinnings, 'number');
-      assert.equal(typeof cs.houseEdge, 'number');
-      assert.equal(typeof cs.luckMeter, 'number');
       assert.equal(typeof cs.dopamineHits, 'number');
       assert.equal(typeof cs.sessionDuration, 'string');
-      assert.equal(typeof cs.vibesQuality, 'string');
+    });
+
+    it('should EXCLUDE volatile decorative casinoStats fields from the SSE payload', () => {
+      store.setState({ casinoModeEnabled: true });
+      server = new WebDashboardServer({ store });
+      const cs = server.getSerializableState().casinoStats;
+
+      // These fields are random (Math.random) or clock-driven (Date.now()/3000)
+      // and would defeat the lastPushedJson dedup if pushed every 500ms.
+      // The dashboard recomputes them client-side at render time.
+      assert.equal(cs.luckMeter, undefined, 'luckMeter must not appear in SSE payload');
+      assert.equal(cs.houseEdge, undefined, 'houseEdge must not appear in SSE payload');
+      assert.equal(cs.vibesQuality, undefined, 'vibesQuality must not appear in SSE payload');
+      assert.equal(cs.timeSinceLastHit, undefined, 'timeSinceLastHit must not appear in SSE payload');
+    });
+
+    it('should produce identical JSON for getSerializableState across consecutive calls when state is unchanged', () => {
+      store.setState({ casinoModeEnabled: true });
+      server = new WebDashboardServer({ store });
+
+      const samples = [];
+      for (let i = 0; i < 5; i++) {
+        samples.push(JSON.stringify(server.getSerializableState()));
+      }
+      // The whole point of dropping the volatile decorative fields: when
+      // nothing's changed in the underlying store, the JSON payload is
+      // identical and `_pushState` will dedup it.
+      const distinct = new Set(samples);
+      assert.equal(
+        distinct.size,
+        1,
+        `expected 1 distinct payload, got ${distinct.size}. Random/clock fields are leaking back into the SSE payload.`
+      );
     });
   });
 

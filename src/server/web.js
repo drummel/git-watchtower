@@ -147,8 +147,12 @@ class WebDashboardServer {
       // the mode on, so the web dashboard can render the same winnings box
       // the terminal does. Null when disabled — keeps payload small and
       // avoids ticking Math.random()/Date.now() into every SSE push when
-      // nobody's asked for the effect.
-      casinoStats: s.casinoModeEnabled ? casino.getStats() : null,
+      // nobody's asked for the effect. We use `getSerializableStats` (not
+      // the full getStats) so the random/clock-driven decorative fields
+      // (luckMeter, houseEdge, vibesQuality, timeSinceLastHit) don't
+      // defeat the lastPushedJson dedup — the dashboard recomputes them
+      // client-side from the stable counters that ARE in the payload.
+      casinoStats: s.casinoModeEnabled ? casino.getSerializableStats() : null,
       projectName: s.projectName,
 
       // Activity
