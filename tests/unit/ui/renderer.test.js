@@ -1216,4 +1216,58 @@ describe('renderUpdateModal', () => {
     });
     assert.ok(text.includes('Dismiss'), 'Expected dismiss hint in modal');
   });
+
+  // Regression for the audit finding: optionStartIdx was hardcoded to 7
+  // (matching the line count above by coincidence) AND was shadowed by a
+  // correctly-computed value scoped to the `else` block. Future copy edits
+  // above the option block would have silently desynced the highlight.
+  // The fix lifts optionStartIdx to a single dynamic computation.
+
+  it('should highlight the first option when updateModalSelectedIndex is 0', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+      updateModalSelectedIndex: 0,
+    });
+    // Cursor marker is ▸ followed by space
+    assert.ok(
+      text.includes('▸ Update & restart'),
+      'Expected cursor on "Update & restart" when selectedIndex=0'
+    );
+    assert.ok(
+      !text.includes('▸ Show update command'),
+      'Cursor should NOT be on "Show update command" when selectedIndex=0'
+    );
+  });
+
+  it('should highlight the second option when updateModalSelectedIndex is 1', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+      updateModalSelectedIndex: 1,
+    });
+    assert.ok(
+      text.includes('▸ Show update command'),
+      'Expected cursor on "Show update command" when selectedIndex=1'
+    );
+    assert.ok(
+      !text.includes('▸ Update & restart'),
+      'Cursor should NOT be on "Update & restart" when selectedIndex=1'
+    );
+  });
+
+  it('should not render any selectable cursor when updateInProgress', () => {
+    const { text } = collectState(renderUpdateModal, {
+      updateAvailable: '2.5.0',
+      updateModalVisible: true,
+      updateInProgress: true,
+      updateModalSelectedIndex: 0,
+    });
+    // optionStartIdx is -1 in this branch — neither option line should
+    // render with a cursor.
+    assert.ok(!text.includes('▸ Update & restart'),
+      'No cursor should be drawn while updateInProgress');
+    assert.ok(!text.includes('▸ Show update command'),
+      'No cursor should be drawn while updateInProgress');
+  });
 });
