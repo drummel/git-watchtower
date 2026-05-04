@@ -1,3 +1,10 @@
+## [2.3.11](https://github.com/drummel/git-watchtower/compare/v2.3.10...v2.3.11) (2026-05-04)
+
+
+### Bug Fixes
+
+* count display columns, not UTF-16 code units, in visibleLength ([4860e73](https://github.com/drummel/git-watchtower/commit/4860e735a84a6fbc21f4771831c963ba16b91290))
+
 ## [2.3.10](https://github.com/drummel/git-watchtower/compare/v2.3.9...v2.3.10) (2026-05-04)
 
 
