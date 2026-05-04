@@ -37,6 +37,16 @@ const MAX_PORT_RETRIES = 20;
 const SSE_KEEPALIVE_INTERVAL = 15000;
 
 /**
+ * Maximum number of consecutive periodic-state pushes a stalled client (one
+ * whose internal write buffer hasn't drained) is allowed to miss before we
+ * force-close it. At a 500 ms STATE_PUSH_INTERVAL this gives roughly 30 s
+ * of grace before eviction — enough for a paused tab to wake up, short
+ * enough that a permanently dead socket can't pin memory or keep
+ * `clientCount` misleadingly high.
+ */
+const MAX_STALLED_PUSHES = 60;
+
+/**
  * Actions the web dashboard is allowed to POST to /api/action. Every entry
  * here MUST be matched by a `case` in `handleWebAction` in bin/git-watchtower.js
  * — `tests/unit/server/web.test.js` enforces that link so a future addition
@@ -85,6 +95,15 @@ class WebDashboardServer {
 
     /** @type {Set<import('net').Socket>} Raw TCP sockets, tracked so stop() can force-close them */
     this._sockets = new Set();
+
+    /**
+     * Per-client count of consecutive state pushes skipped because the
+     * client's internal buffer hasn't drained. Reset to 0 on a successful
+     * write; a paused tab whose count crosses MAX_STALLED_PUSHES gets
+     * evicted to bound memory.
+     * @type {WeakMap<import('http').ServerResponse, number>}
+     */
+    this._stalledPushes = new WeakMap();
 
     // Multi-project support (populated by coordinator)
     /** @type {Map<string, Object>} */
@@ -341,11 +360,9 @@ class WebDashboardServer {
    */
   flash(text, type) {
     const data = JSON.stringify({ text, type: type || 'info' });
+    const message = 'event: flash\ndata: ' + data + '\n\n';
     for (const client of this.clients) {
-      try {
-        client.write('event: flash\n');
-        client.write('data: ' + data + '\n\n');
-      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
+      this._writeToClient(client, message);
     }
   }
 
@@ -355,11 +372,9 @@ class WebDashboardServer {
    */
   sendPreview(data) {
     const json = JSON.stringify(data);
+    const message = 'event: preview\ndata: ' + json + '\n\n';
     for (const client of this.clients) {
-      try {
-        client.write('event: preview\n');
-        client.write('data: ' + json + '\n\n');
-      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
+      this._writeToClient(client, message);
     }
   }
 
@@ -369,12 +384,49 @@ class WebDashboardServer {
    */
   sendActionResult(result) {
     const json = JSON.stringify(result);
+    const message = 'event: actionResult\ndata: ' + json + '\n\n';
     for (const client of this.clients) {
-      try {
-        client.write('event: actionResult\n');
-        client.write('data: ' + json + '\n\n');
-      } catch (e) { /* SSE client disconnected — will be pruned when its response closes */ }
+      this._writeToClient(client, message);
     }
+  }
+
+  /**
+   * Write a frame to a single SSE client, respecting backpressure.
+   * Skips the write when the client's internal buffer hasn't drained
+   * (`writableNeedDrain`), so a paused tab can't cause unbounded
+   * server-side queueing. Drops the client on synchronous write errors
+   * (most often "write after end" on an abruptly-closed socket).
+   *
+   * @param {import('http').ServerResponse} client
+   * @param {string} message - Pre-formatted SSE frame (event + data + \n\n)
+   * @returns {boolean} `true` if the write was issued, `false` if skipped or failed
+   * @private
+   */
+  _writeToClient(client, message) {
+    if (client.writableNeedDrain) {
+      // Client hasn't acknowledged earlier writes — skip this frame so
+      // backpressure doesn't accumulate. The next push retries naturally.
+      return false;
+    }
+    try {
+      client.write(message);
+      this._stalledPushes.set(client, 0);
+      return true;
+    } catch (e) {
+      this._dropClient(client);
+      return false;
+    }
+  }
+
+  /**
+   * Force-close and forget a client. Idempotent.
+   * @param {import('http').ServerResponse} client
+   * @private
+   */
+  _dropClient(client) {
+    try { client.end(); } catch (_) { /* already torn down */ }
+    this.clients.delete(client);
+    this._stalledPushes.delete(client);
   }
 
   /**
@@ -586,8 +638,22 @@ class WebDashboardServer {
 
     const message = 'event: state\ndata: ' + json + '\n\n';
     for (const client of this.clients) {
+      if (client.writableNeedDrain) {
+        // Backpressure: client's internal buffer hasn't drained from a
+        // previous write. Track how many consecutive periodic pushes
+        // we've skipped so a paused/dead tab can't accumulate stalled
+        // writes forever. The non-periodic emitters (flash/preview/
+        // actionResult) skip silently — only `_pushState` evicts.
+        const n = (this._stalledPushes.get(client) || 0) + 1;
+        this._stalledPushes.set(client, n);
+        if (n >= MAX_STALLED_PUSHES) {
+          this._dropClient(client);
+        }
+        continue;
+      }
       try {
         client.write(message);
+        this._stalledPushes.set(client, 0);
       } catch (e) {
         // Write failed — proactively prune the dead client instead of
         // waiting for req.on('close') to fire. On abrupt socket resets
@@ -595,8 +661,7 @@ class WebDashboardServer {
         // hit the same failed write, accumulating exception work and
         // keeping clientCount misleadingly high. Set.delete during
         // iteration is safe; the for-of iterator handles it.
-        try { client.end(); } catch (_) { /* already torn down */ }
-        this.clients.delete(client);
+        this._dropClient(client);
       }
     }
   }
@@ -606,5 +671,6 @@ module.exports = {
   WebDashboardServer,
   DEFAULT_WEB_PORT,
   STATE_PUSH_INTERVAL,
+  MAX_STALLED_PUSHES,
   ALLOWED_ACTIONS,
 };

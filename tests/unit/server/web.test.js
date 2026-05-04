@@ -11,6 +11,7 @@ const {
   WebDashboardServer,
   DEFAULT_WEB_PORT,
   STATE_PUSH_INTERVAL,
+  MAX_STALLED_PUSHES,
   ALLOWED_ACTIONS,
 } = require('../../../src/server/web');
 const { Store } = require('../../../src/state/store');
@@ -1134,6 +1135,138 @@ describe('WebDashboardServer', () => {
       assert.equal(res.status, 200);
       assert.equal(onActionCalls, 1);
       assert.equal(sendCommandCalls, 0, 'no routing without a known local project ID');
+    });
+  });
+
+  describe('SSE backpressure handling', () => {
+    /**
+     * Build a minimal mock of an http.ServerResponse for SSE testing.
+     * Honours `writableNeedDrain` (so we can exercise backpressure paths)
+     * and records every write so tests can count frames received.
+     */
+    function makeMockClient() {
+      return {
+        writableNeedDrain: false,
+        writes: [],
+        ended: false,
+        write(message) {
+          this.writes.push(message);
+          // Mirror Node's contract: returns true unless backpressure is
+          // engaged. Test stays simple: each write succeeds, the test
+          // controls writableNeedDrain explicitly.
+          return !this.writableNeedDrain;
+        },
+        end() { this.ended = true; },
+      };
+    }
+
+    it('should expose MAX_STALLED_PUSHES as a positive integer', () => {
+      assert.equal(typeof MAX_STALLED_PUSHES, 'number');
+      assert.ok(Number.isInteger(MAX_STALLED_PUSHES));
+      assert.ok(MAX_STALLED_PUSHES > 0);
+    });
+
+    it('_pushState should skip clients with writableNeedDrain set', () => {
+      server = new WebDashboardServer({ store });
+      const fast = makeMockClient();
+      const slow = makeMockClient();
+      slow.writableNeedDrain = true;
+      server.clients.add(fast);
+      server.clients.add(slow);
+
+      server._pushState();
+
+      assert.equal(fast.writes.length, 1, 'fast client should receive the push');
+      assert.equal(slow.writes.length, 0, 'stalled client should NOT receive the push');
+    });
+
+    it('_pushState should resume writes once writableNeedDrain clears', () => {
+      server = new WebDashboardServer({ store });
+      const client = makeMockClient();
+      client.writableNeedDrain = true;
+      server.clients.add(client);
+
+      // First push: stalled, skipped.
+      server._pushState();
+      assert.equal(client.writes.length, 0);
+
+      // Drain. Force a state change so the dedup doesn't suppress the
+      // next push.
+      client.writableNeedDrain = false;
+      store.setState({ currentBranch: 'main-2' });
+      server._pushState();
+      assert.equal(client.writes.length, 1, 'should resume writing after drain');
+    });
+
+    it('_pushState should evict a client after MAX_STALLED_PUSHES consecutive stalls', () => {
+      server = new WebDashboardServer({ store });
+      const client = makeMockClient();
+      client.writableNeedDrain = true;
+      server.clients.add(client);
+
+      // Force a state change every iteration so the dedup fast-path
+      // doesn't short-circuit. Each iteration counts as one missed push.
+      for (let i = 0; i < MAX_STALLED_PUSHES; i++) {
+        store.setState({ currentBranch: 'iter-' + i });
+        server._pushState();
+      }
+
+      assert.ok(client.ended, 'eviction should have called client.end()');
+      assert.ok(!server.clients.has(client), 'client should be removed from the set');
+      assert.equal(server.getClientCount(), 0);
+    });
+
+    it('_pushState should reset the stall counter on a successful write', () => {
+      server = new WebDashboardServer({ store });
+      const client = makeMockClient();
+      server.clients.add(client);
+
+      // Stall for almost the eviction limit, then drain and write.
+      client.writableNeedDrain = true;
+      for (let i = 0; i < MAX_STALLED_PUSHES - 1; i++) {
+        store.setState({ currentBranch: 'pre-' + i });
+        server._pushState();
+      }
+      client.writableNeedDrain = false;
+      store.setState({ currentBranch: 'drained' });
+      server._pushState();
+
+      // Counter should be back to 0; another long stall should be allowed.
+      client.writableNeedDrain = true;
+      for (let i = 0; i < MAX_STALLED_PUSHES - 1; i++) {
+        store.setState({ currentBranch: 'post-' + i });
+        server._pushState();
+      }
+      assert.ok(!client.ended, 'client must NOT be evicted while stall counter is fresh');
+      assert.ok(server.clients.has(client));
+    });
+
+    it('flash/sendPreview/sendActionResult should skip stalled clients', () => {
+      server = new WebDashboardServer({ store });
+      const fast = makeMockClient();
+      const slow = makeMockClient();
+      slow.writableNeedDrain = true;
+      server.clients.add(fast);
+      server.clients.add(slow);
+
+      server.flash('hello', 'info');
+      server.sendPreview({ branch: 'main', commits: [] });
+      server.sendActionResult({ action: 'pull', success: true, message: 'ok' });
+
+      assert.equal(fast.writes.length, 3, 'fast client should receive all three frames');
+      assert.equal(slow.writes.length, 0, 'stalled client should be skipped on every emitter');
+    });
+
+    it('_writeToClient should drop a client when write() throws', () => {
+      server = new WebDashboardServer({ store });
+      const client = makeMockClient();
+      client.write = function () { throw new Error('write after end'); };
+      server.clients.add(client);
+
+      server.flash('boom', 'error');
+
+      assert.ok(client.ended, 'should have called end() on the dead client');
+      assert.ok(!server.clients.has(client), 'should have been removed from the set');
     });
   });
 });
