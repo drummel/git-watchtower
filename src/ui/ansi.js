@@ -358,12 +358,106 @@ function sanitizeForRender(str) {
 }
 
 /**
- * Get the visible length of a string (excluding ANSI codes)
- * @param {string} str - String potentially containing ANSI codes
- * @returns {number} Visible character count
+ * Display width of a single Unicode code point in terminal columns.
+ * Returns 0 for combining marks / variation selectors / ZWJ, 2 for East
+ * Asian Wide / Fullwidth and emoji-presentation code points, 1 otherwise.
+ * Used by visibleLength's grapheme iterator.
+ * @param {number} cp
+ * @returns {number}
+ * @private
+ */
+function _codePointWidth(cp) {
+  if (cp == null) return 0;
+  // C0 / DEL — defensively zero-width (stripAnsi already drops them).
+  if (cp < 0x20 || cp === 0x7f) return 0;
+
+  // Combining marks, variation selectors, ZWJ — zero-width.
+  if (
+    (cp >= 0x0300 && cp <= 0x036F) ||  // Combining Diacritical Marks
+    (cp >= 0x1AB0 && cp <= 0x1AFF) ||  // Combining Diacritical Marks Extended
+    (cp >= 0x1DC0 && cp <= 0x1DFF) ||  // Combining Diacritical Marks Supplement
+    (cp >= 0x20D0 && cp <= 0x20FF) ||  // Combining Diacritical Marks for Symbols
+    (cp >= 0xFE00 && cp <= 0xFE0F) ||  // Variation Selectors (incl. emoji presentation)
+    (cp >= 0xFE20 && cp <= 0xFE2F) ||  // Combining Half Marks
+    cp === 0x200D                       // ZWJ
+  ) return 0;
+
+  // East Asian Wide / Fullwidth / emoji — two columns.
+  if (
+    (cp >= 0x1100 && cp <= 0x115F) ||  // Hangul Jamo
+    (cp >= 0x2E80 && cp <= 0x303E) ||  // CJK Radicals etc
+    (cp >= 0x3041 && cp <= 0x33FF) ||  // CJK Symbols / Hiragana / Katakana / Bopomofo / Hangul / CJK
+    (cp >= 0x3400 && cp <= 0x4DBF) ||  // CJK Unified Ideographs Ext A
+    (cp >= 0x4E00 && cp <= 0x9FFF) ||  // CJK Unified Ideographs
+    (cp >= 0xA000 && cp <= 0xA4CF) ||  // Yi Syllables
+    (cp >= 0xAC00 && cp <= 0xD7A3) ||  // Hangul Syllables
+    (cp >= 0xF900 && cp <= 0xFAFF) ||  // CJK Compatibility Ideographs
+    (cp >= 0xFE30 && cp <= 0xFE4F) ||  // CJK Compatibility Forms
+    (cp >= 0xFF00 && cp <= 0xFF60) ||  // Fullwidth Forms
+    (cp >= 0xFFE0 && cp <= 0xFFE6) ||  // Fullwidth Signs
+    (cp >= 0x1F300 && cp <= 0x1F5FF) || // Misc Symbols and Pictographs
+    (cp >= 0x1F600 && cp <= 0x1F64F) || // Emoticons
+    (cp >= 0x1F680 && cp <= 0x1F6FF) || // Transport
+    (cp >= 0x1F900 && cp <= 0x1F9FF) || // Supplemental Symbols and Pictographs
+    (cp >= 0x1FA00 && cp <= 0x1FAFF) || // Symbols and Pictographs Extended-A
+    (cp >= 0x1F1E6 && cp <= 0x1F1FF) || // Regional indicators (flags)
+    (cp >= 0x1F3FB && cp <= 0x1F3FF) || // Emoji modifiers (skin tone)
+    (cp >= 0x20000 && cp <= 0x2FFFD) || // CJK Ideographs Extension B-F
+    (cp >= 0x30000 && cp <= 0x3FFFD)    // CJK Ideographs Extension G-H
+  ) return 2;
+
+  return 1;
+}
+
+// Reused grapheme segmenter — instantiating per-call would be wasteful for
+// strings hit on every render. Default locale is fine; we only care about
+// boundaries, not script-aware ordering.
+const _graphemeSegmenter = (typeof Intl !== 'undefined' && Intl.Segmenter)
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null;
+
+/**
+ * Get the visible width of a string in terminal columns, excluding ANSI
+ * codes and counting wide characters (CJK ideographs, emoji, fullwidth)
+ * as 2 columns. Combining marks, variation selectors, and ZWJ are 0-width.
+ * Grapheme clusters that contain at least one wide code point clamp to 2
+ * — so a ZWJ family (e.g. 👨‍👩‍👧, which is 5 code points = 13 UTF-16 units)
+ * counts as 2, matching how terminals render it.
+ *
+ * Without this, branch names with emoji/CJK misalign sparklines, badges
+ * and box borders because the renderer's `padRight`/truncation math drifts
+ * by one or more columns per non-ASCII character.
+ *
+ * @param {string} str - String potentially containing ANSI codes and unicode
+ * @returns {number} Visible width in terminal columns
  */
 function visibleLength(str) {
-  return stripAnsi(str).length;
+  const stripped = stripAnsi(str);
+  // ASCII fast path — every char is 1 column, regex avoids the Segmenter
+  // setup cost on the renderer's hot path.
+  if (/^[\x20-\x7e]*$/.test(stripped)) return stripped.length;
+  if (!_graphemeSegmenter) {
+    // Pre-Intl.Segmenter fallback (shouldn't hit on Node 16+).
+    let width = 0;
+    for (const ch of stripped) width += _codePointWidth(ch.codePointAt(0));
+    return width;
+  }
+  let total = 0;
+  for (const { segment } of _graphemeSegmenter.segment(stripped)) {
+    let clusterTotal = 0;
+    let clusterHasWide = false;
+    for (const ch of segment) {
+      const w = _codePointWidth(ch.codePointAt(0));
+      if (w === 2) clusterHasWide = true;
+      clusterTotal += w;
+    }
+    // ZWJ-joined emoji clusters (e.g. family / flag / skin-tone) sum to
+    // more than 2 by code point, but render as a single 2-column glyph.
+    // Cap them at 2; non-wide clusters (combining marks on a base char)
+    // still take at least 1 column.
+    total += clusterHasWide ? 2 : Math.max(1, clusterTotal);
+  }
+  return total;
 }
 
 /**
@@ -382,14 +476,39 @@ function truncate(str, maxLen, suffix = '…') {
   // raw input with cursor/screen-control sequences in it. SGR survives.
   const safeStr = sanitizeForRender(str);
   const visible = stripAnsi(safeStr);
-  if (visible.length <= maxLen) {
+
+  // Compare in display columns, not UTF-16 code units, so a string of CJK
+  // ideographs (e.g. "中文测试" — 4 code units, 8 columns) is correctly
+  // recognised as needing truncation in a 4-column slot.
+  if (visibleLength(visible) <= maxLen) {
     return safeStr;
   }
 
-  // Long-string path: drop ALL escapes (including SGR), truncate, append
-  // ellipsis + reset. Existing behaviour, kept for layout determinism.
-  const truncated = visible.slice(0, maxLen - suffix.length);
-  return truncated + suffix + ansi.reset;
+  // Long-string path: drop ALL escapes (including SGR), accumulate
+  // graphemes up to the column budget, append ellipsis + reset. Walking
+  // graphemes (not code units) keeps wide characters from being split
+  // mid-glyph and keeps the truncated width <= maxLen even for emoji
+  // and CJK input.
+  const suffixWidth = visibleLength(suffix);
+  const budget = Math.max(0, maxLen - suffixWidth);
+  let acc = '';
+  let used = 0;
+  if (_graphemeSegmenter) {
+    for (const { segment } of _graphemeSegmenter.segment(visible)) {
+      const w = visibleLength(segment);
+      if (used + w > budget) break;
+      acc += segment;
+      used += w;
+    }
+  } else {
+    for (const ch of visible) {
+      const w = _codePointWidth(ch.codePointAt(0));
+      if (used + w > budget) break;
+      acc += ch;
+      used += w;
+    }
+  }
+  return acc + suffix + ansi.reset;
 }
 
 /**
