@@ -1,3 +1,10 @@
+## [2.3.12](https://github.com/drummel/git-watchtower/compare/v2.3.11...v2.3.12) (2026-05-04)
+
+
+### Bug Fixes
+
+* count real diff churn for casino wins, not the placeholder *100 ([cd9b97d](https://github.com/drummel/git-watchtower/commit/cd9b97de748208ca0854d17d3bf4c8f379915cac))
+
 ## [2.3.11](https://github.com/drummel/git-watchtower/compare/v2.3.10...v2.3.11) (2026-05-04)
 
 
