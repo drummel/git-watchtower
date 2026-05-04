@@ -1505,13 +1505,19 @@ function renderUpdateModal(state, write) {
   lines.push(updateCmd);
   lines.push('');
 
+  // Tracks where the selectable option block starts so the highlight
+  // logic below can reverse-map line index → option index. -1 when
+  // there are no options (the updateInProgress path). Computed from
+  // `lines.length` so adding any line above never silently desyncs the
+  // highlight — previously this was a hardcoded `7` that happened to
+  // match the line count above by coincidence.
+  let optionStartIdx = -1;
   if (state.updateInProgress) {
     lines.push('Updating...');
     lines.push('');
     lines.push('Please wait...');
   } else {
-    // Option lines
-    const optionStartIdx = lines.length;
+    optionStartIdx = lines.length;
     for (const opt of options) {
       lines.push(opt);
     }
@@ -1519,7 +1525,6 @@ function renderUpdateModal(state, write) {
     lines.push('[Enter] Select  [Esc] Dismiss');
   }
 
-  const optionStartIdx = state.updateInProgress ? -1 : 7;
   const height = lines.length + 2;
 
   // Draw magenta double-border box
