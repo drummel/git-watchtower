@@ -1241,7 +1241,31 @@ ${pureFnBlock}
     return left + right;
   }
 
+  // Decorative casino fields the server intentionally does NOT include in
+  // the SSE payload because they're random/clock-driven and would defeat
+  // the lastPushedJson dedup. Recompute them locally at render time so the
+  // dashboard stays visually identical to the TUI.
+  const CASINO_VIBES = ['\u{1f60e}','\u{1f525}','✨','\u{1f4ab}','\u{1f31f}','⚡','\u{1f3af}','\u{1f4aa}','\u{1f680}','\u{1f4af}'];
+  function computeCasinoDecorations(cs) {
+    const baseLuck = 50 + Math.random() * 30;
+    const streakBonus = Math.min((cs.consecutivePolls || 0) * 5, 20);
+    return {
+      luckMeter: Math.min(Math.round(baseLuck + streakBonus), 99),
+      houseEdge: Math.round(55 + Math.random() * 45),
+      vibesQuality: CASINO_VIBES[Math.floor(Date.now() / 3000) % CASINO_VIBES.length],
+    };
+  }
+
   function renderCasinoStatsRow(cs) {
+    // Server-supplied (preferred) OR locally computed (default). The
+    // fallback covers older servers that still ship the decorative fields,
+    // plus tests that stub them in explicitly. != null treats undefined and
+    // null as "missing" so legitimate zero values from the server survive.
+    const local = computeCasinoDecorations(cs);
+    const houseEdge = (cs.houseEdge != null) ? cs.houseEdge : local.houseEdge;
+    const luckMeter = (cs.luckMeter != null) ? cs.luckMeter : local.luckMeter;
+    const vibesQuality = cs.vibesQuality || local.vibesQuality;
+
     const netClass = cs.netWinnings >= 0 ? 'pos' : 'neg';
     const netSign = cs.netWinnings >= 0 ? '+' : '';
     const stat = (k, v) => '<span class="stat"><span class="stat-k">' + k + '</span><span class="stat-v">' + v + '</span></span>';
@@ -1256,9 +1280,9 @@ ${pureFnBlock}
     let right = '<div class="stats-group">';
     right += stat('\u{1f4b8} Cost', '<span class="neg">' + dollar + (cs.totalPolls || 0) + '</span>');
     right += stat('\u{1f4b0} Net', '<span class="' + netClass + '">' + netSign + dollar + (cs.netWinnings || 0) + '</span>');
-    right += stat('\u{1f3b0} Edge', '<span class="neon">' + (cs.houseEdge || 0) + '%</span>');
-    right += stat('\u{1f3b2} Luck', '<span class="gold">' + (cs.luckMeter || 0) + '%</span>');
-    right += stat('\u{1f60e} Vibes', escHtml(cs.vibesQuality || ''));
+    right += stat('\u{1f3b0} Edge', '<span class="neon">' + houseEdge + '%</span>');
+    right += stat('\u{1f3b2} Luck', '<span class="gold">' + luckMeter + '%</span>');
+    right += stat('\u{1f60e} Vibes', escHtml(vibesQuality));
     right += stat('\u{1f9e0} Hits', '<span class="pos">' + (cs.dopamineHits || 0) + '</span>');
     if (cs.consecutivePolls > 1) right += stat('\u{1f525} Streak', '<span class="gold">' + cs.consecutivePolls + 'x</span>');
     right += '</div>';

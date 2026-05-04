@@ -177,6 +177,68 @@ describe('casino getStats calculations', () => {
   });
 });
 
+describe('casino getSerializableStats', () => {
+  beforeEach(() => {
+    casino.disable();
+    casino.resetStats();
+    casino.enable();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('should EXCLUDE the random/clock-driven decorative fields', () => {
+    const stats = casino.getSerializableStats();
+    // These four are random or Date.now()-driven and would defeat the
+    // SSE lastPushedJson dedup — the dashboard recomputes them locally.
+    assert.strictEqual(stats.luckMeter, undefined);
+    assert.strictEqual(stats.houseEdge, undefined);
+    assert.strictEqual(stats.vibesQuality, undefined);
+    assert.strictEqual(stats.timeSinceLastHit, undefined);
+  });
+
+  it('should KEEP the stable counter and derived fields', () => {
+    casino.recordPoll(true);
+    casino.triggerWin(100, 0, () => {});
+    const stats = casino.getSerializableStats();
+    assert.equal(typeof stats.totalLinesAdded, 'number');
+    assert.equal(typeof stats.totalLinesDeleted, 'number');
+    assert.equal(typeof stats.totalPolls, 'number');
+    assert.equal(typeof stats.consecutivePolls, 'number');
+    assert.equal(typeof stats.pollsWithUpdates, 'number');
+    assert.equal(typeof stats.bigWins, 'number');
+    assert.equal(typeof stats.jackpots, 'number');
+    assert.equal(typeof stats.megaJackpots, 'number');
+    assert.equal(typeof stats.totalLines, 'number');
+    assert.equal(typeof stats.netWinnings, 'number');
+    assert.equal(typeof stats.dopamineHits, 'number');
+    assert.equal(typeof stats.hitRate, 'number');
+    assert.equal(typeof stats.sessionDuration, 'string');
+  });
+
+  it('should produce identical JSON across consecutive calls when state is unchanged', () => {
+    // Regression for the audit finding: getStats() returns random/clock
+    // fields that defeat dedup. getSerializableStats must not.
+    const samples = [];
+    for (let i = 0; i < 5; i++) {
+      samples.push(JSON.stringify(casino.getSerializableStats()));
+    }
+    assert.equal(
+      new Set(samples).size,
+      1,
+      'getSerializableStats should be deterministic when no state has changed'
+    );
+  });
+
+  it('should change when an underlying counter changes', () => {
+    const before = JSON.stringify(casino.getSerializableStats());
+    casino.recordPoll(true);
+    const after = JSON.stringify(casino.getSerializableStats());
+    assert.notEqual(before, after, 'recordPoll should make the payload change');
+  });
+});
+
 describe('casino win levels', () => {
   beforeEach(() => {
     casino.enable();

@@ -700,6 +700,24 @@ function getStats() {
 }
 
 /**
+ * Stats payload safe for SSE serialization. Excludes the random/clock-driven
+ * decorative fields (luckMeter, houseEdge, vibesQuality, timeSinceLastHit)
+ * because they tick on every call — leaving them in the payload defeats
+ * web.js's `lastPushedJson` dedup, so the full ~100 KB state is shipped to
+ * every connected client every 500 ms even when nothing has actually
+ * changed. The dashboard recomputes these client-side at render time.
+ *
+ * Stable but slow-ticking fields (sessionDuration, which changes once per
+ * minute) are kept — the cost is at most one extra push per minute.
+ *
+ * @returns {Object}
+ */
+function getSerializableStats() {
+  const { luckMeter, houseEdge, vibesQuality, timeSinceLastHit, ...stable } = getStats();
+  return stable;
+}
+
+/**
  * Reset session stats
  */
 function resetStats() {
@@ -788,6 +806,7 @@ module.exports = {
   // Stats
   recordPoll,
   getStats,
+  getSerializableStats,
   resetStats,
   getStatsDisplay,
 };
