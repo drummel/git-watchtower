@@ -63,6 +63,7 @@ const readline = require('readline');
 // Casino mode - Vegas-style feedback effects
 const casino = require('../src/casino');
 const casinoSounds = require('../src/casino/sounds');
+const { sumPollChurn } = require('../src/casino/poll-churn');
 
 // Gitignore utilities for file watcher
 const { loadGitignorePatterns, shouldIgnoreFile } = require('../src/utils/gitignore');
@@ -1995,8 +1996,13 @@ async function pollGitChanges() {
     // Keep deleted branches in the list (don't remove them)
     const pollFilteredBranches = allBranches;
 
-    // Detect updates on other branches (for flash notification)
+    // Detect updates on other branches (for flash notification).
+    // We also capture each updated branch's pre-update commit so the casino
+    // win calculation can compute REAL line churn via git diff, instead of
+    // the old `notifyBranches.length * 100` placeholder that surfaced as
+    // inflated dashboard numbers.
     const updatedBranches = [];
+    const updatedBranchPrevCommits = new Map();
     const currentBranchName = store.get('currentBranch');
     const activeBranchNames = new Set();
     for (const branch of pollFilteredBranches) {
@@ -2007,6 +2013,7 @@ async function pollGitChanges() {
       const prevCommit = previousBranchStates.get(branch.name);
       if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {
         updatedBranches.push(branch);
+        updatedBranchPrevCommits.set(branch.name, prevCommit);
         branch.justUpdated = true;
       }
       previousBranchStates.set(branch.name, branch.commit);
@@ -2041,14 +2048,25 @@ async function pollGitChanges() {
       showFlash(names);
       playSound();
 
-      // Casino mode: trigger win effect based on number of updated branches
+      // Casino mode: trigger win effect based on REAL line churn from
+      // each updated branch's prev → new commit. New branches (no prev
+      // commit) contribute 0 — the win still fires from the slot animation
+      // path, but no fake volume is added to totalLinesAdded.
       if (casinoOn) {
-        // Estimate line changes: more branches = bigger "win"
-        // Each branch update counts as ~100 lines (placeholder until we calculate actual diff)
-        const estimatedLines = notifyBranches.length * 100;
-        const winLevel = casino.getWinLevel(estimatedLines);
+        const churn = await sumPollChurn(
+          updatedBranches,
+          updatedBranchPrevCommits,
+          getDiffStats
+        );
+        const totalLines = churn.added + churn.deleted;
+        // getWinLevel(0) returns null and would skip the slot result label
+        // and the sound. Use max(1, totalLines) so a no-line update (e.g.
+        // a tag-only commit, an empty merge) still registers as a "small"
+        // win — the user did get a notification, after all.
+        const winLines = Math.max(1, totalLines);
+        const winLevel = casino.getWinLevel(winLines);
         casino.stopSlotReels(true, render, winLevel);  // Win - matching symbols + flash + label
-        casino.triggerWin(estimatedLines, 0, render);
+        casino.triggerWin(churn.added, churn.deleted, render);
         if (winLevel) {
           casinoSounds.playForWinLevel(winLevel.key);
         }
