@@ -110,6 +110,13 @@ function disable() {
   // up to ~15 frames × 120 ms = 1.8 s after disable, and lossMessage stayed
   // set so isLossAnimating() reported true into the next session.
   resetLossState();
+  // Drop the marquee render callback so a stale closure to the previous
+  // session's render() doesn't survive across enable/disable cycles. In
+  // production this is mostly hygiene (bin/git-watchtower.js wires the
+  // callback exactly once at startup against a singleton render fn), but
+  // tests that re-use the casino module saw the previous test's callback
+  // persist into the next setRenderCallback assignment.
+  marqueeCallback = null;
 }
 
 /**
