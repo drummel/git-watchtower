@@ -13,6 +13,7 @@ const {
   STATE_PUSH_INTERVAL,
   MAX_STALLED_PUSHES,
   ALLOWED_ACTIONS,
+  CONTENT_SECURITY_POLICY,
 } = require('../../../src/server/web');
 const { Store } = require('../../../src/state/store');
 
@@ -885,6 +886,82 @@ describe('WebDashboardServer', () => {
       const state = server.getProjectState('abc');
       assert.ok(state);
       assert.equal(state.currentBranch, 'main');
+    });
+  });
+
+  describe('Content-Security-Policy and security headers', () => {
+    let port;
+
+    beforeEach(async () => {
+      port = 19891;
+      server = new WebDashboardServer({ store, port });
+      await server.start();
+    });
+
+    function httpGet(urlPath) {
+      return new Promise((resolve, reject) => {
+        const req = http.request(`http://127.0.0.1:${server.port}${urlPath}`, {
+          method: 'GET',
+          headers: { 'Connection': 'close' },
+        }, (res) => {
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+    }
+
+    it('should expose CONTENT_SECURITY_POLICY as a non-empty string', () => {
+      assert.equal(typeof CONTENT_SECURITY_POLICY, 'string');
+      assert.ok(CONTENT_SECURITY_POLICY.length > 0);
+    });
+
+    it('should restrict default-src to none', () => {
+      // default-src 'none' is the deny-by-default baseline. Anything we
+      // need to load explicitly must be granted by a specific directive.
+      assert.match(CONTENT_SECURITY_POLICY, /default-src\s+'none'/);
+    });
+
+    it('should permit inline scripts and styles for the bundled UI', () => {
+      // The whole dashboard is inlined into a single HTML response, so
+      // we cannot avoid 'unsafe-inline' without a build-time hashing pass.
+      assert.match(CONTENT_SECURITY_POLICY, /script-src[^;]*'unsafe-inline'/);
+      assert.match(CONTENT_SECURITY_POLICY, /style-src[^;]*'unsafe-inline'/);
+    });
+
+    it('should permit XHR / SSE to same origin', () => {
+      // The dashboard POSTs to /api/action and subscribes to /api/events.
+      assert.match(CONTENT_SECURITY_POLICY, /connect-src\s+'self'/);
+    });
+
+    it('should block framing and form submission and base-uri rewrites', () => {
+      assert.match(CONTENT_SECURITY_POLICY, /frame-ancestors\s+'none'/);
+      assert.match(CONTENT_SECURITY_POLICY, /form-action\s+'none'/);
+      assert.match(CONTENT_SECURITY_POLICY, /base-uri\s+'none'/);
+    });
+
+    it('should set the CSP header on the dashboard HTML response', async () => {
+      const res = await httpGet('/');
+      assert.equal(res.status, 200);
+      assert.equal(res.headers['content-security-policy'], CONTENT_SECURITY_POLICY);
+    });
+
+    it('should set X-Content-Type-Options: nosniff', async () => {
+      const res = await httpGet('/');
+      assert.equal(res.headers['x-content-type-options'], 'nosniff');
+    });
+
+    it('should set Referrer-Policy: no-referrer', async () => {
+      const res = await httpGet('/');
+      assert.equal(res.headers['referrer-policy'], 'no-referrer');
+    });
+
+    it('should still serve the HTML body alongside the headers', async () => {
+      const res = await httpGet('/');
+      assert.match(res.body, /<!DOCTYPE html>/i);
+      assert.ok(res.body.includes('Git Watchtower'));
     });
   });
 
