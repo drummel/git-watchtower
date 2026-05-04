@@ -1,3 +1,10 @@
+## [2.3.14](https://github.com/drummel/git-watchtower/compare/v2.3.13...v2.3.14) (2026-05-04)
+
+
+### Bug Fixes
+
+* cancel pending casino sound timeouts on disable / shutdown ([429ee99](https://github.com/drummel/git-watchtower/commit/429ee990887f2190bab7efbad5679ad1dda9d55c))
+
 ## [2.3.13](https://github.com/drummel/git-watchtower/compare/v2.3.12...v2.3.13) (2026-05-04)
 
 
