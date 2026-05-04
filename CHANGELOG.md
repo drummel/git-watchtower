@@ -1,3 +1,10 @@
+## [2.3.10](https://github.com/drummel/git-watchtower/compare/v2.3.9...v2.3.10) (2026-05-04)
+
+
+### Bug Fixes
+
+* respect SSE backpressure so paused tabs can't pin server memory ([cdc9797](https://github.com/drummel/git-watchtower/commit/cdc979768751631e2d60c0c83e172fe4d230227a))
+
 ## [2.3.9](https://github.com/drummel/git-watchtower/compare/v2.3.8...v2.3.9) (2026-05-04)
 
 
