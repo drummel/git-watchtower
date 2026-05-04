@@ -8,6 +8,7 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const fs = require('fs');
 
 // Resolve a fresh copy of the sounds module per test so the internal
 // _pendingTimeouts set doesn't bleed state between cases.
@@ -21,30 +22,37 @@ function freshSounds() {
 describe('casino sounds: cancelAll', () => {
   let sounds;
   let originalWrite;
-  let originalGetSoundPath;
+  let originalExistsSync;
   let bellCount;
 
   beforeEach(() => {
-    sounds = freshSounds();
     bellCount = 0;
     originalWrite = process.stdout.write.bind(process.stdout);
     // Count terminal bells (BEL = \x07). The bell-chain fallback fires
     // these from setTimeout callbacks, so a successful cancelAll should
     // freeze the count after the immediate first bell.
-    process.stdout.write = (s, ...rest) => {
+    process.stdout.write = (s) => {
       if (typeof s === 'string' && s.includes('\x07')) bellCount++;
       // Don't pollute test output with bells — swallow.
       return true;
     };
-    // Force the bell-chain fallback so we're not playing real audio
-    // files from system paths.
-    originalGetSoundPath = sounds.getSoundPath;
-    sounds.getSoundPath = () => null;
+    // Force the bell-chain fallback so we're not playing real audio.
+    // sounds.js's getSoundPath uses fs.existsSync to probe both bundled
+    // and system sound paths; on Ubuntu CI runners the freedesktop
+    // sounds (bell.oga, complete.oga, etc.) ARE installed at the system
+    // paths, so we have to make existsSync return false to force the
+    // bell-chain fallback. Stubbing the export of `sounds.getSoundPath`
+    // doesn't work — the internal call site captures the module-local
+    // reference, not the export property.
+    originalExistsSync = fs.existsSync;
+    fs.existsSync = () => false;
+
+    sounds = freshSounds();
   });
 
   afterEach(() => {
     process.stdout.write = originalWrite;
-    sounds.getSoundPath = originalGetSoundPath;
+    fs.existsSync = originalExistsSync;
     sounds.cancelAll();
   });
 
