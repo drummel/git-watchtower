@@ -47,6 +47,36 @@ const SSE_KEEPALIVE_INTERVAL = 15000;
 const MAX_STALLED_PUSHES = 60;
 
 /**
+ * Content-Security-Policy header for the dashboard HTML.
+ *
+ * The dashboard uses inline <script> and inline <style> blocks (the whole
+ * UI is bundled at build time), and makes XHR / EventSource calls to
+ * /api/... on the same origin. No external resources are loaded.
+ *
+ * `default-src 'none'` denies everything not explicitly allowed.
+ * `script-src` / `style-src` need 'unsafe-inline' for the bundled blocks.
+ * `connect-src 'self'` lets XHR + SSE hit /api/... .
+ * `base-uri 'none'` blocks <base> injection from rewriting URLs.
+ * `form-action 'none'` blocks any rogue form posts.
+ * `frame-ancestors 'none'` blocks embedding (defense vs. clickjacking).
+ *
+ * Defense-in-depth — the dashboard already escapes user-supplied content
+ * everywhere we render it, but a future regression that forgets escHtml
+ * is mitigated here.
+ */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "connect-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+/**
  * Actions the web dashboard is allowed to POST to /api/action. Every entry
  * here MUST be matched by a `case` in `handleWebAction` in bin/git-watchtower.js
  * — `tests/unit/server/web.test.js` enforces that link so a future addition
@@ -474,7 +504,12 @@ class WebDashboardServer {
 
     // Routes
     if (pathname === '/' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': CONTENT_SECURITY_POLICY,
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+      });
       res.end(this._cachedHtml);
       return;
     }
@@ -673,4 +708,5 @@ module.exports = {
   STATE_PUSH_INTERVAL,
   MAX_STALLED_PUSHES,
   ALLOWED_ACTIONS,
+  CONTENT_SECURITY_POLICY,
 };
