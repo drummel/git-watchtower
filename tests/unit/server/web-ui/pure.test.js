@@ -12,6 +12,9 @@ const {
   renderSparklineBars,
   fmtCompact,
   getDisplayBranches,
+  buildBranchUrl,
+  buildCommitUrl,
+  buildPrUrl,
 } = require('../../../../src/server/web-ui/pure');
 
 // ── escHtml ─────────────────────────────────────────────────────────
@@ -391,5 +394,174 @@ describe('getDisplayBranches', () => {
     const result = getDisplayBranches(branches, { sortOrder: 'default' });
     const names = result.map(b => b.name);
     assert.deepEqual(names, branches.map(b => b.name));
+  });
+});
+
+// ── buildBranchUrl ──────────────────────────────────────────────────
+// These are inlined into the browser bundle, so the audit's "broken links
+// for Bitbucket / Azure / AWS CodeCommit" finding becomes a regression
+// here if they revert.
+
+describe('buildBranchUrl', () => {
+  it('should build GitHub branch URL', () => {
+    assert.equal(
+      buildBranchUrl('https://github.com/user/repo', 'github.com', 'main'),
+      'https://github.com/user/repo/tree/main'
+    );
+  });
+
+  it('should build self-hosted GitLab branch URL (still uses /tree/)', () => {
+    assert.equal(
+      buildBranchUrl('https://gitlab.example.com/g/p', 'gitlab.example.com', 'feature'),
+      'https://gitlab.example.com/g/p/tree/feature'
+    );
+  });
+
+  it('should build Bitbucket branch URL with /src/', () => {
+    assert.equal(
+      buildBranchUrl('https://bitbucket.org/team/repo', 'bitbucket.org', 'develop'),
+      'https://bitbucket.org/team/repo/src/develop'
+    );
+  });
+
+  it('should build Azure DevOps branch URL with ?version=GB', () => {
+    assert.equal(
+      buildBranchUrl('https://dev.azure.com/org/proj/_git/repo', 'dev.azure.com', 'feature'),
+      'https://dev.azure.com/org/proj/_git/repo?version=GBfeature'
+    );
+  });
+
+  it('should build VisualStudio.com Azure branch URL', () => {
+    assert.equal(
+      buildBranchUrl('https://org.visualstudio.com/proj/_git/repo', 'org.visualstudio.com', 'main'),
+      'https://org.visualstudio.com/proj/_git/repo?version=GBmain'
+    );
+  });
+
+  it('should build AWS CodeCommit branch URL', () => {
+    assert.equal(
+      buildBranchUrl(
+        'https://codecommit.us-east-1.amazonaws.com/v1/repos/myrepo',
+        'codecommit.us-east-1.amazonaws.com',
+        'main'
+      ),
+      'https://codecommit.us-east-1.amazonaws.com/v1/repos/myrepo/browse/refs/heads/main'
+    );
+  });
+
+  it('should encode branch names with special characters', () => {
+    assert.equal(
+      buildBranchUrl('https://github.com/u/r', 'github.com', 'feature/my branch'),
+      'https://github.com/u/r/tree/feature%2Fmy%20branch'
+    );
+  });
+
+  it('should default to /tree/ for unknown hosts', () => {
+    assert.equal(
+      buildBranchUrl('https://gitea.example.com/u/r', 'gitea.example.com', 'main'),
+      'https://gitea.example.com/u/r/tree/main'
+    );
+  });
+
+  it('should be case-insensitive on host', () => {
+    assert.equal(
+      buildBranchUrl('https://bitbucket.org/team/repo', 'BITBUCKET.org', 'develop'),
+      'https://bitbucket.org/team/repo/src/develop'
+    );
+  });
+});
+
+// ── buildCommitUrl ──────────────────────────────────────────────────
+
+describe('buildCommitUrl', () => {
+  it('should build GitHub commit URL with /commit/', () => {
+    assert.equal(
+      buildCommitUrl('https://github.com/u/r', 'github.com', 'abc1234'),
+      'https://github.com/u/r/commit/abc1234'
+    );
+  });
+
+  it('should build Bitbucket commit URL with /commits/ (plural)', () => {
+    assert.equal(
+      buildCommitUrl('https://bitbucket.org/team/repo', 'bitbucket.org', 'abc1234'),
+      'https://bitbucket.org/team/repo/commits/abc1234'
+    );
+  });
+
+  it('should build GitLab commit URL with /commit/', () => {
+    assert.equal(
+      buildCommitUrl('https://gitlab.com/g/p', 'gitlab.com', 'abc1234'),
+      'https://gitlab.com/g/p/commit/abc1234'
+    );
+  });
+
+  it('should return null for missing sha', () => {
+    assert.equal(buildCommitUrl('https://github.com/u/r', 'github.com', null), null);
+    assert.equal(buildCommitUrl('https://github.com/u/r', 'github.com', ''), null);
+  });
+});
+
+// ── buildPrUrl ──────────────────────────────────────────────────────
+
+describe('buildPrUrl', () => {
+  it('should build GitHub PR URL with /pull/', () => {
+    assert.equal(
+      buildPrUrl('https://github.com/u/r', 'github.com', 42),
+      'https://github.com/u/r/pull/42'
+    );
+  });
+
+  it('should build GitLab MR URL with /-/merge_requests/', () => {
+    assert.equal(
+      buildPrUrl('https://gitlab.com/g/p', 'gitlab.com', 42),
+      'https://gitlab.com/g/p/-/merge_requests/42'
+    );
+  });
+
+  it('should build self-hosted GitLab MR URL', () => {
+    assert.equal(
+      buildPrUrl('https://gitlab.example.com/g/p', 'gitlab.example.com', 42),
+      'https://gitlab.example.com/g/p/-/merge_requests/42'
+    );
+  });
+
+  it('should build Bitbucket pull-request URL with /pull-requests/', () => {
+    assert.equal(
+      buildPrUrl('https://bitbucket.org/team/repo', 'bitbucket.org', 42),
+      'https://bitbucket.org/team/repo/pull-requests/42'
+    );
+  });
+
+  it('should build Azure DevOps PR URL with /pullrequest/', () => {
+    assert.equal(
+      buildPrUrl('https://dev.azure.com/org/proj/_git/repo', 'dev.azure.com', 42),
+      'https://dev.azure.com/org/proj/_git/repo/pullrequest/42'
+    );
+  });
+
+  it('should build AWS CodeCommit PR URL', () => {
+    assert.equal(
+      buildPrUrl(
+        'https://codecommit.us-east-1.amazonaws.com/v1/repos/myrepo',
+        'codecommit.us-east-1.amazonaws.com',
+        42
+      ),
+      'https://codecommit.us-east-1.amazonaws.com/v1/repos/myrepo/pull-requests/42'
+    );
+  });
+
+  it('should return null for missing prNumber', () => {
+    assert.equal(buildPrUrl('https://github.com/u/r', 'github.com', null), null);
+    assert.equal(buildPrUrl('https://github.com/u/r', 'github.com', 0), null);
+  });
+
+  it('should not match "gitlab" inside an unrelated host segment', () => {
+    // host like "company.com" with path containing "gitlab" should NOT
+    // be classified as GitLab — we split on dots, so "gitlab" must be
+    // its own segment.
+    assert.equal(
+      buildPrUrl('https://github.com/gitlab-org/repo', 'github.com', 42),
+      'https://github.com/gitlab-org/repo/pull/42'
+    );
   });
 });

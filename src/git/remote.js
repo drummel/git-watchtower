@@ -3,6 +3,11 @@
  * @module git/remote
  */
 
+// Branch-URL building lives in the pure module so it can be inlined into
+// the web dashboard bundle. We re-export it here so existing Node callers
+// keep working without an extra hop.
+const { buildBranchUrl } = require('../server/web-ui/pure');
+
 /**
  * Parse a git remote URL into { host, path } components.
  * Supports SSH (git@host:path), HTTPS, and ssh:// protocol formats.
@@ -25,42 +30,6 @@ function parseRemoteUrl(remoteUrl) {
   if (sshProtoMatch) return { host: sshProtoMatch[1], path: sshProtoMatch[2] };
 
   return null;
-}
-
-/**
- * Build a branch URL for the appropriate git hosting service.
- * Each service has its own URL format for viewing branches.
- * @param {string} baseUrl - Repository base URL (e.g., https://github.com/user/repo)
- * @param {string} host - Hostname of the git hosting service
- * @param {string} branchName - Name of the branch
- * @returns {string}
- */
-function buildBranchUrl(baseUrl, host, branchName) {
-  const branch = encodeURIComponent(branchName);
-
-  // Azure DevOps: dev.azure.com/org/project/_git/repo or org.visualstudio.com
-  if (host === 'dev.azure.com' || host.endsWith('.visualstudio.com')) {
-    return `${baseUrl}?version=GB${branch}`;
-  }
-
-  // Bitbucket Cloud
-  if (host === 'bitbucket.org') {
-    return `${baseUrl}/src/${branch}`;
-  }
-
-  // AWS CodeCommit
-  if (host.match(/codecommit\..+\.amazonaws\.com/)) {
-    return `${baseUrl}/browse/refs/heads/${branch}`;
-  }
-
-  // SourceHut
-  if (host === 'git.sr.ht') {
-    return `${baseUrl}/tree/${branch}`;
-  }
-
-  // GitHub, GitLab, Codeberg, Gitea, Forgejo, Gogs, and self-hosted instances
-  // All use /tree/<branch>
-  return `${baseUrl}/tree/${branch}`;
 }
 
 /**

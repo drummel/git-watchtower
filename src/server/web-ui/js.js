@@ -198,26 +198,34 @@ function getDashboardJs() {
   }
 
   // ── URL Building Helpers ──────────────────────────────────────
+  // state.repoWebUrl is the server-built BASE url (no /tree/...). Extract
+  // the host once per call and let the buildXxxUrl helpers — inlined from
+  // pure.js — branch on platform. The previous getBranchUrl/getCommitUrl/
+  // getPrUrl hardcoded GitHub paths and produced broken links for
+  // Bitbucket (/src/), Azure DevOps (?version=GB), AWS CodeCommit
+  // (/browse/refs/heads/), self-hosted GitLab, etc.
   function getRepoUrl() {
-    return (state && state.repoWebUrl) ? state.repoWebUrl.replace(/\\/tree\\/.*$/, '') : null;
+    return (state && state.repoWebUrl) ? state.repoWebUrl : null;
+  }
+  function getRepoHost() {
+    var base = getRepoUrl();
+    if (!base) return null;
+    try { return new URL(base).hostname; } catch (e) { return null; }
   }
   function getBranchUrl(branchName) {
-    const base = getRepoUrl();
+    var base = getRepoUrl();
     if (!base) return null;
-    return base + '/tree/' + encodeURIComponent(branchName);
+    return buildBranchUrl(base, getRepoHost(), branchName);
   }
   function getCommitUrl(hash) {
-    const base = getRepoUrl();
-    if (!base || !hash) return null;
-    return base + '/commit/' + hash;
+    var base = getRepoUrl();
+    if (!base) return null;
+    return buildCommitUrl(base, getRepoHost(), hash);
   }
   function getPrUrl(prNumber) {
-    const base = getRepoUrl();
-    if (!base || !prNumber) return null;
-    if (base.indexOf('gitlab') !== -1) {
-      return base + '/-/merge_requests/' + prNumber;
-    }
-    return base + '/pull/' + prNumber;
+    var base = getRepoUrl();
+    if (!base) return null;
+    return buildPrUrl(base, getRepoHost(), prNumber);
   }
 
   // ── SSE Connection ─────────────────────────────────────────────
