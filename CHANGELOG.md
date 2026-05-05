@@ -1,3 +1,10 @@
+## [2.3.19](https://github.com/drummel/git-watchtower/compare/v2.3.18...v2.3.19) (2026-05-05)
+
+
+### Bug Fixes
+
+* **polling:** wrap setState/casino-reels/render inside the poll try-finally ([#216](https://github.com/drummel/git-watchtower/issues/216)) ([debb904](https://github.com/drummel/git-watchtower/commit/debb904ed71f6deba1c1983af72ab8bcb5f821fa))
+
 ## [2.3.18](https://github.com/drummel/git-watchtower/compare/v2.3.17...v2.3.18) (2026-05-05)
 
 
