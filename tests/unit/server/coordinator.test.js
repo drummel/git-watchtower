@@ -56,6 +56,47 @@ describe('isProcessAlive', () => {
     // Use a very high PID that's unlikely to exist
     assert.equal(isProcessAlive(999999999), false);
   });
+
+  // Regression for the audit finding: process.kill(pid, 0) returns EPERM
+  // when the process exists but is owned by another user (or is in a
+  // different cgroup). The previous implementation treated EPERM as
+  // "dead", which caused stale-lock cleanup to clobber a coordinator
+  // whose PID had been reused by another user's process.
+  it('should treat EPERM as alive (foreign-user / restricted-cgroup process)', () => {
+    const original = process.kill;
+    let calledWith = null;
+    // @ts-ignore — test mock
+    process.kill = (pid, sig) => {
+      calledWith = { pid, sig };
+      const err = new Error('Operation not permitted');
+      // @ts-ignore — Node sets .code on syscall errors
+      err.code = 'EPERM';
+      throw err;
+    };
+    try {
+      assert.equal(isProcessAlive(54321), true,
+        'EPERM means the process exists; isProcessAlive must report true');
+      assert.deepEqual(calledWith, { pid: 54321, sig: 0 });
+    } finally {
+      process.kill = original;
+    }
+  });
+
+  it('should treat ESRCH as dead', () => {
+    const original = process.kill;
+    // @ts-ignore — test mock
+    process.kill = () => {
+      const err = new Error('No such process');
+      // @ts-ignore
+      err.code = 'ESRCH';
+      throw err;
+    };
+    try {
+      assert.equal(isProcessAlive(54321), false);
+    } finally {
+      process.kill = original;
+    }
+  });
 });
 
 describe('lock file operations', () => {

@@ -108,6 +108,24 @@ function ensureDir() {
 
 /**
  * Check if a process with the given PID is alive.
+ *
+ * `process.kill(pid, 0)` is the standard "is this PID alive?" probe. It
+ * sends signal 0 (no-op) and surfaces the kernel's answer via errno:
+ *
+ *   - resolves cleanly       → process exists and we can signal it
+ *   - throws ESRCH           → no such process; safe to call dead
+ *   - throws EPERM           → process exists but is owned by another
+ *                              user or in a different cgroup. STILL
+ *                              alive — we just can't signal it.
+ *
+ * Treating EPERM as "dead" was a real bug for the coordinator lock: if
+ * a coordinator's PID was reused by another local user's process after
+ * a crash, a peer instance would read the lock, see EPERM, decide the
+ * coordinator was dead, unlink the lock, and try to take over while
+ * the original (or reused) PID was still running. Mirroring the same
+ * EPERM-aware check used by src/utils/monitor-lock.js prevents that
+ * cleanup-then-clobber race.
+ *
  * @param {number} pid
  * @returns {boolean}
  */
@@ -116,7 +134,8 @@ function isProcessAlive(pid) {
     process.kill(pid, 0);
     return true;
   } catch (e) {
-    return false;
+    // ESRCH = no such process; EPERM = exists but owned by another user.
+    return e.code === 'EPERM';
   }
 }
 
