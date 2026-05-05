@@ -2004,12 +2004,10 @@ async function pollGitChanges() {
     const updatedBranches = [];
     const updatedBranchPrevCommits = new Map();
     const currentBranchName = store.get('currentBranch');
-    const activeBranchNames = new Set();
     for (const branch of pollFilteredBranches) {
       // Clear previous cycle's flag so only freshly-updated branches are highlighted
       branch.justUpdated = false;
       if (branch.isDeleted) continue;
-      activeBranchNames.add(branch.name);
       const prevCommit = previousBranchStates.get(branch.name);
       if (prevCommit && prevCommit !== branch.commit && branch.name !== currentBranchName) {
         updatedBranches.push(branch);
@@ -2019,17 +2017,13 @@ async function pollGitChanges() {
       previousBranchStates.set(branch.name, branch.commit);
     }
 
-    // Remove stale entries from caches for branches
-    // that no longer exist in the current poll results
-    const staleCaches = [previousBranchStates, prInfoCache, store.get('sparklineCache'), store.get('aheadBehindCache')];
-    for (const cache of staleCaches) {
-      if (!cache) continue;
-      for (const name of cache.keys()) {
-        if (!activeBranchNames.has(name)) {
-          cache.delete(name);
-        }
-      }
-    }
+    // (No second prune pass here — pruneStaleEntries above already prunes
+    // these four caches against fetchedBranchNames with a 30 s deleted-
+    // branch grace period. The previous extra loop pruned against the
+    // active-only set instead, which excluded isDeleted entries and so
+    // wiped a recently-deleted branch's sparkline / PR status / ahead-
+    // behind data IMMEDIATELY — contradicting the retention window the
+    // first prune was specifically designed to provide.)
 
     // Flash and sound for updates or new branches
     const casinoOn = store.get('casinoModeEnabled');
