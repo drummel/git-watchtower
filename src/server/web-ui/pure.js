@@ -134,4 +134,83 @@ function getDisplayBranches(branches, options) {
   return result;
 }
 
-module.exports = { escHtml, timeAgo, renderSparklineBars, fmtCompact, getDisplayBranches };
+/**
+ * Build a branch URL for the appropriate git hosting service.
+ * Pure / browser-safe — duplicated logic lives in src/git/remote.js for
+ * Node-side callers, but THIS function is the canonical implementation
+ * that the web dashboard inlines into its bundle.
+ *
+ * @param {string} baseUrl - Repository base URL (e.g., https://github.com/user/repo)
+ * @param {string} host - Hostname of the git hosting service
+ * @param {string} branchName - Name of the branch
+ * @returns {string}
+ */
+function buildBranchUrl(baseUrl, host, branchName) {
+  var branch = encodeURIComponent(branchName);
+  var h = String(host || '').toLowerCase();
+
+  // Azure DevOps: dev.azure.com/org/project/_git/repo or org.visualstudio.com
+  if (h === 'dev.azure.com' || /\.visualstudio\.com$/.test(h)) {
+    return baseUrl + '?version=GB' + branch;
+  }
+  // Bitbucket Cloud
+  if (h === 'bitbucket.org') return baseUrl + '/src/' + branch;
+  // AWS CodeCommit
+  if (/codecommit\..+\.amazonaws\.com/.test(h)) {
+    return baseUrl + '/browse/refs/heads/' + branch;
+  }
+  // GitHub, GitLab, SourceHut, Codeberg, Gitea, Forgejo, Gogs, self-hosted
+  return baseUrl + '/tree/' + branch;
+}
+
+/**
+ * Build a commit URL for the appropriate git hosting service.
+ * @param {string} baseUrl - Repository base URL
+ * @param {string} host - Hostname
+ * @param {string} sha - Commit SHA (full or short)
+ * @returns {string|null}
+ */
+function buildCommitUrl(baseUrl, host, sha) {
+  if (!sha) return null;
+  var h = String(host || '').toLowerCase();
+  // Bitbucket uses /commits/ (plural)
+  if (h === 'bitbucket.org') return baseUrl + '/commits/' + sha;
+  // GitHub, GitLab, Gitea, Forgejo, Codeberg, Azure (best-effort), self-hosted
+  return baseUrl + '/commit/' + sha;
+}
+
+/**
+ * Build a pull/merge-request URL for the appropriate git hosting service.
+ * @param {string} baseUrl - Repository base URL
+ * @param {string} host - Hostname
+ * @param {string|number} prNumber - PR / MR number
+ * @returns {string|null}
+ */
+function buildPrUrl(baseUrl, host, prNumber) {
+  if (!prNumber) return null;
+  var h = String(host || '').toLowerCase();
+  if (h === 'bitbucket.org') return baseUrl + '/pull-requests/' + prNumber;
+  // GitLab.com or any host containing "gitlab" (self-hosted gitlab.example.com)
+  if (h === 'gitlab.com' || h.split('.').indexOf('gitlab') !== -1) {
+    return baseUrl + '/-/merge_requests/' + prNumber;
+  }
+  if (h === 'dev.azure.com' || /\.visualstudio\.com$/.test(h)) {
+    return baseUrl + '/pullrequest/' + prNumber;
+  }
+  if (/codecommit\..+\.amazonaws\.com/.test(h)) {
+    return baseUrl + '/pull-requests/' + prNumber;
+  }
+  // GitHub, Gitea, Codeberg, Forgejo, Gogs, self-hosted
+  return baseUrl + '/pull/' + prNumber;
+}
+
+module.exports = {
+  escHtml,
+  timeAgo,
+  renderSparklineBars,
+  fmtCompact,
+  getDisplayBranches,
+  buildBranchUrl,
+  buildCommitUrl,
+  buildPrUrl,
+};
