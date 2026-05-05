@@ -532,34 +532,38 @@ describe('marquee animation', () => {
     assert.ok(char.length > 0, 'Should return side character');
   });
 
-  // Regression for the audit hygiene finding: disable() previously left
-  // marqueeCallback set, so a stale closure to a previous session's render
-  // function survived across enable/disable cycles. In production it's
-  // benign (the bin sets the callback exactly once at startup against a
-  // singleton render fn), but tests that exercised setRenderCallback per
-  // iteration saw the previous test's callback fire during the next
-  // enable() before its own setRenderCallback overwrote it.
-  it('disable() should null the marquee callback so it does not survive into the next session', async () => {
-    let firstCallbackInvocations = 0;
-    casino.setRenderCallback(() => { firstCallbackInvocations++; });
+  // Regression for the audit finding: disable() used to null marqueeCallback,
+  // which broke the production toggle path. The bin registers the render
+  // callback exactly once at startup, so nulling it on disable meant the
+  // next enable() (e.g. user pressing `c c`) ticked the marquee interval
+  // without ever firing render() — animation froze until some other event
+  // happened to redraw. The interval body is gated on `casinoEnabled` so
+  // disabled-state safety is preserved without nulling the callback.
+  it('marquee callback registered once must keep firing across disable→enable cycles', async () => {
+    let invocations = 0;
+    casino.setRenderCallback(() => { invocations++; });
     // Wait long enough for the marquee interval (150 ms) to fire at least once.
     await new Promise((r) => setTimeout(r, 200));
-    assert.ok(firstCallbackInvocations > 0, 'sanity: first callback should be invoked while enabled');
+    assert.ok(invocations > 0, 'sanity: callback should fire during initial enable');
 
     casino.disable();
-    const beforeReenable = firstCallbackInvocations;
+    const afterDisable = invocations;
+    // Wait past the interval to confirm disable actually stops new callbacks.
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(invocations, afterDisable, 'callback must NOT fire while disabled');
 
-    // Re-enable WITHOUT setting a new render callback. If disable() didn't
-    // null marqueeCallback, the stale first-callback closure would fire
-    // again from the new marquee interval.
+    // Re-enable WITHOUT re-registering the callback — production pattern,
+    // since bin/git-watchtower.js calls setRenderCallback exactly once at
+    // startup. The originally registered callback must still fire.
     casino.enable();
     await new Promise((r) => setTimeout(r, 250));
-    assert.equal(
-      firstCallbackInvocations,
-      beforeReenable,
-      'first session\'s render callback must NOT fire from a fresh enable()'
+    assert.ok(
+      invocations > afterDisable,
+      'previously registered callback must resume firing on re-enable'
     );
     casino.disable();
+    // Restore a no-op so a stale closure can't leak into later test cases.
+    casino.setRenderCallback(() => {});
   });
 });
 
