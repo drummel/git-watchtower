@@ -1,3 +1,10 @@
+## [2.3.16](https://github.com/drummel/git-watchtower/compare/v2.3.15...v2.3.16) (2026-05-05)
+
+
+### Bug Fixes
+
+* **web-ui:** build platform-aware branch/commit/PR links in dashboard ([#212](https://github.com/drummel/git-watchtower/issues/212)) ([b3d49d4](https://github.com/drummel/git-watchtower/commit/b3d49d4f814d839669b2ffcd678dd521b881f96e))
+
 ## [2.3.15](https://github.com/drummel/git-watchtower/compare/v2.3.14...v2.3.15) (2026-05-05)
 
 
