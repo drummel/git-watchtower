@@ -1881,18 +1881,24 @@ async function pollGitChanges() {
   // Skip if a poll is already in progress (don't queue)
   if (pollMutex.isLocked()) return;
   const pollToken = await pollMutex.acquire();
-  store.setState({ isPolling: true, pollingStatus: 'fetching' });
 
-  // Casino mode: start slot reels spinning (no sound - too annoying)
-  if (store.get('casinoModeEnabled')) {
-    casino.startSlotReels(render);
-  }
-
-  render();
-
-  const fetchStartTime = Date.now();
-
+  // Everything past acquire() must be wrapped so the finally releases
+  // the token. The previous shape kept the setState / casino.startSlotReels
+  // / render() calls outside the try, so a throw from any of them (e.g. a
+  // store middleware error, a casino interval-setup failure) leaked the
+  // mutex permanently and stalled every subsequent poll cycle.
   try {
+    store.setState({ isPolling: true, pollingStatus: 'fetching' });
+
+    // Casino mode: start slot reels spinning (no sound - too annoying)
+    if (store.get('casinoModeEnabled')) {
+      casino.startSlotReels(render);
+    }
+
+    render();
+
+    const fetchStartTime = Date.now();
+
     const newCurrentBranch = await getCurrentBranch();
     const prevCurrentBranch = store.get('currentBranch');
 
