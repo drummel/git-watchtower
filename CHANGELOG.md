@@ -1,3 +1,10 @@
+## [2.3.15](https://github.com/drummel/git-watchtower/compare/v2.3.14...v2.3.15) (2026-05-05)
+
+
+### Bug Fixes
+
+* **casino:** keep marquee callback across disable→enable cycles ([#211](https://github.com/drummel/git-watchtower/issues/211)) ([8dc1c2e](https://github.com/drummel/git-watchtower/commit/8dc1c2ef110413ae01d7340c26f5cdf362b1cef8))
+
 ## [2.3.14](https://github.com/drummel/git-watchtower/compare/v2.3.13...v2.3.14) (2026-05-04)
 
 
