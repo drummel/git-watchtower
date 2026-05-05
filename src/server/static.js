@@ -125,10 +125,50 @@ function resolveStaticPath(candidate, realStaticDir) {
   return { status: 'ok', path: realPath };
 }
 
+/**
+ * Broadcast an SSE frame to every live-reload client, isolating per-client
+ * write failures so one dead socket can't abort the whole iteration.
+ *
+ * Previously this was a one-liner in bin/git-watchtower.js:
+ *   clients.forEach(c => c.write('data: reload\n\n'));
+ * If any client's underlying socket had been destroyed (browser tab
+ * closed, network reset, proxy hangup) without 'close' firing yet, the
+ * synchronous write threw `ERR_STREAM_DESTROYED` and aborted the
+ * forEach mid-iteration — every later client in the Set never received
+ * the reload event. Wrapping each write in try/catch and removing the
+ * failed client from the Set keeps the broadcast atomic-per-client and
+ * also prunes the dead entry so the next call doesn't trip on it again.
+ *
+ * @param {Set<{write: function, end?: function}>} clients - SSE response objects
+ * @param {string} [frame='data: reload\n\n'] - Pre-formatted SSE frame
+ * @returns {{delivered: number, dropped: number}}
+ */
+function broadcastReload(clients, frame) {
+  const message = frame || 'data: reload\n\n';
+  let delivered = 0;
+  let dropped = 0;
+  // Iterate a snapshot — Set.delete during forEach is safe in V8, but
+  // copying makes the contract explicit and survives any future
+  // iterator-protocol changes.
+  for (const client of Array.from(clients)) {
+    try {
+      client.write(message);
+      delivered++;
+    } catch (e) {
+      // Dead socket. Drop it and keep going so subsequent clients still
+      // see the broadcast.
+      clients.delete(client);
+      dropped++;
+    }
+  }
+  return { delivered, dropped };
+}
+
 module.exports = {
   MIME_TYPES,
   getMimeType,
   LIVE_RELOAD_SCRIPT,
   injectLiveReload,
   resolveStaticPath,
+  broadcastReload,
 };

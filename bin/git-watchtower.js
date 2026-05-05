@@ -878,7 +878,7 @@ const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../s
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
-const { getMimeType, injectLiveReload, resolveStaticPath } = require('../src/server/static');
+const { getMimeType, injectLiveReload, resolveStaticPath, broadcastReload } = require('../src/server/static');
 
 // State (non-store globals)
 let previousBranchStates = new Map(); // branch name -> commit hash
@@ -2299,9 +2299,13 @@ function restartPolling() {
 
 function notifyClients() {
   if (NO_SERVER) return; // No clients in no-server mode
-  clients.forEach(client => client.write('data: reload\n\n'));
-  if (clients.size > 0) {
-    addLog(`Reloading ${clients.size} browser(s)`, 'info');
+  if (clients.size === 0) return;
+  const { delivered, dropped } = broadcastReload(clients);
+  if (delivered > 0) {
+    addLog(`Reloading ${delivered} browser(s)`, 'info');
+  }
+  if (dropped > 0) {
+    addLog(`Dropped ${dropped} dead live-reload client(s)`, 'warning');
   }
 }
 
