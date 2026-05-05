@@ -8,6 +8,7 @@ const {
   MIME_TYPES,
   injectLiveReload,
   resolveStaticPath,
+  broadcastReload,
 } = require('../../../src/server/static');
 const { parseDiffStats } = require('../../../src/git/commands');
 
@@ -236,5 +237,84 @@ describe('resolveStaticPath', () => {
     const result = resolveStaticPath(subdir, realStaticDir);
     assert.equal(result.status, 'ok');
     assert.equal(result.path, subdir);
+  });
+});
+
+// ── broadcastReload ─────────────────────────────────────────────────
+// Regression for the audit finding: notifyClients() used to call
+// `clients.forEach(c => c.write(...))` with no try/catch, so one dead
+// socket aborted the iteration and every subsequent client missed the
+// reload. broadcastReload isolates per-client failures and prunes
+// dead entries from the Set as it goes.
+
+describe('broadcastReload', () => {
+  function fakeClient(name, opts = {}) {
+    return {
+      name,
+      written: [],
+      write(msg) {
+        if (opts.throws) {
+          const err = new Error('Cannot call write after a stream was destroyed');
+          err.code = 'ERR_STREAM_DESTROYED';
+          throw err;
+        }
+        this.written.push(msg);
+      },
+    };
+  }
+
+  it('delivers the frame to every healthy client', () => {
+    const a = fakeClient('a');
+    const b = fakeClient('b');
+    const c = fakeClient('c');
+    const set = new Set([a, b, c]);
+    const result = broadcastReload(set);
+    assert.equal(result.delivered, 3);
+    assert.equal(result.dropped, 0);
+    assert.equal(a.written.length, 1);
+    assert.equal(b.written.length, 1);
+    assert.equal(c.written.length, 1);
+    assert.equal(a.written[0], 'data: reload\n\n');
+  });
+
+  it('keeps broadcasting after one client throws (the audit-fix #3 regression)', () => {
+    const a = fakeClient('a');
+    const b = fakeClient('b', { throws: true }); // dead socket mid-iteration
+    const c = fakeClient('c');
+    const d = fakeClient('d');
+    const set = new Set([a, b, c, d]);
+    const result = broadcastReload(set);
+    // 3 healthy received the frame; b was dropped from the Set
+    assert.equal(result.delivered, 3, 'all healthy clients should receive the broadcast');
+    assert.equal(result.dropped, 1);
+    assert.equal(a.written.length, 1);
+    assert.equal(c.written.length, 1, 'client AFTER the bad one must still receive the broadcast');
+    assert.equal(d.written.length, 1);
+    assert.equal(set.has(b), false, 'failed client should be removed from the Set');
+    assert.equal(set.size, 3);
+  });
+
+  it('handles all clients failing without throwing', () => {
+    const a = fakeClient('a', { throws: true });
+    const b = fakeClient('b', { throws: true });
+    const set = new Set([a, b]);
+    const result = broadcastReload(set);
+    assert.equal(result.delivered, 0);
+    assert.equal(result.dropped, 2);
+    assert.equal(set.size, 0, 'all dead clients should be pruned');
+  });
+
+  it('handles an empty client set', () => {
+    const set = new Set();
+    const result = broadcastReload(set);
+    assert.equal(result.delivered, 0);
+    assert.equal(result.dropped, 0);
+  });
+
+  it('uses the supplied frame when provided', () => {
+    const a = fakeClient('a');
+    const set = new Set([a]);
+    broadcastReload(set, 'data: custom\n\n');
+    assert.equal(a.written[0], 'data: custom\n\n');
   });
 });
