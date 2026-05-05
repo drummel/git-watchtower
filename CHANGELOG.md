@@ -1,3 +1,10 @@
+## [2.3.18](https://github.com/drummel/git-watchtower/compare/v2.3.17...v2.3.18) (2026-05-05)
+
+
+### Bug Fixes
+
+* **coordinator:** treat EPERM from process.kill probe as alive ([#214](https://github.com/drummel/git-watchtower/issues/214)) ([860c2f8](https://github.com/drummel/git-watchtower/commit/860c2f8c017b127e172f9ee06926add03c66eed7))
+
 ## [2.3.17](https://github.com/drummel/git-watchtower/compare/v2.3.16...v2.3.17) (2026-05-05)
 
 
