@@ -296,8 +296,15 @@ const NON_SGR_CSI_RE = /\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x6c\x6e-\x7e]/g;
 
 // Match OSC sequences: ESC ] ... terminator (BEL or ESC \). These set
 // terminal title, hyperlinks, etc. — all undesirable in untrusted input.
+// The trailing `|$` alternation also matches an UNTERMINATED OSC tail
+// (`\x1b]0;evil-text` with no \x07 / \x1b\\ before EOF). Without it,
+// the literal payload survived sanitisation as visible text — ESC_RE
+// stripped the leading `\x1b]` since `]` is in the `\\-_` range, but
+// "0;evil-text" remained. Per ECMA-48, an unterminated OSC at EOF is
+// effectively an open control string, so dropping it entirely is the
+// safe default.
 // eslint-disable-next-line no-control-regex
-const OSC_RE = /\x1b\][\s\S]*?(?:\x07|\x1b\\)/g;
+const OSC_RE = /\x1b\][\s\S]*?(?:\x07|\x1b\\|$)/g;
 
 // Match other 2-byte ESC sequences (Fe codes 0x40-0x5F) excluding CSI ([)
 // and OSC (]) which are handled separately above.
