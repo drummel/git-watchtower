@@ -1,3 +1,10 @@
+## [2.3.22](https://github.com/drummel/git-watchtower/compare/v2.3.21...v2.3.22) (2026-05-06)
+
+
+### Bug Fixes
+
+* **casino:** center win/loss displays by terminal columns, not code units ([#219](https://github.com/drummel/git-watchtower/issues/219)) ([9401aa6](https://github.com/drummel/git-watchtower/commit/9401aa605283b242c50d514cbf0a8bef09419112))
+
 ## [2.3.21](https://github.com/drummel/git-watchtower/compare/v2.3.20...v2.3.21) (2026-05-06)
 
 
