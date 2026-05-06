@@ -632,6 +632,99 @@ describe('Worker registration handshake', () => {
     await assert.rejects(() => w.connect());
     assert.equal(w.isConnected(), false);
   });
+
+  // Regression for the audit finding: socket.on('close') used to call
+  // settleReject(new Error('coordinator socket closed before
+  // registration')) on EVERY close, including ones that happen well
+  // after the handshake has resolved. settleReject is a no-op on the
+  // already-settled promise, but the misleading error string was still
+  // constructed and would have been visible if anything ever logged
+  // through the rejection path. Now the close handler only attempts a
+  // settleReject pre-registration.
+  it('does not emit a "before registration" rejection when the socket closes AFTER ACK', async () => {
+    fakeSockPath = SOCKET_PATH + '.post-ack-close';
+    try { fs.unlinkSync(fakeSockPath); } catch (_) { /* not present */ }
+
+    let socketRef = null;
+    fakeServer = net.createServer((socket) => {
+      socketRef = socket;
+      let buf = '';
+      socket.on('data', (d) => {
+        buf += d.toString();
+        const idx = buf.indexOf('\n');
+        if (idx === -1) return;
+        const msg = JSON.parse(buf.slice(0, idx));
+        buf = buf.slice(idx + 1);
+        if (msg.type === 'register') {
+          socket.write(JSON.stringify({ type: 'registered', id: msg.id }) + '\n');
+        }
+      });
+    });
+    await new Promise((r) => fakeServer.listen(fakeSockPath, r));
+
+    const w = new Worker({
+      id: 'post-ack-close',
+      projectPath: '/tmp/p',
+      projectName: 'p',
+      socketPath: fakeSockPath,
+    });
+
+    let unhandled = null;
+    const handler = (reason) => { unhandled = reason; };
+    process.on('unhandledRejection', handler);
+
+    try {
+      await w.connect();
+      assert.equal(w.isConnected(), true);
+
+      // Close the socket from the SERVER side. The Worker's close
+      // listener runs; pre-fix, it constructed and passed the
+      // "before registration" error to a no-op settleReject. Post-fix,
+      // the !settled guard skips that branch entirely.
+      socketRef.destroy();
+
+      // Give the close event a tick to propagate.
+      await new Promise((r) => setTimeout(r, 50));
+
+      assert.equal(w.isConnected(), false,
+        '_connected must flip to false on post-ACK close');
+      assert.equal(unhandled, null,
+        'no unhandled rejection should be produced by post-ACK close');
+    } finally {
+      process.removeListener('unhandledRejection', handler);
+      w.disconnect();
+    }
+  });
+
+  // Reinforces the runtime smoke test above with a static check: the
+  // observable difference of the audit's hygiene fix is that the
+  // misleading Error is no longer ALLOCATED post-registration. The
+  // settleReject call would have been a silent no-op either way, so
+  // the runtime assertion alone can't distinguish fix from no-fix.
+  // This source-level assertion does. If a future refactor removes
+  // the `!settled` guard, this test fails immediately and documents
+  // why.
+  it('Worker close handler has the !settled guard so post-ACK closes do not allocate a misleading Error', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', 'src', 'server', 'coordinator.js'),
+      'utf8'
+    );
+    // Pluck out the Worker.connect() socket close handler. The regex
+    // is intentionally narrow — Worker is the second `this.socket.on('close',`
+    // in the file (Coordinator's _handleWorkerConnection has its own
+    // close handler with different semantics).
+    const closeHandlers = src.match(/this\.socket\.on\('close',\s*\(\)\s*=>\s*\{([\s\S]*?)\}\);/g);
+    assert.ok(closeHandlers && closeHandlers.length >= 1,
+      'expected at least one Worker socket.on("close",...) handler in coordinator.js');
+    const workerCloseHandler = closeHandlers[closeHandlers.length - 1];
+    assert.match(
+      workerCloseHandler,
+      /if\s*\(!settled\)/,
+      'Worker close handler must guard settleReject behind !settled — without it, a post-ACK close still constructs the misleading "before registration" Error.'
+    );
+  });
 });
 
 describe('Coordinator worker state validation', () => {
