@@ -8,12 +8,24 @@
  * @param {Array} prs - Array of PR objects from gh CLI
  * @returns {object|null} Normalized PR info
  */
+// GitHub statusCheckRollup conclusions that mean "this check did not pass."
+// FAILURE alone misses TIMED_OUT, CANCELLED, ACTION_REQUIRED, and STARTUP_FAILURE
+// — a PR with any of those would render no CI badge in the action modal,
+// leaving the user blind to a real CI break.
+const FAILED_CONCLUSIONS = new Set([
+  'FAILURE',
+  'TIMED_OUT',
+  'CANCELLED',
+  'ACTION_REQUIRED',
+  'STARTUP_FAILURE',
+]);
+
 function parseGitHubPr(prs) {
   if (!prs || prs.length === 0) return null;
   const pr = prs[0];
   const checks = pr.statusCheckRollup || [];
   const checksPass = checks.length > 0 && checks.every(c => c.conclusion === 'SUCCESS');
-  const checksFail = checks.some(c => c.conclusion === 'FAILURE');
+  const checksFail = checks.some(c => FAILED_CONCLUSIONS.has(c.conclusion));
   return {
     number: pr.number,
     title: pr.title,
