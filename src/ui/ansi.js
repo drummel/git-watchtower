@@ -602,25 +602,79 @@ function style(text, ...styles) {
 }
 
 /**
- * Pad a string on the right, truncating if too long (uses raw string length)
- * @param {string} str - String to pad
- * @param {number} len - Target length
+ * Walk graphemes up to a column budget, returning the longest prefix
+ * whose visible width does not exceed `maxCols`. Drops one grapheme
+ * past the budget (mirrors how truncate() consumes — never mid-cut
+ * a wide char or surrogate pair).
+ * @param {string} str
+ * @param {number} maxCols
  * @returns {string}
+ * @private
  */
-function padRight(str, len) {
-  if (str.length >= len) return str.substring(0, len);
-  return str + ' '.repeat(len - str.length);
+function _sliceByColumns(str, maxCols) {
+  if (maxCols <= 0) return '';
+  let acc = '';
+  let used = 0;
+  if (_graphemeSegmenter) {
+    for (const { segment } of _graphemeSegmenter.segment(str)) {
+      const w = visibleLength(segment);
+      if (used + w > maxCols) break;
+      acc += segment;
+      used += w;
+    }
+  } else {
+    for (const ch of str) {
+      const w = _codePointWidth(ch.codePointAt(0));
+      if (used + w > maxCols) break;
+      acc += ch;
+      used += w;
+    }
+  }
+  return acc;
 }
 
 /**
- * Pad a string on the left, truncating if too long (uses raw string length)
+ * Pad a string on the right to a target visible-column width.
+ * Truncates (without adding an ellipsis) when the input already
+ * exceeds the budget.
+ *
+ * Width is measured in display columns via visibleLength, NOT UTF-16
+ * `.length`. ASCII-only inputs keep their previous behaviour because
+ * `.length === visibleLength` for them. CJK / wide emoji / ZWJ
+ * clusters now pad by the columns they actually render in, and the
+ * truncate path slices on grapheme boundaries so a wide character
+ * isn't cut mid-byte.
+ *
+ * SGR-styled strings (e.g. `\x1b[31mhi\x1b[0m`) previously had their
+ * raw-byte length compared against `len`, so the colour wrapper made
+ * the string look "too long" and `substring(0, len)` cut the escape
+ * sequence in half — leaving the terminal in a stuck colour state.
+ * Now the width comparison uses visibleLength which strips ANSI
+ * before measuring, and the slice helper preserves SGR runs because
+ * they have width 0.
+ *
  * @param {string} str - String to pad
- * @param {number} len - Target length
+ * @param {number} len - Target visible-column width
+ * @returns {string}
+ */
+function padRight(str, len) {
+  const cols = visibleLength(str);
+  if (cols >= len) return _sliceByColumns(str, len);
+  return str + ' '.repeat(len - cols);
+}
+
+/**
+ * Pad a string on the left to a target visible-column width.
+ * Same column-vs-codeunit semantics as {@link padRight}.
+ *
+ * @param {string} str - String to pad
+ * @param {number} len - Target visible-column width
  * @returns {string}
  */
 function padLeft(str, len) {
-  if (str.length >= len) return str.substring(0, len);
-  return ' '.repeat(len - str.length) + str;
+  const cols = visibleLength(str);
+  if (cols >= len) return _sliceByColumns(str, len);
+  return ' '.repeat(len - cols) + str;
 }
 
 /**
