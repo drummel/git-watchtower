@@ -7,17 +7,42 @@ const { execFile } = require('child_process');
 
 /**
  * Validate that a string is a safe URL to pass to OS open commands.
- * Rejects URLs containing shell metacharacters that could lead to
- * command injection when passed through cmd.exe on Windows.
+ *
+ * Rejects:
+ * - non-string / empty input
+ * - schemes other than http(s) / file
+ * - control characters in any input (would mangle argv parsing on every
+ *   open-tool we target)
+ * - on Windows only: cmd.exe shell metacharacters (`& | < > ^ " ! %`)
+ *   because the Windows path passes the URL through `cmd.exe /c start`
+ *   to invoke the `start` shell builtin. macOS (`open`) and Linux
+ *   (`xdg-open`) go through `execFile` with an args array — no shell
+ *   involved — so those characters are safe to pass verbatim there.
+ *
+ * The platform-aware split fixes a real-world bug: legitimate URLs
+ * containing `&` (query separators), `%` (percent-encoding — produced
+ * by `encodeURIComponent` for any branch name with `/`), or `!` were
+ * being rejected on macOS/Linux where they pose no shell-injection
+ * risk. The TUI's "open branch on web" action silently no-op'd for
+ * any branch like `feat/my-thing` because its built URL contained
+ * `feat%2Fmy-thing`.
+ *
  * @param {string} url
+ * @param {string} [platform=process.platform] - Override for tests.
  * @returns {boolean}
  */
-function isSafeUrl(url) {
+function isSafeUrl(url, platform) {
+  if (platform === undefined) platform = process.platform;
   if (!url || typeof url !== 'string') return false;
   // Must start with http://, https://, or file://
   if (!/^https?:\/\/|^file:\/\//i.test(url)) return false;
-  // Reject shell metacharacters that cmd.exe would interpret
-  if (/[&|<>^"!%]/.test(url)) return false;
+  // Reject embedded control bytes regardless of platform — every
+  // open-tool's argv parser would mangle them, and there is no
+  // legitimate reason for a URL to contain them.
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(url)) return false;
+  // Windows-only: reject the chars cmd.exe interprets in unquoted args.
+  if (platform === 'win32' && /[&|<>^"!%]/.test(url)) return false;
   return true;
 }
 

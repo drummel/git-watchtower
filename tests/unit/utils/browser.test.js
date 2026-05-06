@@ -23,29 +23,74 @@ describe('isSafeUrl', () => {
     assert.equal(isSafeUrl('file:///tmp/report.html'), true);
   });
 
-  it('should reject URLs with & (cmd.exe command chaining)', () => {
+  // The cmd.exe-meta rejection was previously global (any platform).
+  // It is now scoped to win32 — macOS / Linux go through execFile with
+  // an args array, no shell, so these characters are safe there.
+  // Tests below pass `platform` explicitly so they do not depend on
+  // the host running them.
+
+  it('should reject URLs with & on win32 (cmd.exe command chaining)', () => {
     const { isSafeUrl } = getModule();
-    assert.equal(isSafeUrl('https://example.com&calc'), false);
+    assert.equal(isSafeUrl('https://example.com&calc', 'win32'), false);
   });
 
-  it('should reject URLs with | (cmd.exe pipe)', () => {
+  it('should reject URLs with | on win32 (cmd.exe pipe)', () => {
     const { isSafeUrl } = getModule();
-    assert.equal(isSafeUrl('https://example.com|calc'), false);
+    assert.equal(isSafeUrl('https://example.com|calc', 'win32'), false);
   });
 
-  it('should reject URLs with > (cmd.exe redirect)', () => {
+  it('should reject URLs with > on win32 (cmd.exe redirect)', () => {
     const { isSafeUrl } = getModule();
-    assert.equal(isSafeUrl('https://example.com>out.txt'), false);
+    assert.equal(isSafeUrl('https://example.com>out.txt', 'win32'), false);
   });
 
-  it('should reject URLs with < (cmd.exe redirect)', () => {
+  it('should reject URLs with < on win32 (cmd.exe redirect)', () => {
     const { isSafeUrl } = getModule();
-    assert.equal(isSafeUrl('https://example.com<in.txt'), false);
+    assert.equal(isSafeUrl('https://example.com<in.txt', 'win32'), false);
   });
 
-  it('should reject URLs with ^ (cmd.exe escape char)', () => {
+  it('should reject URLs with ^ on win32 (cmd.exe escape char)', () => {
     const { isSafeUrl } = getModule();
-    assert.equal(isSafeUrl('https://example.com^foo'), false);
+    assert.equal(isSafeUrl('https://example.com^foo', 'win32'), false);
+  });
+
+  // Bug coverage: real-world URLs containing & / % / ! were being
+  // rejected globally even though those characters are safe on
+  // non-Windows platforms (no shell on the open path).
+
+  it('should accept query-string URLs with & on linux', () => {
+    const { isSafeUrl } = getModule();
+    assert.equal(isSafeUrl('https://github.com/u/r/pulls?state=open&author=me', 'linux'), true);
+  });
+
+  it('should accept query-string URLs with & on darwin', () => {
+    const { isSafeUrl } = getModule();
+    assert.equal(isSafeUrl('https://example.com/path?a=1&b=2', 'darwin'), true);
+  });
+
+  it('should accept percent-encoded URLs on linux (encodeURIComponent output)', () => {
+    const { isSafeUrl } = getModule();
+    // encodeURIComponent('feat/my-thing') → 'feat%2Fmy-thing'
+    assert.equal(isSafeUrl('https://github.com/u/r/tree/feat%2Fmy-thing', 'linux'), true);
+  });
+
+  it('should accept percent-encoded URLs on darwin', () => {
+    const { isSafeUrl } = getModule();
+    assert.equal(isSafeUrl('https://example.com/path%20with%20space', 'darwin'), true);
+  });
+
+  it('should accept URLs with ! on linux', () => {
+    const { isSafeUrl } = getModule();
+    assert.equal(isSafeUrl('https://example.com/foo!bar', 'linux'), true);
+  });
+
+  // Defence against control-byte injection regardless of platform.
+  it('should reject URLs with embedded control characters on every platform', () => {
+    const { isSafeUrl } = getModule();
+    for (const platform of ['linux', 'darwin', 'win32']) {
+      assert.equal(isSafeUrl('https://example.com/\x00null', platform), false, `NUL on ${platform}`);
+      assert.equal(isSafeUrl('https://example.com/\nnewline', platform), false, `LF on ${platform}`);
+    }
   });
 
   it('should reject non-http/https/file schemes', () => {
