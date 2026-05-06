@@ -710,12 +710,21 @@ class Worker {
 
       this.socket.on('error', (err) => {
         this._connected = false;
-        settleReject(err);
+        // Pre-registration: settleReject the connect-promise with the
+        // socket error. Post-registration: the promise has already
+        // resolved, so just maintain _connected. Without the `settled`
+        // guard we still passed the same Error into settleReject — a
+        // no-op on the already-settled promise, but the misleading
+        // "before registration" message would survive in any future
+        // change that logged it.
+        if (!settled) settleReject(err);
       });
 
       this.socket.on('close', () => {
         this._connected = false;
-        settleReject(new Error('coordinator socket closed before registration'));
+        if (!settled) {
+          settleReject(new Error('coordinator socket closed before registration'));
+        }
       });
     });
   }
