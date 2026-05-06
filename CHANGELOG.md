@@ -1,3 +1,10 @@
+## [2.3.20](https://github.com/drummel/git-watchtower/compare/v2.3.19...v2.3.20) (2026-05-06)
+
+
+### Bug Fixes
+
+* **ansi:** drop the payload of an unterminated OSC tail in sanitiser ([#217](https://github.com/drummel/git-watchtower/issues/217)) ([77d450b](https://github.com/drummel/git-watchtower/commit/77d450b8140c485ebad9f029c27a8520bb5666e6))
+
 ## [2.3.19](https://github.com/drummel/git-watchtower/compare/v2.3.18...v2.3.19) (2026-05-05)
 
 
