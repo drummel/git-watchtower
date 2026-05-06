@@ -76,6 +76,29 @@ describe('parseGitHubPr', () => {
     assert.equal(result.checksFail, true);
   });
 
+  // GitHub's statusCheckRollup uses several non-success terminal conclusions
+  // for broken builds. Treating only literal FAILURE as "fail" left
+  // TIMED_OUT, CANCELLED, ACTION_REQUIRED, and STARTUP_FAILURE invisible —
+  // checksPass was false (not every is SUCCESS), checksFail was false (no
+  // literal FAILURE), so the action modal rendered no CI badge for a real
+  // CI break.
+  for (const conclusion of ['TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE']) {
+    it(`should treat ${conclusion} as a failing check`, () => {
+      const result = parseGitHubPr([{
+        number: 1,
+        title: 'PR',
+        state: 'OPEN',
+        reviewDecision: '',
+        statusCheckRollup: [
+          { conclusion: 'SUCCESS' },
+          { conclusion },
+        ],
+      }]);
+      assert.equal(result.checksPass, false, `${conclusion} should not count as pass`);
+      assert.equal(result.checksFail, true, `${conclusion} should count as fail`);
+    });
+  }
+
   it('should handle missing statusCheckRollup', () => {
     const result = parseGitHubPr([{
       number: 1,
