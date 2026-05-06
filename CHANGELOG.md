@@ -1,3 +1,10 @@
+## [2.3.26](https://github.com/drummel/git-watchtower/compare/v2.3.25...v2.3.26) (2026-05-06)
+
+
+### Bug Fixes
+
+* **browser:** only enforce cmd.exe metas on win32 in isSafeUrl ([7301478](https://github.com/drummel/git-watchtower/commit/7301478d9daae8642e1b12a2b8a7ff11b9b16a21))
+
 ## [2.3.25](https://github.com/drummel/git-watchtower/compare/v2.3.24...v2.3.25) (2026-05-06)
 
 
