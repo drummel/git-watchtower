@@ -1,3 +1,10 @@
+## [2.3.23](https://github.com/drummel/git-watchtower/compare/v2.3.22...v2.3.23) (2026-05-06)
+
+
+### Bug Fixes
+
+* **pr:** treat TIMED_OUT/CANCELLED/ACTION_REQUIRED as failing checks ([fccd68f](https://github.com/drummel/git-watchtower/commit/fccd68fdb5e6a235339420cc3e073a91845c8619))
+
 ## [2.3.22](https://github.com/drummel/git-watchtower/compare/v2.3.21...v2.3.22) (2026-05-06)
 
 
