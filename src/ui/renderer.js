@@ -27,6 +27,32 @@ const { detectInstallSource, getUpdateCommand } = require('../utils/install-sour
 const { version: PACKAGE_VERSION } = require('../../package.json');
 
 // ---------------------------------------------------------------------------
+// Branch-row layout helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Spaces to write after the (possibly truncated) branch name so the
+ * sparkline column lands at a consistent offset regardless of the
+ * branch name's actual byte count.
+ *
+ * Must measure in display columns, not UTF-16 code units. truncate()
+ * appends ansi.reset (4 bytes) on its long-string path; CJK / wide
+ * emoji span 1 code unit per 2 columns; ZWJ clusters render as 2
+ * columns from up to 8 units. Using raw .length would drift the
+ * sparkline by N columns per non-ASCII branch and by 4 for any
+ * truncated branch.
+ *
+ * Always returns at least 1 so consecutive writes never abut.
+ *
+ * @param {string} displayName - Already truncate()d branch name.
+ * @param {number} maxNameLen - Column budget the name was truncated to.
+ * @returns {number} Number of space characters to write.
+ */
+function computeNamePadding(displayName, maxNameLen) {
+  return Math.max(1, maxNameLen - visibleLength(displayName) + 2);
+}
+
+// ---------------------------------------------------------------------------
 // Compact number formatting
 // ---------------------------------------------------------------------------
 
@@ -239,7 +265,7 @@ function renderBranchList(state, write) {
     const fixedWidth = 27 + DIFF_TAG_FIXED_LEN;
     const maxNameLen = contentWidth - fixedWidth;
     const displayName = truncate(branch.name, maxNameLen);
-    const namePadding = Math.max(1, maxNameLen - displayName.length + 2);
+    const namePadding = computeNamePadding(displayName, maxNameLen);
 
     if (isSelected) write(ansi.inverse);
     write(cursor);
@@ -1600,4 +1626,6 @@ module.exports = {
   renderStashConfirm,
   renderCleanupConfirm,
   renderUpdateModal,
+  // Layout helpers — exported for unit testing
+  computeNamePadding,
 };
