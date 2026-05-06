@@ -1,3 +1,10 @@
+## [2.3.21](https://github.com/drummel/git-watchtower/compare/v2.3.20...v2.3.21) (2026-05-06)
+
+
+### Bug Fixes
+
+* **store:** clone cache Maps in getState() so snapshots are isolated ([#218](https://github.com/drummel/git-watchtower/issues/218)) ([b6e0120](https://github.com/drummel/git-watchtower/commit/b6e0120e35633e55008fe030e66e09735918165d))
+
 ## [2.3.20](https://github.com/drummel/git-watchtower/compare/v2.3.19...v2.3.20) (2026-05-06)
 
 
