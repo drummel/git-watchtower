@@ -272,6 +272,14 @@ describe('stripAnsi', () => {
     assert.strictEqual(stripAnsi('a\x1b]8;;https://x\x1b\\linkb'), 'alinkb');
   });
 
+  // Regression for the audit finding: an unterminated OSC tail used to
+  // leave its payload as visible text. ESC_RE caught the leading \x1b]
+  // (since `]` falls in the `\\-_` range) but "0;evil-text" survived.
+  it('should drop the payload of an unterminated OSC tail', () => {
+    assert.strictEqual(stripAnsi('safe\x1b]0;evil-text'), 'safe');
+    assert.strictEqual(stripAnsi('\x1b]8;;https://attacker'), '');
+  });
+
   it('should remove dangerous C0 controls (bell, BS, DEL) but keep whitespace', () => {
     assert.strictEqual(stripAnsi('a\x07b\x08c\x7fd'), 'abcd');
     assert.strictEqual(stripAnsi('tab\there\nnewline\rcr'), 'tab\there\nnewline\rcr');
@@ -307,6 +315,15 @@ describe('sanitizeForRender', () => {
 
   it('should drop OSC terminal-title sequences', () => {
     assert.strictEqual(sanitizeForRender('safe\x1b]0;hijack\x07tail'), 'safetail');
+  });
+
+  // Regression for the audit finding: previously, a malicious
+  // commit subject ending in an unterminated OSC like `\x1b]0;…` had
+  // its payload leak through as visible text — only the leading
+  // `\x1b]` got stripped.
+  it('should drop the payload of an unterminated OSC tail', () => {
+    assert.strictEqual(sanitizeForRender('safe\x1b]0;evil-text'), 'safe');
+    assert.strictEqual(sanitizeForRender('a\x1b]8;;https://attacker'), 'a');
   });
 
   it('should drop dangerous C0 controls but keep whitespace', () => {
