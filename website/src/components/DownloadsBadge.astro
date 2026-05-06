@@ -19,22 +19,20 @@ async function fetchMonthly(): Promise<number | null> {
 
 monthly = await fetchMonthly();
 
-const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
+const exact = monthly !== null ? monthly.toLocaleString('en-US') : '';
 ---
 
-{
-  monthly !== null && (
-    <a
-      class="gw-downloads"
-      href={`https://www.npmjs.com/package/${PACKAGE_NAME}`}
-      target="_blank"
-      rel="noopener"
-    >
-      <span class="gw-downloads-num">{exact}</span>
-      <span class="gw-downloads-label">downloads in the last 30 days</span>
-    </a>
-  )
-}
+<a
+  class="gw-downloads"
+  href={`https://www.npmjs.com/package/${PACKAGE_NAME}`}
+  target="_blank"
+  rel="noopener"
+  data-gw-downloads
+  hidden={monthly === null}
+>
+  <span class="gw-downloads-num" data-gw-downloads-num>{exact}</span>
+  <span class="gw-downloads-label">downloads in the last 30 days</span>
+</a>
 
 <style>
   .gw-downloads {
@@ -47,6 +45,10 @@ const exact = monthly !== null ? monthly.toLocaleString('en-US') : null;
     color: var(--sl-color-gray-3, #999);
     text-decoration: none;
     transition: color 0.15s ease;
+  }
+
+  .gw-downloads[hidden] {
+    display: none;
   }
 
   :root[data-theme='light'] .gw-downloads {
