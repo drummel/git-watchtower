@@ -25,6 +25,7 @@ const tabs = [
         aria-controls={`install-panel-${tab.id}`}
         tabindex={i === 0 ? 0 : -1}
         data-install-tab={tab.id}
+        data-cta={`install_tab_${tab.id}`}
       >
         {tab.label}
       </button>
@@ -39,7 +40,7 @@ const tabs = [
       data-install-panel={tab.id}
       hidden={i !== 0}
     >
-      <InstallCommand command={tab.command} />
+      <InstallCommand command={tab.command} name={tab.id} />
     </div>
   ))}
 </div>
