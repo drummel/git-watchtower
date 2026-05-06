@@ -35,12 +35,48 @@ describe('Store', () => {
       assert.notStrictEqual(state1, state2);
       assert.deepStrictEqual(state1, state2);
     });
+
+    // Regression for the audit finding: getState() used to expose the
+    // live cache Maps by reference, so a caller that mutated the
+    // snapshot's sparklineCache / branchPrStatusMap / aheadBehindCache
+    // bypassed the middleware/notify pipeline.
+    it('should isolate sparklineCache so snapshot mutations do not affect the store', () => {
+      store.setState({ sparklineCache: new Map([['main', '▁▂▃']]) });
+      const snap = store.getState();
+      snap.sparklineCache.set('feature', '█');
+      assert.equal(store.get('sparklineCache').has('feature'), false);
+      assert.equal(store.get('sparklineCache').get('main'), '▁▂▃');
+    });
+
+    it('should isolate branchPrStatusMap from snapshot mutations', () => {
+      store.setState({ branchPrStatusMap: new Map([['x', { number: 1 }]]) });
+      const snap = store.getState();
+      snap.branchPrStatusMap.delete('x');
+      assert.equal(store.get('branchPrStatusMap').has('x'), true);
+    });
+
+    it('should isolate aheadBehindCache from snapshot mutations', () => {
+      store.setState({ aheadBehindCache: new Map([['main', { ahead: 1, behind: 0 }]]) });
+      const snap = store.getState();
+      snap.aheadBehindCache.set('feature', { ahead: 2, behind: 3 });
+      assert.equal(store.get('aheadBehindCache').has('feature'), false);
+    });
   });
 
   describe('get', () => {
     it('should return specific state value', () => {
       assert.strictEqual(store.get('mode'), 'normal');
       assert.deepStrictEqual(store.get('branches'), []);
+    });
+
+    // get(key) is the by-reference path used by the polling cache-prune
+    // pattern (mutate in place + setState to notify). Lock the contract
+    // in so future refactors don't accidentally start cloning here too.
+    it('should return Map values BY REFERENCE for in-place mutation', () => {
+      const m = new Map([['main', '▁▂▃']]);
+      store.setState({ sparklineCache: m });
+      assert.strictEqual(store.get('sparklineCache'), m,
+        'get(key) must return the live Map reference for the prune pattern');
     });
   });
 

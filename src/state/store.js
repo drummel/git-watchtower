@@ -209,15 +209,47 @@ class Store {
   }
 
   /**
-   * Get a copy of the current state
+   * Get a snapshot of the current state.
+   *
+   * The top-level object is a shallow copy (so adding/removing top-level
+   * keys on the returned object does not mutate the store). Map values
+   * (sparklineCache, branchPrStatusMap, aheadBehindCache) are also
+   * shallow-cloned so that consumers — most importantly the web
+   * dashboard's getSerializableState — can iterate or mutate the
+   * snapshot without the store's live data shifting underneath them.
+   *
+   * If you need the live, by-reference Map for in-place mutation
+   * followed by setState() (the polling cache-prune pattern), use
+   * `get(key)` instead.
+   *
    * @returns {State}
    */
   getState() {
-    return { ...this.state };
+    const snapshot = { ...this.state };
+    if (snapshot.sparklineCache instanceof Map) {
+      snapshot.sparklineCache = new Map(snapshot.sparklineCache);
+    }
+    if (snapshot.branchPrStatusMap instanceof Map) {
+      snapshot.branchPrStatusMap = new Map(snapshot.branchPrStatusMap);
+    }
+    if (snapshot.aheadBehindCache instanceof Map) {
+      snapshot.aheadBehindCache = new Map(snapshot.aheadBehindCache);
+    }
+    return snapshot;
   }
 
   /**
-   * Get a specific state value
+   * Get a specific state value by-reference.
+   *
+   * IMPORTANT: returns the live value, not a copy. For Map values
+   * (sparklineCache, branchPrStatusMap, aheadBehindCache) this is
+   * deliberate — the polling layer mutates these in place and then
+   * calls setState({key: sameMap}) to notify subscribers. Code that
+   * doesn't intend to mutate should treat the result as read-only,
+   * or copy it first (e.g. `new Map(store.get('sparklineCache'))`).
+   *
+   * For an isolation-safe snapshot, prefer `getState()`.
+   *
    * @template {keyof State} K
    * @param {K} key - State key
    * @returns {State[K]}
