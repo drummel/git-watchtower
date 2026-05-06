@@ -506,6 +506,48 @@ describe('disable() loss animation cleanup', () => {
   });
 });
 
+// Regression for the audit finding: getWinDisplay / getLossDisplay used
+// `label.length` (UTF-16 code units) for centering. For 2-codepoint
+// emoji like 💰 / 🎰 the math accidentally lined up, but ZWJ clusters
+// (family / flag / skin-tone) and CJK characters drifted by one or
+// more columns per glyph. Switching to visibleLength() counts terminal
+// display columns instead.
+describe('display centering uses visible columns', () => {
+  const { stripAnsi, visibleLength } = require('../../../src/ui/ansi');
+
+  beforeEach(() => {
+    casino.enable();
+    casino.resetStats();
+  });
+
+  afterEach(() => {
+    casino.disable();
+  });
+
+  it('getLossDisplay centers a flag-emoji message by display columns', () => {
+    // 🇬🇧 is 2 UTF-16 code units per regional indicator (4 total) but
+    // renders as a single 2-column glyph. The pre-fix code added 4 too
+    // many columns of padding compared to the visual width.
+    casino.triggerLoss('🇬🇧 down', () => {});
+    const out = casino.getLossDisplay(80);
+    const visible = stripAnsi(out);
+    // visibleLength should equal the requested width (or differ by at
+    // most 1 from rounding); the buggy version was off by 2-4 cols.
+    const drift = Math.abs(visibleLength(visible) - 80);
+    assert.ok(drift <= 1, `loss display drifted ${drift} columns from target width 80; got "${visible}"`);
+  });
+
+  it('getLossDisplay centers a CJK message by display columns', () => {
+    // CJK ideographs are 2 columns per code point. The buggy version
+    // counted them as 1 each.
+    casino.triggerLoss('合并冲突', () => {});
+    const out = casino.getLossDisplay(80);
+    const visible = stripAnsi(out);
+    const drift = Math.abs(visibleLength(visible) - 80);
+    assert.ok(drift <= 1, `loss display drifted ${drift} columns from target width 80; got "${visible}"`);
+  });
+});
+
 describe('marquee animation', () => {
   beforeEach(() => {
     casino.enable();

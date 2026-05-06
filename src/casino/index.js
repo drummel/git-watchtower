@@ -6,7 +6,7 @@
  * like hitting the jackpot.
  */
 
-const { ansi, box } = require('../ui/ansi');
+const { ansi, box, visibleLength } = require('../ui/ansi');
 const sounds = require('./sounds');
 
 // ============================================================================
@@ -537,7 +537,13 @@ function getWinDisplay(width) {
   const label = currentWinLevel.label;
   const color = flashOn ? currentWinLevel.color : ansi.dim + currentWinLevel.color;
 
-  const padding = Math.max(0, Math.floor((width - label.length) / 2));
+  // Use visibleLength so multi-codepoint emoji clusters (ZWJ family,
+  // flag emoji, variation selectors) are counted by display columns
+  // rather than UTF-16 code units. The current WIN_LEVELS labels happen
+  // to use 2-codepoint emoji whose .length matches column width, but a
+  // future label with a flag or family emoji would otherwise center
+  // off by one or more columns per glyph.
+  const padding = Math.max(0, Math.floor((width - visibleLength(label)) / 2));
 
   return color + ' '.repeat(padding) + label + ' '.repeat(padding) + ansi.reset;
 }
@@ -615,7 +621,10 @@ function getLossDisplay(width) {
   const display = `${symbols}${lossMessage}${symbols}`;
   const color = flashOn ? ansi.bgRed + ansi.white : ansi.bgBlack + ansi.red;
 
-  const padding = Math.max(0, Math.floor((width - display.length) / 2));
+  // Same reasoning as getWinDisplay: count terminal columns, not UTF-16
+  // code units. Untrusted lossMessage strings can also contain wide
+  // characters (e.g. CJK in error messages from a localised git build).
+  const padding = Math.max(0, Math.floor((width - visibleLength(display)) / 2));
 
   return color + ' '.repeat(padding) + display + ' '.repeat(padding) + ansi.reset;
 }
