@@ -1,3 +1,10 @@
+## [2.3.24](https://github.com/drummel/git-watchtower/compare/v2.3.23...v2.3.24) (2026-05-06)
+
+
+### Bug Fixes
+
+* **renderer:** measure branch-name padding in display columns ([30e15f0](https://github.com/drummel/git-watchtower/commit/30e15f02f8213b7680bbb97c426e4d3e6a1da878))
+
 ## [2.3.23](https://github.com/drummel/git-watchtower/compare/v2.3.22...v2.3.23) (2026-05-06)
 
 
