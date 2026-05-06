@@ -694,6 +694,47 @@ describe('padRight', () => {
   it('should handle empty string', () => {
     assert.strictEqual(padRight('', 3), '   ');
   });
+
+  // Width is measured in display columns, not UTF-16 code units. The bug
+  // these tests cover: padRight previously compared str.length against len
+  // and padded with .length-derived counts, so non-ASCII strings drifted
+  // and SGR-wrapped strings had their colour codes cut mid-sequence.
+
+  it('measures CJK input by display columns, not UTF-16 units', () => {
+    // 4 CJK chars = 4 UTF-16 units but 8 visible columns.
+    // Old behaviour: padRight('中文测试', 8) returned the input + 4 spaces
+    // (visibleLength 12). Correct: input already exactly fills 8 columns.
+    assert.strictEqual(visibleLength(padRight('中文测试', 8)), 8);
+    assert.strictEqual(padRight('中文测试', 8), '中文测试');
+  });
+
+  it('pads CJK input that is shorter than the budget', () => {
+    // '中文' is 4 columns. Pad to 8 → 4 trailing spaces.
+    assert.strictEqual(padRight('中文', 8), '中文    ');
+    assert.strictEqual(visibleLength(padRight('中文', 8)), 8);
+  });
+
+  it('does not split a wide grapheme when truncating', () => {
+    // '中文测试' is 8 cols; pad-to-5 forces truncation. Old behaviour
+    // used substring(0, 5) — mid-cuts 0 wide chars (since each is 1
+    // unit) but produced 4 visible chars + ASCII wide misalignment in
+    // the output. New behaviour walks graphemes by column budget; we
+    // accept either '中' (2 cols) or '中文' (4 cols) — the contract is
+    // that the visible width never exceeds the budget.
+    const result = padRight('中文测试', 5);
+    assert.ok(visibleLength(result) <= 5, `result "${result}" must not exceed 5 cols`);
+  });
+
+  it('pads SGR-styled strings to the right visible width', () => {
+    // 'hi' is 2 visible cols, the surrounding SGR is 0-width.
+    // Pad to 5 cols → 3 trailing spaces.
+    const styled = '\x1b[31mhi\x1b[0m';
+    const result = padRight(styled, 5);
+    assert.strictEqual(visibleLength(result), 5);
+    // The original SGR must still be present.
+    assert.ok(result.includes('\x1b[31m'), 'red SGR should be preserved');
+    assert.ok(result.includes('\x1b[0m'), 'reset SGR should be preserved');
+  });
 });
 
 describe('padLeft', () => {
@@ -711,6 +752,24 @@ describe('padLeft', () => {
 
   it('should handle empty string', () => {
     assert.strictEqual(padLeft('', 3), '   ');
+  });
+
+  it('measures CJK input by display columns, not UTF-16 units', () => {
+    // '中文' is 4 cols. Pad to 8 → 4 leading spaces.
+    assert.strictEqual(padLeft('中文', 8), '    中文');
+    assert.strictEqual(visibleLength(padLeft('中文', 8)), 8);
+  });
+
+  it('pads SGR-styled strings to the right visible width', () => {
+    // Old: '\x1b[31mhi\x1b[0m'.length is 11, so .length >= 5 fired the
+    // truncate branch and returned ' '.repeat(?) + substring(0, 5) which
+    // mid-cut the SGR. New: visibleLength is 2 < 5, so we hit the pad
+    // branch and prepend 3 spaces, preserving the styling intact.
+    const styled = '\x1b[31mhi\x1b[0m';
+    const result = padLeft(styled, 5);
+    assert.strictEqual(visibleLength(result), 5);
+    assert.ok(result.includes('\x1b[31m'));
+    assert.ok(result.includes('\x1b[0m'));
   });
 });
 
