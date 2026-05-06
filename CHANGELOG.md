@@ -1,3 +1,10 @@
+## [2.3.25](https://github.com/drummel/git-watchtower/compare/v2.3.24...v2.3.25) (2026-05-06)
+
+
+### Bug Fixes
+
+* **ui:** padRight/padLeft measure visible columns, not UTF-16 units ([104b5a5](https://github.com/drummel/git-watchtower/commit/104b5a530267dc600f705cd6a9c7bf01f6dea029))
+
 ## [2.3.24](https://github.com/drummel/git-watchtower/compare/v2.3.23...v2.3.24) (2026-05-06)
 
 
