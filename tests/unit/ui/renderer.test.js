@@ -20,7 +20,9 @@ const {
   renderInfo,
   renderActionModal,
   renderUpdateModal,
+  computeNamePadding,
 } = require('../../../src/ui/renderer');
+const { truncate } = require('../../../src/ui/ansi');
 const { stripAnsi } = require('../../../src/ui/ansi');
 const { detectInstallSource, getUpdateCommand } = require('../../../src/utils/install-source');
 
@@ -1269,5 +1271,60 @@ describe('renderUpdateModal', () => {
       'No cursor should be drawn while updateInProgress');
     assert.ok(!text.includes('▸ Show update command'),
       'No cursor should be drawn while updateInProgress');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeNamePadding
+// ---------------------------------------------------------------------------
+
+describe('computeNamePadding', () => {
+  // Invariant we rely on: visibleLength(displayName) + namePadding ===
+  // maxNameLen + 2 whenever the formula's natural value is at least 1.
+  // That keeps the sparkline column at a consistent offset regardless
+  // of how the branch name is encoded.
+
+  it('returns the +2 gap for an ASCII name shorter than the budget', () => {
+    // 'main' is 4 cols, budget is 20. Padding = 20 - 4 + 2 = 18.
+    assert.strictEqual(computeNamePadding('main', 20), 18);
+  });
+
+  it('returns the +2 gap for an ASCII name exactly at the budget', () => {
+    // 'a'.repeat(20) is 20 cols. Padding = 20 - 20 + 2 = 2.
+    assert.strictEqual(computeNamePadding('a'.repeat(20), 20), 2);
+  });
+
+  it('measures a truncate()d name in display columns, not UTF-16 units', () => {
+    // truncate appends ansi.reset (4 bytes) on the long-string path, so
+    // raw .length overstates by 4. Without visibleLength, padding came
+    // out 1 (Math.max floor) instead of 2, drifting the sparkline left.
+    const long = 'feature/very-long-branch-name-for-testing';
+    const display = truncate(long, 20);
+    assert.ok(display.length > 20, 'sanity: truncate output longer than maxLen due to ANSI reset');
+    assert.strictEqual(computeNamePadding(display, 20), 2);
+  });
+
+  it('counts CJK characters as 2 columns each', () => {
+    // 4 CJK code units = 8 visible columns. Budget 12 => padding 12-8+2=6.
+    assert.strictEqual(computeNamePadding('中文测试', 12), 6);
+  });
+
+  it('counts a ZWJ family-emoji cluster as 2 columns', () => {
+    // Family ZWJ cluster: 8 UTF-16 units, renders as 2 cols.
+    // Budget 10 => padding 10-2+2 = 10.
+    const family = '\u{1f468}‍\u{1f469}‍\u{1f467}'; // 👨‍👩‍👧
+    assert.strictEqual(computeNamePadding(family, 10), 10);
+  });
+
+  it('counts a 2-codepoint emoji as 2 columns (matches a 2-col rendering)', () => {
+    // 🚀 = 2 UTF-16 units, 2 visible cols. Budget 10 => padding 10-2+2=10.
+    assert.strictEqual(computeNamePadding('\u{1f680}', 10), 10);
+  });
+
+  it('clamps to a minimum of 1 even when the name overflows its budget', () => {
+    // Defensive — truncate should keep names <= budget, but a future
+    // caller passing something larger must not produce 0 or negative
+    // padding (which would let the sparkline abut the name).
+    assert.strictEqual(computeNamePadding('a'.repeat(50), 10), 1);
   });
 });
