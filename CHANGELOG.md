@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/drummel/git-watchtower/compare/v2.3.26...v2.4.0) (2026-06-23)
+
+
+### Features
+
+* update dev dependencies to latest majors ([c494335](https://github.com/drummel/git-watchtower/commit/c49433586920d3fc1602e0f6ae4deb2b15d6aae3)), closes [#233](https://github.com/drummel/git-watchtower/issues/233)
+
 ## [2.3.26](https://github.com/drummel/git-watchtower/compare/v2.3.25...v2.3.26) (2026-05-06)
 
 
