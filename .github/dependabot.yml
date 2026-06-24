@@ -18,6 +18,21 @@ updates:
         patterns:
           - "*"
 
+  # npm dependencies for the website/ subproject (the Astro docs site). These
+  # are excluded from semantic-release analysis (see scripts/release-filter-cli.js),
+  # so website bumps never cut a release for the CLI package.
+  - package-ecosystem: "npm"
+    directory: "/website"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore"
+    groups:
+      website-dependencies:
+        patterns:
+          - "*"
+
   # GitHub Actions used by the workflows in .github/workflows.
   - package-ecosystem: "github-actions"
     directory: "/"

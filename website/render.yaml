@@ -6,6 +6,10 @@ services:
     staticPublishPath: ./dist
     pullRequestPreviewsEnabled: true
     envVars:
+      # astro 7 requires Node >= 22.12.0; pin the Render build runtime so the
+      # deploy doesn't fall back to an older default and fail to build.
+      - key: NODE_VERSION
+        value: "22.12.0"
       - key: PUBLIC_POSTHOG_KEY
         value: phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG
       - key: PUBLIC_POSTHOG_HOST
