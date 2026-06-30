@@ -544,6 +544,7 @@ function renderFooter(state, write) {
   write(ansi.gray + '[Enter]' + ansi.reset + ansi.bgBlack + ' Switch  ');
   write(ansi.gray + '[h]' + ansi.reset + ansi.bgBlack + ' History  ');
   write(ansi.gray + '[i]' + ansi.reset + ansi.bgBlack + ' Info  ');
+  write(ansi.gray + '[?]' + ansi.reset + ansi.bgBlack + ' Help  ');
   write(ansi.gray + '[b]' + ansi.reset + ansi.bgBlack + ' Actions  ');
 
   if (!state.noServer) {
@@ -1040,6 +1041,113 @@ function renderInfo(state, write) {
   // Instructions
   write(ansi.moveTo(row + height - 2, col + Math.floor((width - 20) / 2)));
   write(ansi.gray + 'Press [i] or [Esc] to close' + ansi.reset);
+}
+
+// ---------------------------------------------------------------------------
+// renderHelp
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the keyboard-shortcuts overlay (toggled with '?').
+ *
+ * The full key reference is laid out in two columns inside a centered box so
+ * it fits on a standard 80x24 terminal without scrolling. Each column entry is
+ * a section header (`{ h }`), a key/description pair (`{ k, d }`), or a spacer
+ * (`{}`). Descriptions are truncated to the available cell width so the layout
+ * degrades gracefully on narrow terminals rather than wrapping.
+ *
+ * @param {object} state
+ * @param {function} write
+ */
+function renderHelp(state, write) {
+  const leftCol = [
+    { h: 'NAVIGATION' },
+    { k: '↑↓ j/k', d: 'Move selection' },
+    { k: 'Enter', d: 'Switch branch' },
+    { k: '/', d: 'Search / filter' },
+    { k: 'Esc', d: 'Clear search' },
+    {},
+    { h: 'BRANCHES' },
+    { k: 'v', d: 'Preview diff' },
+    { k: 'b', d: 'Branch actions' },
+    { k: 'h', d: 'Switch history' },
+    { k: 'u', d: 'Undo switch' },
+    { k: 'p', d: 'Pull current' },
+    { k: 'f', d: 'Fetch + refresh' },
+    { k: 'd', d: 'Clean up gone' },
+  ];
+
+  const rightCol = [
+    { h: 'SERVER & WEB' },
+    { k: 'r', d: 'Reload browsers' },
+    { k: 'R', d: 'Restart server' },
+    { k: 'l', d: 'Server logs' },
+    { k: 'o', d: 'Open in browser' },
+    { k: 'W', d: 'Toggle web UI' },
+    {},
+    { h: 'DISPLAY & MISC' },
+    { k: '1-9 0', d: 'Set list size' },
+    { k: '+ -', d: 'Grow / shrink' },
+    { k: 's', d: 'Toggle sound' },
+    { k: 'c', d: 'Casino mode' },
+    { k: 'i', d: 'Status info' },
+    { k: 'S', d: 'Stash & retry' },
+  ];
+
+  const rows = Math.max(leftCol.length, rightCol.length);
+  const width = Math.min(64, Math.max(40, state.terminalWidth - 4));
+  const height = rows + 5;
+  const col = Math.max(1, Math.floor((state.terminalWidth - width) / 2));
+  const row = Math.max(1, Math.floor((state.terminalHeight - height) / 2));
+
+  // Box (double-line, matching renderInfo)
+  write(ansi.moveTo(row, col));
+  write(ansi.cyan + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(ansi.cyan + box.dVertical + ansi.reset + ' '.repeat(width - 2) + ansi.cyan + box.dVertical + ansi.reset);
+  }
+  write(ansi.moveTo(row + height - 1, col));
+  write(ansi.cyan + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Title
+  write(ansi.moveTo(row, col + 2));
+  write(ansi.cyan + ansi.bold + ' Keyboard Shortcuts ' + ansi.reset);
+
+  // Column geometry. Each column gets half the inner width; descriptions
+  // start a fixed gap after the key column and are clipped to the cell.
+  const half = Math.floor(width / 2);
+  const keyGap = 8;
+  const leftKeyX = col + 3;
+  const rightKeyX = col + half + 1;
+  const leftDescMax = Math.max(4, (col + half) - (leftKeyX + keyGap) - 1);
+  const rightDescMax = Math.max(4, (col + width - 2) - (rightKeyX + keyGap) - 1);
+
+  const drawColumn = (column, keyX, descMax) => {
+    const descX = keyX + keyGap;
+    column.forEach((item, i) => {
+      const r = row + 2 + i;
+      if (item.h) {
+        write(ansi.moveTo(r, keyX));
+        write(ansi.bold + ansi.brightCyan + item.h + ansi.reset);
+      } else if (item.k) {
+        write(ansi.moveTo(r, keyX));
+        write(ansi.bold + ansi.white + item.k + ansi.reset);
+        write(ansi.moveTo(r, descX));
+        write(ansi.gray + truncate(item.d, descMax) + ansi.reset);
+      }
+    });
+  };
+
+  drawColumn(leftCol, leftKeyX, leftDescMax);
+  drawColumn(rightCol, rightKeyX, rightDescMax);
+
+  // Instructions
+  const hint = 'Press [?], [q] or [Esc] to close';
+  write(ansi.moveTo(row + height - 2, col + Math.max(2, Math.floor((width - hint.length) / 2))));
+  write(ansi.gray + hint + ansi.reset);
 }
 
 // ---------------------------------------------------------------------------
@@ -1622,6 +1730,7 @@ module.exports = {
   renderHistory,
   renderLogView,
   renderInfo,
+  renderHelp,
   renderActionModal,
   renderStashConfirm,
   renderCleanupConfirm,

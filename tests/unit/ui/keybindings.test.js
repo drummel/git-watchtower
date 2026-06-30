@@ -54,6 +54,10 @@ describe('getCurrentMode', () => {
     assert.equal(getCurrentMode({ actionMode: true }), MODES.ACTION);
   });
 
+  it('should return HELP when helpMode is true', () => {
+    assert.equal(getCurrentMode({ helpMode: true }), MODES.HELP);
+  });
+
   it('should prioritize search over other modes', () => {
     assert.equal(getCurrentMode({ searchMode: true, historyMode: true }), MODES.SEARCH);
   });
@@ -279,6 +283,10 @@ describe('getNormalModeAction', () => {
 
   it('should map W to toggle_web', () => {
     assert.equal(getNormalModeAction('W'), 'toggle_web');
+  });
+
+  it('should map ? to help', () => {
+    assert.equal(getNormalModeAction('?'), 'help');
   });
 
   it('should return null for unrecognized keys', () => {
