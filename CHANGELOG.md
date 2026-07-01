@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/drummel/git-watchtower/compare/v2.4.0...v2.5.0) (2026-07-01)
+
+
+### Features
+
+* add '?' keyboard-shortcuts overlay to the TUI ([80fabb0](https://github.com/drummel/git-watchtower/commit/80fabb0088441a241f3cb893b762fb6e091b6f46))
+
 # [2.4.0](https://github.com/drummel/git-watchtower/compare/v2.3.26...v2.4.0) (2026-06-23)
 
 
