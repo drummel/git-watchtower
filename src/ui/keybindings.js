@@ -28,6 +28,7 @@ const MODES = {
   INFO: 'info',
   LOG_VIEW: 'log_view',
   ACTION: 'action',
+  HELP: 'help',
 };
 
 /**
@@ -39,6 +40,7 @@ const MODES = {
  * @param {boolean} state.infoMode
  * @param {boolean} state.logViewMode
  * @param {boolean} state.actionMode
+ * @param {boolean} state.helpMode
  * @returns {string} One of MODES values
  */
 function getCurrentMode(state) {
@@ -48,6 +50,7 @@ function getCurrentMode(state) {
   if (state.infoMode) return MODES.INFO;
   if (state.logViewMode) return MODES.LOG_VIEW;
   if (state.actionMode) return MODES.ACTION;
+  if (state.helpMode) return MODES.HELP;
   return MODES.NORMAL;
 }
 
@@ -156,6 +159,8 @@ function getNormalModeAction(key) {
       return 'cleanup_branches';
     case 'W':
       return 'toggle_web';
+    case '?':
+      return 'help';
     case 'q':
     case KEYS.CTRL_C:
       return 'quit';

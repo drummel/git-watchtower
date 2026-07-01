@@ -19,7 +19,7 @@
  */
 
 /**
- * @typedef {'normal' | 'search' | 'preview' | 'history' | 'logs' | 'info'} UIMode
+ * @typedef {'normal' | 'search' | 'preview' | 'history' | 'logs' | 'info' | 'help'} UIMode
  */
 
 /**
@@ -65,6 +65,7 @@
  * @property {Object|null} previewData - Preview pane data
  * @property {boolean} historyMode - History view active
  * @property {boolean} infoMode - Info view active
+ * @property {boolean} helpMode - Keyboard-shortcuts overlay active
  * @property {boolean} logViewMode - Log view active
  * @property {string} logViewTab - Active log tab ('server' | 'activity')
  * @property {boolean} actionMode - Action modal active
@@ -133,6 +134,7 @@ function getInitialState() {
     previewData: null,
     historyMode: false,
     infoMode: false,
+    helpMode: false,
     logViewMode: false,
     logViewTab: 'server',
     actionMode: false,

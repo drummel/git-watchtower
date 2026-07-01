@@ -177,6 +177,15 @@ function toggleInfo(state) {
 }
 
 /**
+ * Toggle the keyboard-shortcuts help overlay.
+ * @param {object} state
+ * @returns {object} State updates.
+ */
+function toggleHelp(state) {
+  return { helpMode: !state.helpMode };
+}
+
+/**
  * Toggle the log viewer panel.
  * No-ops when running without a server (`state.noServer`).
  * @param {object} state
@@ -396,6 +405,7 @@ module.exports = {
   togglePreview,
   toggleHistory,
   toggleInfo,
+  toggleHelp,
   toggleLogView,
   closeActionModal,
 

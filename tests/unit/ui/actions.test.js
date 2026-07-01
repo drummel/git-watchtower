@@ -9,6 +9,7 @@ const {
   togglePreview,
   toggleHistory,
   toggleInfo,
+  toggleHelp,
   toggleLogView,
   closeActionModal,
   openCleanupConfirm,
@@ -377,6 +378,24 @@ describe('toggleInfo', () => {
     const state = makeState({ infoMode: true });
     const result = toggleInfo(state);
     assert.deepEqual(result, { infoMode: false });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toggleHelp
+// ---------------------------------------------------------------------------
+
+describe('toggleHelp', () => {
+  it('should toggle helpMode from false to true', () => {
+    const state = makeState({ helpMode: false });
+    const result = toggleHelp(state);
+    assert.deepEqual(result, { helpMode: true });
+  });
+
+  it('should toggle helpMode from true to false', () => {
+    const state = makeState({ helpMode: true });
+    const result = toggleHelp(state);
+    assert.deepEqual(result, { helpMode: false });
   });
 });
 

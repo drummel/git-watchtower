@@ -18,6 +18,7 @@ const {
   renderHistory,
   renderLogView,
   renderInfo,
+  renderHelp,
   renderActionModal,
   renderUpdateModal,
   computeNamePadding,
@@ -929,6 +930,46 @@ describe('renderInfo', () => {
   it('should show close instruction', () => {
     const { text } = collectState(renderInfo);
     assert.ok(text.includes('[i] or [Esc] to close'), 'Expected close hint');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderHelp
+// ---------------------------------------------------------------------------
+
+describe('renderHelp', () => {
+  it('should show the Keyboard Shortcuts title', () => {
+    const { text } = collectState(renderHelp);
+    assert.ok(text.includes('Keyboard Shortcuts'), 'Expected overlay title');
+  });
+
+  it('should list the section headers', () => {
+    const { text } = collectState(renderHelp);
+    assert.ok(text.includes('NAVIGATION'), 'Expected NAVIGATION section');
+    assert.ok(text.includes('BRANCHES'), 'Expected BRANCHES section');
+    assert.ok(text.includes('SERVER & WEB'), 'Expected SERVER & WEB section');
+    assert.ok(text.includes('DISPLAY & MISC'), 'Expected DISPLAY & MISC section');
+  });
+
+  it('should describe a sampling of bindings from both columns', () => {
+    const { text } = collectState(renderHelp);
+    assert.ok(text.includes('Switch branch'), 'Expected nav binding');
+    assert.ok(text.includes('Branch actions'), 'Expected branch binding');
+    assert.ok(text.includes('Reload browsers'), 'Expected server binding');
+    assert.ok(text.includes('Casino mode'), 'Expected display binding');
+  });
+
+  it('should show the close instruction with ?, q and Esc', () => {
+    const { text } = collectState(renderHelp);
+    assert.ok(text.includes('[?]'), 'Expected ? in close hint');
+    assert.ok(text.includes('[q]'), 'Expected q in close hint');
+    assert.ok(text.includes('[Esc]'), 'Expected Esc in close hint');
+  });
+
+  it('should render without throwing on a narrow terminal', () => {
+    assert.doesNotThrow(() => {
+      collectState(renderHelp, { terminalWidth: 40, terminalHeight: 20 });
+    });
   });
 });
 

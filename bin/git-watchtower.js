@@ -47,8 +47,11 @@
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
  *   c       - Toggle casino mode (Vegas-style feedback)
+ *   d       - Clean up stale (gone) branches
+ *   S       - Stash changes and retry a blocked switch/pull
  *   i       - Show server info (port, connections)
  *   W       - Toggle web dashboard (starts server + opens browser)
+ *   ?       - Show the keyboard shortcuts overlay
  *   1-0     - Set visible branch count (1-10)
  *   +/-     - Increase/decrease visible branches
  *   q/Esc   - Quit (Esc also clears search)
@@ -1449,6 +1452,10 @@ function render() {
     renderer.renderInfo(state, write);
   }
 
+  if (state.helpMode) {
+    renderer.renderHelp(state, write);
+  }
+
   if (state.logViewMode) {
     renderer.renderLogView(state, write);
   }
@@ -2582,6 +2589,17 @@ function setupKeyboardInput() {
       return; // Ignore other keys in info mode
     }
 
+    if (store.get('helpMode')) {
+      // '?' toggles; Esc and 'q' also dismiss. 'q' closes the overlay here
+      // rather than quitting the app, matching the in-overlay hint.
+      if (key === '?' || key === 'q' || key === String.fromCharCode(27)) {
+        applyUpdates(actions.toggleHelp(getActionState()));
+        render();
+        return;
+      }
+      return; // Ignore other keys in help mode
+    }
+
     if (store.get('logViewMode')) {
       if (key === 'l' || key === '\u001b') {
         applyUpdates(actions.toggleLogView(getActionState()));
@@ -3033,6 +3051,12 @@ function setupKeyboardInput() {
 
       case 'i': // Server info
         applyUpdates(actions.toggleInfo(actionState));
+        render();
+        break;
+
+      case '?': // Keyboard shortcuts overlay
+        applyUpdates(actions.toggleHelp(actionState));
+        telemetry.capture('help_opened');
         render();
         break;
 
