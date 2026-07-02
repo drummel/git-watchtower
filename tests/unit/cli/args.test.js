@@ -181,6 +181,32 @@ describe('parseArgs', () => {
       assert.equal(result.pollInterval, null);
       assert.equal(result.errors.length, 1);
     });
+
+    it('should reject a sub-second interval below the schema floor', () => {
+      // The footgun this fix closes: 50ms would hammer git every 50ms.
+      const result = parseArgs(['--poll-interval', '50']);
+      assert.equal(result.pollInterval, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('--poll-interval'));
+    });
+
+    it('should reject an interval above the schema ceiling', () => {
+      const result = parseArgs(['--poll-interval', '300001']);
+      assert.equal(result.pollInterval, null);
+      assert.equal(result.errors.length, 1);
+    });
+
+    it('should accept the minimum boundary (1000)', () => {
+      const result = parseArgs(['--poll-interval', '1000']);
+      assert.equal(result.pollInterval, 1000);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should accept the maximum boundary (300000)', () => {
+      const result = parseArgs(['--poll-interval', '300000']);
+      assert.equal(result.pollInterval, 300000);
+      assert.equal(result.errors.length, 0);
+    });
   });
 
   // UI settings
@@ -212,6 +238,32 @@ describe('parseArgs', () => {
       const result = parseArgs(['--visible-branches', '-3']);
       assert.equal(result.visibleBranches, null);
       assert.equal(result.errors.length, 1);
+    });
+
+    it('should reject a count above the schema ceiling', () => {
+      // The footgun this fix closes: 999 blows past the schema max of 50.
+      const result = parseArgs(['--visible-branches', '999']);
+      assert.equal(result.visibleBranches, null);
+      assert.equal(result.errors.length, 1);
+      assert.ok(result.errors[0].includes('--visible-branches'));
+    });
+
+    it('should reject one above the maximum (51)', () => {
+      const result = parseArgs(['--visible-branches', '51']);
+      assert.equal(result.visibleBranches, null);
+      assert.equal(result.errors.length, 1);
+    });
+
+    it('should accept the minimum boundary (1)', () => {
+      const result = parseArgs(['--visible-branches', '1']);
+      assert.equal(result.visibleBranches, 1);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should accept the maximum boundary (50)', () => {
+      const result = parseArgs(['--visible-branches', '50']);
+      assert.equal(result.visibleBranches, 50);
+      assert.equal(result.errors.length, 0);
     });
   });
 
@@ -579,6 +631,12 @@ describe('getHelpText', () => {
     assert.ok(text.includes('--web'));
     assert.ok(text.includes('--web-port'));
     assert.ok(text.includes('Web Dashboard'));
+  });
+
+  it('should document the valid ranges for bounded numeric flags', () => {
+    const text = getHelpText('1.0.0');
+    assert.ok(text.includes('1000-300000'), 'Expected poll-interval range');
+    assert.ok(text.includes('1-50'), 'Expected visible-branches range');
   });
 });
 
