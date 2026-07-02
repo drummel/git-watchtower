@@ -1,3 +1,10 @@
+## [2.5.1](https://github.com/drummel/git-watchtower/compare/v2.5.0...v2.5.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* clamp CLI --poll-interval and --visible-branches to schema limits ([859db65](https://github.com/drummel/git-watchtower/commit/859db65635fad6203cd005007faa61eba98fff62))
+
 # [2.5.0](https://github.com/drummel/git-watchtower/compare/v2.4.0...v2.5.0) (2026-07-01)
 
 
