@@ -4,6 +4,7 @@
  */
 
 const { version: PACKAGE_VERSION } = require('../../package.json');
+const { LIMITS } = require('../config/schema');
 
 /**
  * @typedef {object} CliArgs
@@ -114,11 +115,16 @@ function parseArgs(argv, options = {}) {
     } else if (args[i] === '--no-auto-pull') {
       result.autoPull = false;
     } else if (args[i] === '--poll-interval') {
+      // Enforce the same bounds as the config schema (LIMITS.gitPollInterval).
+      // CLI args are merged over the config *after* validateConfig() runs, so
+      // without this check a value like `--poll-interval 50` would slip past
+      // the schema floor and make git-watchtower fetch every 50ms — spawning
+      // git faster than it can complete.
       const interval = parseInt(args[i + 1], 10);
-      if (!isNaN(interval) && interval > 0) {
+      if (!isNaN(interval) && interval >= LIMITS.gitPollInterval.min && interval <= LIMITS.gitPollInterval.max) {
         result.pollInterval = interval;
       } else {
-        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: positive integer in ms)`);
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: ${LIMITS.gitPollInterval.min}-${LIMITS.gitPollInterval.max} ms)`);
       }
       i++;
     }
@@ -128,11 +134,13 @@ function parseArgs(argv, options = {}) {
     } else if (args[i] === '--no-sound') {
       result.sound = false;
     } else if (args[i] === '--visible-branches') {
+      // Bounded by LIMITS.visibleBranches so a CLI override can't exceed what
+      // the config schema allows (the merge step bypasses validateConfig).
       const count = parseInt(args[i + 1], 10);
-      if (!isNaN(count) && count > 0) {
+      if (!isNaN(count) && count >= LIMITS.visibleBranches.min && count <= LIMITS.visibleBranches.max) {
         result.visibleBranches = count;
       } else {
-        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: positive integer)`);
+        result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: ${LIMITS.visibleBranches.min}-${LIMITS.visibleBranches.max})`);
       }
       i++;
     } else if (args[i] === '--casino') {
@@ -280,12 +288,12 @@ Git Options:
   -r, --remote <name>     Git remote name (default: origin)
   --auto-pull             Auto-pull on branch switch (default)
   --no-auto-pull          Don't auto-pull on branch switch
-  --poll-interval <ms>    Git polling interval in ms (default: 5000)
+  --poll-interval <ms>    Git polling interval in ms (default: 5000, range: ${LIMITS.gitPollInterval.min}-${LIMITS.gitPollInterval.max})
 
 UI Options:
   --sound                 Enable sound notifications (default)
   --no-sound              Disable sound notifications
-  --visible-branches <n>  Number of branches to display (default: 7)
+  --visible-branches <n>  Number of branches to display (default: 7, range: ${LIMITS.visibleBranches.min}-${LIMITS.visibleBranches.max})
   --casino                Enable casino mode
 
 Web Dashboard:
