@@ -442,6 +442,46 @@ async function hasUncommittedChanges(cwd) {
 }
 
 /**
+ * Check whether the repository currently has unresolved merge conflicts.
+ *
+ * Two signals, either of which counts:
+ *   - Unmerged index entries (UU, AA, DD, AU, UA, DU, UD in porcelain
+ *     status) — present during conflicted merges, rebases, cherry-picks,
+ *     and reverts while conflicts remain unstaged.
+ *   - MERGE_HEAD exists — a merge is still in progress. This persists
+ *     after the user stages resolutions (`git add`) but before the merge
+ *     commit, a window where a pull would still fail.
+ *
+ * Unlike an error-message check after a failed pull, this reads the
+ * repo's actual state, so it also detects conflicts created outside the
+ * app and — critically — reports resolution once the user finishes the
+ * merge, letting callers un-latch any "conflicted" flag.
+ *
+ * Returns false when the probe fails (not a repo, git broken): callers
+ * treat unknown as "not conflicted" and re-check on the next poll.
+ *
+ * @param {string} [cwd] - Working directory
+ * @returns {Promise<boolean>}
+ */
+async function hasUnresolvedConflicts(cwd) {
+  const status = await execGitOptional(['status', '--porcelain'], {
+    cwd,
+    timeout: SHORT_TIMEOUT,
+  });
+  if (status && /^(DD|AU|UD|UA|DU|AA|UU) /m.test(status.stdout)) {
+    return true;
+  }
+
+  // rev-parse -q --verify exits non-zero when MERGE_HEAD is absent,
+  // which execGitOptional maps to null.
+  const mergeHead = await execGitOptional(['rev-parse', '-q', '--verify', 'MERGE_HEAD'], {
+    cwd,
+    timeout: SHORT_TIMEOUT,
+  });
+  return mergeHead !== null;
+}
+
+/**
  * Get changed files for a branch compared to another
  * @param {string} branchName - Branch to compare
  * @param {string} [baseBranch] - Base branch (defaults to current)
@@ -589,6 +629,7 @@ module.exports = {
   log,
   getCommitsByDay,
   hasUncommittedChanges,
+  hasUnresolvedConflicts,
   stash,
   stashPop,
   getChangedFiles,

@@ -877,7 +877,7 @@ const renderer = require('../src/ui/renderer');
 const actions = require('../src/ui/actions');
 
 // Diff stats parsing and stash imported from src/git/commands.js
-const { parseDiffStats, stash: gitStash, stashPop: gitStashPop } = require('../src/git/commands');
+const { parseDiffStats, stash: gitStash, stashPop: gitStashPop, hasUnresolvedConflicts } = require('../src/git/commands');
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
@@ -1914,6 +1914,26 @@ async function pollGitChanges() {
       notifyClients();
     }
     store.setState({ currentBranch: newCurrentBranch });
+
+    // Re-derive the merge-conflict flag from actual repo state every cycle.
+    // The flag used to latch: it was set when a pull conflicted and only
+    // cleared inside the auto-pull success path — which is itself gated on
+    // the flag being false — so one conflict disabled auto-pull (and pinned
+    // the conflict banner) for the rest of the session, even after the user
+    // resolved and committed in another terminal. Reading the repo each
+    // poll clears the flag once the merge is finished, and also catches
+    // conflicts created entirely outside the app, which the old
+    // error-message check never saw.
+    const conflictNow = await hasUnresolvedConflicts(PROJECT_ROOT);
+    const hadConflict = store.get('hasMergeConflict');
+    if (conflictNow !== hadConflict) {
+      if (conflictNow) {
+        addLog('Merge conflict detected — auto-pull paused until resolved', 'error');
+      } else {
+        addLog('Merge conflict resolved — auto-pull re-enabled', 'success');
+      }
+      store.setState({ hasMergeConflict: conflictNow });
+    }
 
     const allBranches = await getAllBranches();
 

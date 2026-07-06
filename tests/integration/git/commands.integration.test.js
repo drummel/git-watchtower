@@ -15,6 +15,7 @@ const {
   getCommitsByDay,
   getChangedFiles,
   hasUncommittedChanges,
+  hasUnresolvedConflicts,
   deleteLocalBranch,
 } = require('../../../src/git/commands');
 
@@ -294,6 +295,80 @@ describe('commands.js integration tests', () => {
       fixture.createFile('tracked.txt', 'modified', false);
       const result = await hasUncommittedChanges(fixture.path);
       assert.strictEqual(result, true);
+    });
+  });
+
+  describe('hasUnresolvedConflicts', () => {
+    /** Set up diverging edits to conflict.txt on master and a feature
+     * branch, then attempt the merge (which fails with a conflict). */
+    function createConflictedMerge() {
+      fixture.createFile('conflict.txt', 'base\n', true, 'Add conflict file');
+      fixture.createBranch('feature', true);
+      fixture.createFile('conflict.txt', 'feature\n', true, 'Feature change');
+      fixture.checkout('master');
+      fixture.createFile('conflict.txt', 'master\n', true, 'Master change');
+      try {
+        fixture.git('merge feature');
+        assert.fail('merge should have conflicted');
+      } catch (e) {
+        // Expected: merge exits non-zero on conflict
+      }
+    }
+
+    it('should return false for a clean repository', async () => {
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, false);
+    });
+
+    it('should return false for a dirty but non-conflicted repository', async () => {
+      fixture.createFile('untracked.txt', 'content', false);
+      fixture.createFile('README.md', '# Modified\n', false);
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, false);
+    });
+
+    it('should return true while a merge conflict is unresolved', async () => {
+      createConflictedMerge();
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, true);
+    });
+
+    it('should return true after staging the resolution but before committing', async () => {
+      createConflictedMerge();
+      fixture.createFile('conflict.txt', 'resolved\n', false);
+      fixture.git('add conflict.txt');
+      // No unmerged entries remain, but MERGE_HEAD still exists
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, true);
+    });
+
+    it('should return false once the merge is committed', async () => {
+      createConflictedMerge();
+      fixture.createFile('conflict.txt', 'resolved\n', false);
+      fixture.git('add conflict.txt');
+      fixture.git('commit -m "Resolve conflict"');
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, false);
+    });
+
+    it('should return false after the merge is aborted', async () => {
+      createConflictedMerge();
+      fixture.git('merge --abort');
+      const result = await hasUnresolvedConflicts(fixture.path);
+      assert.strictEqual(result, false);
+    });
+
+    it('should return false for a non-repository directory', async () => {
+      const os = require('os');
+      const fs = require('fs');
+      const path = require('path');
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-not-a-repo-'));
+      try {
+        const result = await hasUnresolvedConflicts(tmp);
+        assert.strictEqual(result, false);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
     });
   });
 
