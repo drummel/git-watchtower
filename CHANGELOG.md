@@ -1,3 +1,10 @@
+## [2.5.2](https://github.com/drummel/git-watchtower/compare/v2.5.1...v2.5.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* derive merge-conflict state from repo state each poll ([#240](https://github.com/drummel/git-watchtower/issues/240)) ([d94d8af](https://github.com/drummel/git-watchtower/commit/d94d8af594cae553ca6a4bb9eb7e11801aa6ed9c))
+
 ## [2.5.1](https://github.com/drummel/git-watchtower/compare/v2.5.0...v2.5.1) (2026-07-02)
 
 
