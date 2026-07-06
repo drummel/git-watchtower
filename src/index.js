@@ -113,6 +113,7 @@ module.exports = {
   log: gitCommands.log,
   getCommitsByDay: gitCommands.getCommitsByDay,
   hasUncommittedChanges: gitCommands.hasUncommittedChanges,
+  hasUnresolvedConflicts: gitCommands.hasUnresolvedConflicts,
   stash: gitCommands.stash,
   stashPop: gitCommands.stashPop,
   getChangedFiles: gitCommands.getChangedFiles,
