@@ -1,3 +1,10 @@
+## [2.5.4](https://github.com/drummel/git-watchtower/compare/v2.5.3...v2.5.4) (2026-07-07)
+
+
+### Bug Fixes
+
+* make Homebrew in-app auto-update install the new version and hand the terminal to brew ([#242](https://github.com/drummel/git-watchtower/issues/242)) ([7219ab0](https://github.com/drummel/git-watchtower/commit/7219ab007779cb7f294f85b751dd0c41a5c26744))
+
 ## [2.5.3](https://github.com/drummel/git-watchtower/compare/v2.5.2...v2.5.3) (2026-07-07)
 
 
