@@ -1,3 +1,10 @@
+## [2.5.3](https://github.com/drummel/git-watchtower/compare/v2.5.2...v2.5.3) (2026-07-07)
+
+
+### Bug Fixes
+
+* only prompt to stash when git actually refuses the checkout ([#241](https://github.com/drummel/git-watchtower/issues/241)) ([27503eb](https://github.com/drummel/git-watchtower/commit/27503eb9b56ca95846c8ed17db96e98aa4afcbc9))
+
 ## [2.5.2](https://github.com/drummel/git-watchtower/compare/v2.5.1...v2.5.2) (2026-07-06)
 
 
