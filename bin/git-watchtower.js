@@ -893,6 +893,14 @@ const clients = new Set();
 // Flash/error toast timers
 let flashTimeout = null;
 let errorToastTimeout = null;
+// When true, render() is a no-op. Set while another process owns the TTY:
+// during an interactive package-manager upgrade (suspendUI) and permanently
+// once restartProcess() has spawned the replacement. Timers that survive
+// those transitions (flash/toast timeouts, casino animations, the poll loop)
+// all repaint through render(), so gating it here stops the old process from
+// drawing frames over the new one — the "two UIs fighting over the terminal"
+// effect after an in-app update.
+let _renderSuppressed = false;
 
 // Tracks the operation that failed due to dirty working directory.
 // When set, pressing 'S' will stash changes and retry the operation.
@@ -1348,6 +1356,7 @@ function getRenderState() {
 }
 
 function render() {
+  if (_renderSuppressed) return;
   updateTerminalSize();
 
   write(ansi.hideCursor);
@@ -2914,18 +2923,40 @@ function setupKeyboardInput() {
             return;
           }
           store.setState({ updateInProgress: true });
-          render();
-          performAutoUpdate(installSource, (result) => {
-            store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
+          // Leave the TUI and run the package manager attached to the
+          // terminal: brew may prompt (confirmations, sudo) and its
+          // download/build output tells the user why the update is taking
+          // a while. With hidden stdio a prompt would just hang or fail
+          // invisibly.
+          suspendUIForUpdate();
+          console.log(`\n⟳ Updating git-watchtower: ${updateCmd}\n`);
+          performAutoUpdate(installSource, { interactive: true }, (result) => {
             if (result.ok) {
-              store.setState({ updateAvailable: null });
+              store.setState({
+                updateInProgress: false, updateModalVisible: false,
+                updateModalSelectedIndex: 0, updateAvailable: null,
+              });
               addLog('Successfully updated git-watchtower! Restarting...', 'update');
               restartProcess();
-            } else {
+              // No render here — the replacement process owns the TTY now.
+              return;
+            }
+            // Failure: let the user read the package manager's output before
+            // the alternate screen swallows it. The main key handler is still
+            // attached but blocked (updateModalVisible + updateInProgress are
+            // both still true), so this once-listener is the only consumer.
+            console.log(`\n✗ Update failed: ${result.message}`);
+            console.log(`  Run manually: ${updateCmd}`);
+            console.log('\nPress any key to return to git-watchtower...');
+            if (process.stdin.isTTY) process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.once('data', () => {
+              store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
+              resumeUIAfterUpdate();
               addLog(`Update failed: ${result.message}. Run manually: ${updateCmd}`, 'error');
               showFlash(`Update failed. Try manually: ${updateCmd}`);
-            }
-            render();
+              render();
+            });
           });
         } else {
           // Show update command — dismiss modal with flash showing the command
@@ -3375,7 +3406,10 @@ async function handleWebAction(action, payload) {
           }
           store.setState({ updateInProgress: true });
           render();
-          performAutoUpdate(installSrc, (result) => {
+          // Non-interactive: this request came from a browser, so nobody is
+          // guaranteed to be at the terminal to answer a brew prompt. If brew
+          // needs input it sees EOF and fails, which we report back here.
+          performAutoUpdate(installSrc, {}, (result) => {
             store.setState({ updateInProgress: false });
             if (result.ok) {
               store.setState({ updateAvailable: null });
@@ -3733,13 +3767,21 @@ function stopWebDashboard() {
  * instead of triggering a pointless restart.
  *
  * @param {'npm'|'homebrew'} installSource
+ * @param {{interactive?: boolean}} opts - `interactive: true` runs the
+ *   package manager with stdio inherited so its output streams to the
+ *   terminal and the user can answer prompts (brew confirmations, sudo for
+ *   linked casks, etc.). Callers must suspend the TUI first — see
+ *   suspendUIForUpdate(). Non-interactive runs discard output; a package
+ *   manager that prompts then sees EOF on stdin and fails instead of
+ *   hanging, which surfaces as a normal failure message.
  * @param {(result: {ok: boolean, message?: string}) => void} onDone - Called
  *   exactly once with the outcome. `message` is set on failure.
  */
-function performAutoUpdate(installSource, onDone) {
+function performAutoUpdate(installSource, opts, onDone) {
+  const interactive = Boolean(opts && opts.interactive);
   const run = (bin, args, cb) => {
     const child = spawn(bin, args, {
-      stdio: 'ignore',
+      stdio: interactive ? 'inherit' : 'ignore',
       detached: false,
       shell: process.platform === 'win32',
     });
@@ -3777,11 +3819,53 @@ function performAutoUpdate(installSource, onDone) {
 }
 
 /**
+ * Hand the terminal back to the shell screen so an interactive package
+ * manager (brew/npm) can stream output and take keyboard input. Suppresses
+ * render() so surviving timers (poll loop, flash/toast timeouts, casino
+ * animations) can't repaint the TUI over the package manager's output.
+ */
+function suspendUIForUpdate() {
+  _renderSuppressed = true;
+  write(ansi.showCursor);
+  write(ansi.restoreScreen);
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
+  process.stdin.pause();
+}
+
+/**
+ * Re-enter the TUI after a failed interactive update (a successful one
+ * restarts the process instead). Mirrors the screen/raw-mode setup done at
+ * startup.
+ */
+function resumeUIAfterUpdate() {
+  write(ansi.saveScreen);
+  write(ansi.hideCursor);
+  if (process.stdin.isTTY) process.stdin.setRawMode(true);
+  process.stdin.resume();
+  _renderSuppressed = false;
+}
+
+/**
  * Restart the process after a successful update by re-execing with the same
  * arguments. Cleans up terminal state and spawns a replacement process,
  * then exits the current one.
  */
 function restartProcess() {
+  // From here on the replacement child owns the TTY. Any render() from a
+  // surviving timer or a callback that runs after this function returns
+  // (e.g. the update handler's own post-restart render) would clear the
+  // screen and repaint the OLD UI over the child's frames — the two
+  // processes then alternate full-screen redraws until the parent exits.
+  _renderSuppressed = true;
+  if (flashTimeout) {
+    try { clearTimeout(flashTimeout); } catch (_) {}
+    flashTimeout = null;
+  }
+  if (errorToastTimeout) {
+    try { clearTimeout(errorToastTimeout); } catch (_) {}
+    errorToastTimeout = null;
+  }
+
   // Restore terminal state
   write(ansi.showCursor);
   write(ansi.restoreScreen);
