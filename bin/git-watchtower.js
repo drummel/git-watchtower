@@ -2913,33 +2913,18 @@ function setupKeyboardInput() {
             showFlash(`Run: ${updateCmd}`);
             return;
           }
-          const [cmdBin, ...cmdArgs] = installSource === 'homebrew'
-            ? ['brew', 'upgrade', 'git-watchtower']
-            : ['npm', 'i', '-g', 'git-watchtower'];
           store.setState({ updateInProgress: true });
           render();
-          const { spawn } = require('child_process');
-          const child = spawn(cmdBin, cmdArgs, {
-            stdio: 'ignore',
-            detached: false,
-            shell: process.platform === 'win32',
-          });
-          child.on('close', (code) => {
+          performAutoUpdate(installSource, (result) => {
             store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
-            if (code === 0) {
+            if (result.ok) {
               store.setState({ updateAvailable: null });
               addLog('Successfully updated git-watchtower! Restarting...', 'update');
               restartProcess();
             } else {
-              addLog(`Update failed (exit code ${code}). Run manually: ${updateCmd}`, 'error');
+              addLog(`Update failed: ${result.message}. Run manually: ${updateCmd}`, 'error');
               showFlash(`Update failed. Try manually: ${updateCmd}`);
             }
-            render();
-          });
-          child.on('error', (err) => {
-            store.setState({ updateInProgress: false, updateModalVisible: false, updateModalSelectedIndex: 0 });
-            addLog(`Update failed: ${err.message}. Run manually: ${updateCmd}`, 'error');
-            showFlash(`Update failed. Try manually: ${updateCmd}`);
             render();
           });
         } else {
@@ -3390,32 +3375,18 @@ async function handleWebAction(action, payload) {
           }
           store.setState({ updateInProgress: true });
           render();
-          const { spawn: spawnUpdate } = require('child_process');
-          const [updBin, ...updArgs] = installSrc === 'homebrew'
-            ? ['brew', 'upgrade', 'git-watchtower']
-            : ['npm', 'i', '-g', 'git-watchtower'];
-          const updateChild = spawnUpdate(updBin, updArgs, {
-            stdio: 'ignore',
-            detached: false,
-          });
-          updateChild.on('close', (code) => {
+          performAutoUpdate(installSrc, (result) => {
             store.setState({ updateInProgress: false });
-            if (code === 0) {
+            if (result.ok) {
               store.setState({ updateAvailable: null });
               sendResult(true, 'Updated! Restarting...');
               addLog('Successfully updated git-watchtower! Restarting...', 'update');
               restartProcess();
             } else {
-              sendResult(false, `Update failed (exit code ${code})`);
-              addLog(`Update failed (exit code ${code}). Run manually: ${updateCmdStr}`, 'error');
+              sendResult(false, `Update failed: ${result.message}`);
+              addLog(`Update failed: ${result.message}. Run manually: ${updateCmdStr}`, 'error');
               render();
             }
-          });
-          updateChild.on('error', (err2) => {
-            store.setState({ updateInProgress: false });
-            sendResult(false, err2.message);
-            addLog(`Update failed: ${err2.message}`, 'error');
-            render();
           });
         }
         break;
@@ -3747,6 +3718,63 @@ function stopWebDashboard() {
 // ============================================================================
 // Restart after update
 // ============================================================================
+
+/**
+ * Run the package-manager upgrade for an auto-updatable install and report
+ * whether a new version actually landed.
+ *
+ * Homebrew needs `brew update` before `brew upgrade`: upgrade consults the
+ * local formula metadata, so without a refresh it considers the installed
+ * version current, exits 0 without installing anything, and we would
+ * "successfully" restart into the same version. Even after a refresh,
+ * `brew upgrade` exits 0 when the formula hasn't picked up the release yet,
+ * so the entry symlink is re-resolved afterwards — a real upgrade moves it
+ * to a new Cellar path — and an unchanged path is reported as a failure
+ * instead of triggering a pointless restart.
+ *
+ * @param {'npm'|'homebrew'} installSource
+ * @param {(result: {ok: boolean, message?: string}) => void} onDone - Called
+ *   exactly once with the outcome. `message` is set on failure.
+ */
+function performAutoUpdate(installSource, onDone) {
+  const run = (bin, args, cb) => {
+    const child = spawn(bin, args, {
+      stdio: 'ignore',
+      detached: false,
+      shell: process.platform === 'win32',
+    });
+    child.on('close', (code) => cb(null, code));
+    child.on('error', (err) => cb(err));
+  };
+
+  const entryRealPath = () => {
+    try { return fs.realpathSync(process.argv[1]); } catch (_) { return null; }
+  };
+
+  if (installSource === 'npm') {
+    run('npm', ['i', '-g', 'git-watchtower'], (err, code) => {
+      if (err) return onDone({ ok: false, message: err.message });
+      if (code !== 0) return onDone({ ok: false, message: `npm exited with code ${code}` });
+      onDone({ ok: true });
+    });
+    return;
+  }
+
+  const before = entryRealPath();
+  run('brew', ['update'], (err, code) => {
+    if (err) return onDone({ ok: false, message: err.message });
+    if (code !== 0) return onDone({ ok: false, message: `brew update exited with code ${code}` });
+    run('brew', ['upgrade', 'git-watchtower'], (err2, code2) => {
+      if (err2) return onDone({ ok: false, message: err2.message });
+      if (code2 !== 0) return onDone({ ok: false, message: `brew upgrade exited with code ${code2}` });
+      const after = entryRealPath();
+      if (before && after && before === after) {
+        return onDone({ ok: false, message: 'Homebrew has no newer version yet — try again later' });
+      }
+      onDone({ ok: true });
+    });
+  });
+}
 
 /**
  * Restart the process after a successful update by re-execing with the same
