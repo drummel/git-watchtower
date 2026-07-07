@@ -372,6 +372,53 @@ describe('commands.js integration tests', () => {
     });
   });
 
+  describe('checkout dirty-carry contract', () => {
+    // switchToBranch attempts checkout optimistically instead of blocking
+    // whenever `status --porcelain` is non-empty, relying on git to carry
+    // safe changes across and to refuse with "would be overwritten" when
+    // they conflict. These tests pin that contract, including the error
+    // strings the catch path in bin/git-watchtower.js matches on.
+
+    it('carries untracked files across a checkout', async () => {
+      fixture.createBranch('other');
+      fixture.createFile('scratch.txt', 'wip', false);
+      await execGit(['checkout', 'other'], { cwd: fixture.path });
+      assert.strictEqual(fixture.getCurrentBranch(), 'other');
+      const status = await execGit(['status', '--porcelain'], { cwd: fixture.path });
+      assert.ok(status.stdout.includes('scratch.txt'), 'untracked file should survive the switch');
+    });
+
+    it('carries non-conflicting tracked modifications across a checkout', async () => {
+      // README.md is identical on both branches, so a local edit is safe
+      fixture.createBranch('other');
+      fixture.createFile('README.md', '# Local edit\n', false);
+      await execGit(['checkout', 'other'], { cwd: fixture.path });
+      assert.strictEqual(fixture.getCurrentBranch(), 'other');
+      const status = await execGit(['status', '--porcelain'], { cwd: fixture.path });
+      assert.ok(status.stdout.includes('README.md'), 'modification should survive the switch');
+    });
+
+    it('refuses with "overwritten" when a tracked modification conflicts', async () => {
+      fixture.createBranch('other', true);
+      fixture.createFile('README.md', '# Other branch version\n', true, 'Diverge README');
+      fixture.checkout('master');
+      fixture.createFile('README.md', '# Dirty local edit\n', false);
+      await assert.rejects(
+        execGit(['checkout', 'other'], { cwd: fixture.path }),
+        (/** @type {any} */ err) => {
+          const msg = err.stderr || err.message || '';
+          // The strings switchToBranch's catch matches to show the stash dialog
+          assert.ok(
+            msg.includes('overwritten') || msg.includes('local changes'),
+            `expected overwrite refusal, got: ${msg}`
+          );
+          return true;
+        }
+      );
+      assert.strictEqual(fixture.getCurrentBranch(), 'master');
+    });
+  });
+
   describe('execGit timeout handling', () => {
     it('should accept timeout parameter without error', async () => {
       const result = await execGit(['status'], {

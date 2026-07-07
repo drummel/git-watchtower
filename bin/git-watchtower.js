@@ -1592,16 +1592,13 @@ async function switchToBranch(branchName, recordHistory = true) {
     // Validate branch name for security
     const safeBranchName = sanitizeBranchName(branchName);
 
-    // Check for uncommitted changes first
-    const isDirty = await hasUncommittedChanges();
-    if (isDirty) {
-      addLog(`Cannot switch: uncommitted changes in working directory`, 'error');
-      if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
-        showStashConfirm(`switch to ${branchName}`);
-      }
-      telemetry.capture('dirty_repo_encountered');
-      return { success: false, reason: 'dirty' };
-    }
+    // No dirty pre-check here: git itself carries untracked files and
+    // non-conflicting tracked modifications across a checkout, so blocking
+    // on `status --porcelain` being non-empty forced a stash for switches
+    // git would have allowed (a stray build artifact or test snapshot
+    // blocked every switch). Attempt the checkout optimistically; the
+    // catch below shows the stash dialog only when git actually refuses
+    // with "would be overwritten by checkout".
 
     const previousBranch = store.get('currentBranch');
 
@@ -1634,6 +1631,11 @@ async function switchToBranch(branchName, recordHistory = true) {
     }
 
     addLog(`Switched to ${safeBranchName}`, 'success');
+    // Surface carried-over changes so a later "where did this diff come
+    // from?" moment has an answer in the activity log.
+    if (await hasUncommittedChanges()) {
+      addLog(`Uncommitted changes carried over to ${safeBranchName}`, 'info');
+    }
     telemetry.capture('branch_switched');
     branchSwitchCount++;
     clearPendingDirtyOp();
@@ -1659,6 +1661,8 @@ async function switchToBranch(branchName, recordHistory = true) {
       if (setPendingDirtyOp({ type: 'switch', branch: branchName })) {
         showStashConfirm(`switch to ${branchName}`);
       }
+      telemetry.capture('dirty_repo_encountered');
+      return { success: false, reason: 'dirty' };
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
       showErrorToast(
@@ -1690,14 +1694,9 @@ async function undoLastSwitch() {
     const hash = detachedMatch[1];
     addLog(`Undoing: restoring detached HEAD at ${hash}`, 'update');
 
-    if (await hasUncommittedChanges()) {
-      addLog('Cannot undo: uncommitted changes in working directory', 'error');
-      if (setPendingDirtyOp({ type: 'switch', branch: lastSwitch.from })) {
-        showStashConfirm(`undo to detached HEAD ${hash}`);
-      }
-      return { success: false, reason: 'dirty' };
-    }
-
+    // Like switchToBranch, no dirty pre-check: attempt the checkout and
+    // only prompt to stash when git refuses because files would be
+    // overwritten (see the catch below).
     try {
       await execGit(['checkout', hash], { cwd: PROJECT_ROOT });
       store.setState({
@@ -1712,6 +1711,14 @@ async function undoLastSwitch() {
       return { success: true };
     } catch (e) {
       const errMsg = e.stderr || e.message || String(e);
+      if (errMsg.includes('local changes') || errMsg.includes('overwritten')) {
+        addLog('Cannot undo: local changes would be overwritten', 'error');
+        if (setPendingDirtyOp({ type: 'switch', branch: lastSwitch.from })) {
+          showStashConfirm(`undo to detached HEAD ${hash}`);
+        }
+        telemetry.capture('dirty_repo_encountered');
+        return { success: false, reason: 'dirty' };
+      }
       addLog(`Undo failed: ${errMsg}`, 'error');
       showErrorToast('Undo Failed', truncate(errMsg, 100), 'Commit may have been garbage-collected');
       return { success: false };
