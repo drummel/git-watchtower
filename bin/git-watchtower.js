@@ -866,7 +866,7 @@ let pollIntervalId = null;
 const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, sanitizeForRender, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
 
 // Error detection utilities imported from src/utils/errors.js
-const { isAuthError, isMergeConflict, isNetworkError } = require('../src/utils/errors');
+const { isAuthError, isMergeConflict, isNetworkError, isDivergentBranches } = require('../src/utils/errors');
 const { Mutex, sleep } = require('../src/utils/async');
 
 // Keyboard handling utilities imported from src/ui/keybindings.js
@@ -877,7 +877,7 @@ const renderer = require('../src/ui/renderer');
 const actions = require('../src/ui/actions');
 
 // Diff stats parsing and stash imported from src/git/commands.js
-const { parseDiffStats, stash: gitStash, stashPop: gitStashPop, hasUnresolvedConflicts } = require('../src/git/commands');
+const { parseDiffStats, stash: gitStash, stashPop: gitStashPop, hasUnresolvedConflicts, resetHard } = require('../src/git/commands');
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
@@ -901,6 +901,13 @@ let errorToastTimeout = null;
 // drawing frames over the new one — the "two UIs fighting over the terminal"
 // effect after an in-app update.
 let _renderSuppressed = false;
+
+// Divergence prompts the user chose to ignore: branch name → the remote
+// commit (short hash) that was current when they dismissed the dialog.
+// While the remote commit is unchanged the dialog is not re-shown, so a
+// dismissed divergence doesn't nag on every poll cycle. When the remote
+// moves again the entry no longer matches and the dialog reappears.
+const divergenceSnooze = new Map();
 
 // Tracks the operation that failed due to dirty working directory.
 // When set, pressing 'S' will stash changes and retry the operation.
@@ -1488,6 +1495,11 @@ function render() {
     renderer.renderStashConfirm(state, write);
   }
 
+  // Divergence resolution dialog renders on top of everything
+  if (state.divergeConfirmMode) {
+    renderer.renderDivergeConfirm(state, write);
+  }
+
   // Update notification modal renders on top of everything
   if (state.updateModalVisible) {
     renderer.renderUpdateModal(state, write);
@@ -1559,6 +1571,144 @@ function hideStashConfirm() {
     });
     render();
   }
+}
+
+function showDivergeConfirm(branch, ahead, behind, remoteCommit) {
+  store.setState({
+    divergeConfirmMode: true,
+    divergeConfirmSelectedIndex: 0,
+    divergeData: { branch, ahead, behind, remoteCommit: remoteCommit || null },
+  });
+  render();
+}
+
+function hideDivergeConfirm() {
+  if (store.get('divergeConfirmMode')) {
+    store.setState({
+      divergeConfirmMode: false,
+      divergeConfirmSelectedIndex: 0,
+      divergeData: null,
+    });
+    render();
+  }
+}
+
+/**
+ * Execute the user's choice from the divergence dialog.
+ *
+ * Transparency is the design constraint here: every action logs the exact
+ * git command it runs before running it, and nothing in this flow happens
+ * without an explicit keypress in the dialog.
+ *
+ * @param {'rebase'|'reset'|'ignore'} action
+ */
+async function resolveDivergence(action) {
+  const data = store.get('divergeData');
+  hideDivergeConfirm();
+  if (!data) return;
+  const { branch, remoteCommit } = data;
+
+  if (action === 'ignore') {
+    if (remoteCommit) divergenceSnooze.set(branch, remoteCommit);
+    addLog(`Divergence on ${branch} ignored until ${REMOTE_NAME} changes again`, 'info');
+    render();
+    return;
+  }
+
+  if (action === 'rebase') {
+    addLog(`Running: git pull --rebase --autostash ${REMOTE_NAME} ${branch}`, 'update');
+    render();
+    try {
+      await execGit(['pull', '--rebase', '--autostash', REMOTE_NAME, branch], {
+        cwd: PROJECT_ROOT,
+        timeout: 60000,
+      });
+      addLog(`Rebased ${branch} onto ${REMOTE_NAME}/${branch}`, 'success');
+      showFlash(`Rebased onto ${REMOTE_NAME}/${branch}`);
+      divergenceSnooze.delete(branch);
+      telemetry.capture('divergence_rebased');
+      notifyClients();
+      await pollGitChanges();
+    } catch (e) {
+      const errMsg = e.stderr || e.message || String(e);
+      addLog(`Rebase failed: ${errMsg}`, 'error');
+      if (isMergeConflict(errMsg)) {
+        store.setState({ hasMergeConflict: true });
+        showErrorToast(
+          'Rebase Conflict',
+          'The rebase hit conflicts that need manual resolution.',
+          'Resolve and run: git rebase --continue (or --abort)'
+        );
+      } else {
+        showErrorToast('Rebase Failed', truncate(errMsg, 100), 'Check the activity log for details');
+      }
+    }
+    render();
+    return;
+  }
+
+  if (action === 'reset') {
+    // Safety net: reset --hard discards uncommitted changes to tracked
+    // files, so stash them (untracked included) before touching anything.
+    if (await hasUncommittedChanges()) {
+      addLog('Running: git stash push --include-untracked (before reset)', 'update');
+      const stashResult = await gitStash({
+        message: `git-watchtower: auto-stash before reset to ${REMOTE_NAME}/${branch}`,
+      });
+      if (stashResult.success) {
+        addLog('Uncommitted changes stashed — restore with: git stash pop', 'info');
+      } else if (stashResult.error && stashResult.error.code !== 'GIT_STASH_EMPTY') {
+        addLog(`Stash failed, reset aborted: ${stashResult.error.message}`, 'error');
+        showErrorToast('Reset Aborted', 'Could not stash uncommitted changes first.', 'Nothing was reset');
+        render();
+        return;
+      }
+    }
+
+    addLog(`Running: git reset --hard ${REMOTE_NAME}/${branch}`, 'update');
+    render();
+    const resetResult = await resetHard(`${REMOTE_NAME}/${branch}`, { cwd: PROJECT_ROOT });
+    if (resetResult.success) {
+      addLog(`Reset ${branch} to ${REMOTE_NAME}/${branch}`, 'success');
+      showFlash(`Reset to ${REMOTE_NAME}/${branch}`);
+      divergenceSnooze.delete(branch);
+      telemetry.capture('divergence_reset');
+      notifyClients();
+      await pollGitChanges();
+    } else {
+      const errMsg = resetResult.error ? resetResult.error.message : 'unknown error';
+      addLog(`Reset failed: ${errMsg}`, 'error');
+      showErrorToast('Reset Failed', truncate(errMsg, 100), 'Check the activity log for details');
+    }
+    render();
+  }
+}
+
+/**
+ * Detect whether `branch` and its remote counterpart have diverged, and
+ * if so surface the resolution dialog (unless the user snoozed this exact
+ * remote commit). Returns true when diverged so callers skip their pull.
+ *
+ * @param {string} branch - Branch name
+ * @param {string|null} remoteCommit - Remote short hash for snooze bookkeeping
+ * @param {boolean} respectSnooze - Auto-pull passes true so an ignored
+ *   divergence stays quiet; the manual [p] keypress passes false because
+ *   an explicit pull request should always get an answer.
+ * @returns {Promise<boolean>} true if diverged (caller must not plain-pull)
+ */
+async function checkDivergence(branch, remoteCommit, respectSnooze) {
+  const { ahead, behind } = await getAheadBehind(branch, `${REMOTE_NAME}/${branch}`, { cwd: PROJECT_ROOT });
+  if (!(ahead > 0 && behind > 0)) return false;
+
+  if (respectSnooze && remoteCommit && divergenceSnooze.get(branch) === remoteCommit) {
+    return true; // Diverged, but the user said "ignore" for this remote commit
+  }
+  if (!store.get('divergeConfirmMode')) {
+    addLog(`${branch} has diverged from ${REMOTE_NAME}/${branch} (${ahead} local / ${behind} remote)`, 'warning');
+    telemetry.capture('divergence_detected');
+    showDivergeConfirm(branch, ahead, behind, remoteCommit);
+  }
+  return true;
 }
 
 // ============================================================================
@@ -1760,6 +1910,14 @@ async function pullCurrentBranch() {
       return { success: false };
     }
 
+    // A diverged branch can't be plain-pulled — offer the resolution
+    // dialog instead of letting git fail. Manual pull ignores any snooze:
+    // an explicit [p] keypress deserves an answer, not silence.
+    const branchInfo = store.get('branches').find(b => b.name === branch);
+    if (await checkDivergence(branch, (branchInfo && branchInfo.remoteCommit) || null, false)) {
+      return { success: false, reason: 'diverged' };
+    }
+
     addLog(`Pulling from ${REMOTE_NAME}/${branch}...`, 'update');
     render();
 
@@ -1797,7 +1955,12 @@ async function pullCurrentBranch() {
     const errMsg = e.stderr || e.message || String(e);
     addLog(`Pull failed: ${errMsg}`, 'error');
 
-    if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
+    if (isDivergentBranches(errMsg)) {
+      // Fallback for the race where the branch diverged between the
+      // pre-pull check and the pull itself.
+      const branchInfo = store.get('branches').find(b => b.name === store.get('currentBranch'));
+      await checkDivergence(store.get('currentBranch'), (branchInfo && branchInfo.remoteCommit) || null, false);
+    } else if (errMsg.includes('local changes') || errMsg.includes('overwritten') || errMsg.includes('uncommitted changes')) {
       if (setPendingDirtyOp({ type: 'pull' })) {
         showStashConfirm('pull');
       }
@@ -2188,7 +2351,8 @@ async function pollGitChanges() {
     // AUTO-PULL: If current branch has remote updates, pull automatically (if enabled)
     const autoPullBranchName = store.get('currentBranch');
     const currentInfo = store.get('branches').find(b => b.name === autoPullBranchName);
-    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !store.get('hasMergeConflict')) {
+    if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !store.get('hasMergeConflict')
+        && !(await checkDivergence(autoPullBranchName, currentInfo.remoteCommit || null, true))) {
       addLog(`Auto-pulling changes for ${autoPullBranchName}...`, 'update');
       render();
 
@@ -2231,7 +2395,14 @@ async function pollGitChanges() {
         addLog(`Auto-pulled ${autoPullBranchName}${summary}`, 'success');
       } catch (e) {
         const errMsg = e.stderr || e.stdout || e.message || String(e);
-        if (isMergeConflict(errMsg)) {
+        if (isDivergentBranches(errMsg)) {
+          // Belt-and-braces: the pre-pull checkDivergence should catch this
+          // first, but if git itself refuses ("divergent branches", "not
+          // possible to fast-forward"), surface the resolution dialog
+          // rather than a dead-end toast retried every poll.
+          addLog(`Pull refused: ${autoPullBranchName} has diverged from ${REMOTE_NAME}`, 'warning');
+          await checkDivergence(autoPullBranchName, currentInfo.remoteCommit || null, false);
+        } else if (isMergeConflict(errMsg)) {
           store.setState({ hasMergeConflict: true });
           addLog(`MERGE CONFLICT detected!`, 'error');
           addLog(`Resolve conflicts manually, then commit`, 'warning');
@@ -2966,6 +3137,44 @@ function setupKeyboardInput() {
         return;
       }
       return; // Block all other keys while modal is shown
+    }
+
+    // Handle divergence resolution dialog
+    if (store.get('divergeConfirmMode')) {
+      const DIVERGE_ACTIONS = ['rebase', 'reset', 'ignore'];
+      if (key === '\u001b[A' || key === 'k') { // Up
+        const idx = store.get('divergeConfirmSelectedIndex');
+        if (idx > 0) {
+          store.setState({ divergeConfirmSelectedIndex: idx - 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\u001b[B' || key === 'j') { // Down
+        const idx = store.get('divergeConfirmSelectedIndex');
+        if (idx < DIVERGE_ACTIONS.length - 1) {
+          store.setState({ divergeConfirmSelectedIndex: idx + 1 });
+          render();
+        }
+        return;
+      }
+      if (key === '\r' || key === '\n') { // Enter — execute selected option
+        await resolveDivergence(DIVERGE_ACTIONS[store.get('divergeConfirmSelectedIndex')]);
+        return;
+      }
+      if (key === 'B' || key === 'b') { // Rebase shortcut
+        await resolveDivergence('rebase');
+        return;
+      }
+      if (key === 'R' || key === 'r') { // Reset shortcut
+        await resolveDivergence('reset');
+        return;
+      }
+      if (key === '\u001b') { // Escape — ignore (snooze until remote moves)
+        await resolveDivergence('ignore');
+        return;
+      }
+      return; // Ignore other keys while the divergence dialog is open
     }
 
     // Handle stash confirmation dialog

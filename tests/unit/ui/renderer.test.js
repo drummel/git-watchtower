@@ -21,6 +21,7 @@ const {
   renderHelp,
   renderActionModal,
   renderUpdateModal,
+  renderDivergeConfirm,
   computeNamePadding,
 } = require('../../../src/ui/renderer');
 const { truncate } = require('../../../src/ui/ansi');
@@ -1189,6 +1190,65 @@ describe('renderActionModal', () => {
 // ---------------------------------------------------------------------------
 // renderUpdateModal
 // ---------------------------------------------------------------------------
+
+describe('renderDivergeConfirm', () => {
+  const divergeState = {
+    divergeConfirmMode: true,
+    divergeConfirmSelectedIndex: 0,
+    divergeData: { branch: 'feature/x', ahead: 2, behind: 3, remoteCommit: 'abc1234' },
+  };
+
+  it('renders nothing when divergeConfirmMode is false', () => {
+    const { raw } = collectState(renderDivergeConfirm, {
+      ...divergeState,
+      divergeConfirmMode: false,
+    });
+    assert.strictEqual(raw, '');
+  });
+
+  it('renders nothing when divergeData is missing', () => {
+    const { raw } = collectState(renderDivergeConfirm, {
+      ...divergeState,
+      divergeData: null,
+    });
+    assert.strictEqual(raw, '');
+  });
+
+  it('shows the title, branch, and ahead/behind counts', () => {
+    const { text } = collectState(renderDivergeConfirm, divergeState);
+    assert.ok(text.includes('Branch Diverged'));
+    assert.ok(text.includes('feature/x'));
+    assert.ok(text.includes('2 local commits'));
+    assert.ok(text.includes('3 remote commits'));
+  });
+
+  it('offers rebase, reset, and ignore options with key hints', () => {
+    const { text } = collectState(renderDivergeConfirm, divergeState);
+    assert.ok(text.includes('Rebase local commits onto remote'));
+    assert.ok(text.includes('Reset to remote'));
+    assert.ok(text.includes('discard 2 local commits'));
+    assert.ok(text.includes('Ignore until remote changes again'));
+    assert.ok(text.includes('[R] Reset  [B] Rebase  [Esc] Ignore'));
+  });
+
+  it('marks the selected option', () => {
+    const { text } = collectState(renderDivergeConfirm, {
+      ...divergeState,
+      divergeConfirmSelectedIndex: 1,
+    });
+    const lines = text.split('\n').join(' ');
+    assert.ok(lines.includes('▸ Reset to remote'), 'selection marker on the reset option');
+  });
+
+  it('uses singular wording for one commit', () => {
+    const { text } = collectState(renderDivergeConfirm, {
+      ...divergeState,
+      divergeData: { branch: 'b', ahead: 1, behind: 1, remoteCommit: 'abc' },
+    });
+    assert.ok(text.includes('1 local commit '));
+    assert.ok(text.includes('discard 1 local commit'));
+  });
+});
 
 describe('renderUpdateModal', () => {
   it('should not render when updateModalVisible is false', () => {

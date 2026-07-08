@@ -65,6 +65,7 @@ module.exports = {
   ErrorHandler: errors.ErrorHandler,
   isAuthError: errors.isAuthError,
   isMergeConflict: errors.isMergeConflict,
+  isDivergentBranches: errors.isDivergentBranches,
   isNetworkError: errors.isNetworkError,
 
   // State management
@@ -118,6 +119,7 @@ module.exports = {
   stashPop: gitCommands.stashPop,
   getChangedFiles: gitCommands.getChangedFiles,
   deleteLocalBranch: gitCommands.deleteLocalBranch,
+  resetHard: gitCommands.resetHard,
 
   // Git branch operations
   isValidBranchName: gitBranch.isValidBranchName,

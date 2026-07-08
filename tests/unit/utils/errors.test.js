@@ -13,6 +13,7 @@ const {
   ErrorHandler,
   isAuthError,
   isMergeConflict,
+  isDivergentBranches,
   isNetworkError,
 } = require('../../../src/utils/errors');
 
@@ -375,6 +376,45 @@ describe('isAuthError (standalone)', () => {
 
   it('should handle empty string', () => {
     assert.strictEqual(isAuthError(''), false);
+  });
+});
+
+describe('isDivergentBranches (standalone)', () => {
+  it('should detect modern git divergent-branches refusal', () => {
+    assert.strictEqual(
+      isDivergentBranches('hint: You have divergent branches and need to specify how to reconcile them.'),
+      true
+    );
+  });
+
+  it('should detect the fatal reconcile message', () => {
+    assert.strictEqual(
+      isDivergentBranches('fatal: Need to specify how to reconcile divergent branches.'),
+      true
+    );
+  });
+
+  it('should detect pull.ff=only refusal', () => {
+    assert.strictEqual(
+      isDivergentBranches('fatal: Not possible to fast-forward, aborting.'),
+      true
+    );
+  });
+
+  it('should be case-insensitive', () => {
+    assert.strictEqual(isDivergentBranches('NOT POSSIBLE TO FAST-FORWARD'), true);
+  });
+
+  it('should return false for non-matching messages', () => {
+    assert.strictEqual(isDivergentBranches('Some other git error'), false);
+    assert.strictEqual(isDivergentBranches('CONFLICT (content): Merge conflict'), false);
+    assert.strictEqual(isDivergentBranches('Authentication failed'), false);
+  });
+
+  it('should handle null, undefined, and empty input', () => {
+    assert.strictEqual(isDivergentBranches(null), false);
+    assert.strictEqual(isDivergentBranches(undefined), false);
+    assert.strictEqual(isDivergentBranches(''), false);
   });
 });
 

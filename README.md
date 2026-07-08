@@ -27,6 +27,7 @@ Built for teams working with Claude Code, Codex, and other AI agents.
 - **Instant notifications** with visual and audio alerts when branches update
 - **Quick switching** with preview pane, undo, and stash integration
 - **Auto-pull** when your current branch has remote changes
+- **Divergence resolution** when the remote branch was rebased or force-pushed — choose rebase (autostash), reset to remote, or ignore, with every git command shown in the activity log
 - **Optional dev server** with live reload, or run your own command (Next.js, Vite, etc.)
 - **Zero dependencies** — uses only Node.js built-in modules
 
