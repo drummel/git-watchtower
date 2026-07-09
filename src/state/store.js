@@ -76,6 +76,9 @@
  * @property {boolean} stashConfirmMode - Stash confirmation dialog active
  * @property {number} stashConfirmSelectedIndex - Selected option in stash confirm dialog
  * @property {string|null} pendingDirtyOperationLabel - Label for the pending dirty operation
+ * @property {boolean} divergeConfirmMode - Divergence resolution dialog active
+ * @property {number} divergeConfirmSelectedIndex - Selected option in divergence dialog
+ * @property {{branch: string, ahead: number, behind: number, remoteCommit: string|null}|null} divergeData - Divergence dialog data
  * @property {ActivityLogEntry[]} activityLog - Activity log entries
  * @property {SwitchHistoryEntry[]} switchHistory - Branch switch history
  * @property {boolean} isPolling - Currently polling git
@@ -147,6 +150,9 @@ function getInitialState() {
     stashConfirmMode: false,
     stashConfirmSelectedIndex: 0,
     pendingDirtyOperationLabel: null,
+    divergeConfirmMode: false,
+    divergeConfirmSelectedIndex: 0,
+    divergeData: null,
 
     // Activity tracking
     activityLog: [],

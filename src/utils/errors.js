@@ -431,6 +431,30 @@ function isMergeConflict(errorMessage) {
 }
 
 /**
+ * Check if an error message indicates the local and remote branches have
+ * diverged and git refused to pull without a reconciliation strategy.
+ *
+ * Covers both modern git's refusal ("You have divergent branches ... Need
+ * to specify how to reconcile divergent branches", git >= 2.33.1 with no
+ * pull.rebase/pull.ff config) and the pull.ff=only variant ("Not possible
+ * to fast-forward"). Common when a remote branch is rebased or
+ * force-pushed (e.g. by a hosted agent session) while a stale local copy
+ * of the same branch exists.
+ *
+ * @param {string} errorMessage - Error message to check
+ * @returns {boolean}
+ */
+function isDivergentBranches(errorMessage) {
+  const divergentIndicators = [
+    'divergent branches',
+    'need to specify how to reconcile',
+    'not possible to fast-forward',
+  ];
+  const msg = (errorMessage || '').toLowerCase();
+  return divergentIndicators.some(ind => msg.includes(ind));
+}
+
+/**
  * Check if an error message indicates a network error
  * @param {string} errorMessage - Error message to check
  * @returns {boolean}
@@ -459,5 +483,6 @@ module.exports = {
   ErrorHandler,
   isAuthError,
   isMergeConflict,
+  isDivergentBranches,
   isNetworkError,
 };

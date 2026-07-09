@@ -544,6 +544,31 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
 }
 
 /**
+ * Hard-reset the current branch to a ref (e.g. "origin/feature-x").
+ *
+ * Destructive by design: discards local commits and any uncommitted
+ * changes to tracked files. Callers are responsible for stashing or
+ * confirming with the user first.
+ *
+ * @param {string} ref - Ref to reset to
+ * @param {Object} [options] - Options
+ * @param {string} [options.cwd] - Working directory
+ * @returns {Promise<{success: boolean, error?: GitError}>}
+ */
+async function resetHard(ref, options = {}) {
+  const { cwd } = options;
+  try {
+    await execGit(['reset', '--hard', ref], { cwd });
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof GitError ? error : GitError.fromExecError(error, 'reset --hard'),
+    };
+  }
+}
+
+/**
  * Delete a local branch
  * @param {string} branchName - Branch to delete
  * @param {Object} [options] - Options
@@ -636,6 +661,7 @@ module.exports = {
   parseDiffStats,
   getDiffStats,
   deleteLocalBranch,
+  resetHard,
   getAheadBehind,
   getDiffShortstat,
   buildGitEnv,

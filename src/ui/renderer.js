@@ -1490,6 +1490,123 @@ function renderStashConfirm(state, write) {
 }
 
 // ---------------------------------------------------------------------------
+// renderDivergeConfirm
+// ---------------------------------------------------------------------------
+
+/**
+ * Render the branch-divergence resolution dialog.
+ *
+ * Shown when the current branch and its remote counterpart have diverged
+ * (both ahead and behind), so a plain pull cannot fast-forward — typically
+ * after the remote branch was rebased or force-pushed. Offers three
+ * options navigable with up/down arrows.
+ *
+ * State shape expected:
+ *   divergeConfirmMode: boolean
+ *   divergeConfirmSelectedIndex: number (0..2)
+ *   divergeData: { branch, ahead, behind }
+ *
+ * @param {object} state
+ * @param {function} write
+ */
+function renderDivergeConfirm(state, write) {
+  if (!state.divergeConfirmMode || !state.divergeData) return;
+
+  const { branch, ahead, behind } = state.divergeData;
+  const options = [
+    'Rebase local commits onto remote (autostash)',
+    `Reset to remote — discard ${ahead} local commit${ahead === 1 ? '' : 's'}`,
+    'Ignore until remote changes again',
+  ];
+  const selectedIdx = state.divergeConfirmSelectedIndex || 0;
+
+  const title = 'Branch Diverged';
+  const message = `${branch} and its remote have diverged: ${ahead} local commit${ahead === 1 ? '' : 's'} vs ${behind} remote commit${behind === 1 ? '' : 's'}. A plain pull cannot fast-forward (the remote was likely rebased or force-pushed).`;
+
+  const width = Math.min(64, state.terminalWidth - 4);
+  const col = Math.floor((state.terminalWidth - width) / 2);
+  const row = 2;
+
+  // Build content lines
+  const lines = [];
+  lines.push(title);
+  lines.push('');
+
+  // Word wrap the message
+  const msgWords = message.split(' ');
+  let currentLine = '';
+  for (const word of msgWords) {
+    if ((currentLine + ' ' + word).length > width - 6) {
+      lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += (currentLine ? ' ' : '') + word;
+    }
+  }
+  if (currentLine) lines.push(currentLine.trim());
+
+  lines.push('');
+
+  // Option lines (rendered specially below)
+  const optionStartIdx = lines.length;
+  for (const opt of options) {
+    lines.push(opt);
+  }
+
+  const hints = '[R] Reset  [B] Rebase  [Esc] Ignore';
+  lines.push('');
+  lines.push(hints);
+
+  const height = lines.length + 2;
+
+  // Draw red box — this is a destructive-choice dialog
+  write(ansi.moveTo(row, col));
+  write(ansi.red + ansi.bold);
+  write(box.dTopLeft + box.dHorizontal.repeat(width - 2) + box.dTopRight);
+
+  for (let i = 1; i < height - 1; i++) {
+    write(ansi.moveTo(row + i, col));
+    write(ansi.red + box.dVertical + ansi.reset + '  ' + ' '.repeat(width - 6) + '  ' + ansi.red + box.dVertical + ansi.reset);
+  }
+
+  write(ansi.moveTo(row + height - 1, col));
+  write(ansi.red + box.dBottomLeft + box.dHorizontal.repeat(width - 2) + box.dBottomRight);
+  write(ansi.reset);
+
+  // Render content
+  let contentRow = row + 1;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    write(ansi.moveTo(contentRow, col + 3));
+
+    if (i === 0) {
+      // Title — centered, bold red
+      const titlePadding = Math.floor((width - 6 - line.length) / 2);
+      write(' '.repeat(titlePadding) + ansi.red + ansi.bold + line + ansi.reset + ' '.repeat(width - 6 - titlePadding - line.length));
+    } else if (i >= optionStartIdx && i < optionStartIdx + options.length) {
+      // Selectable option
+      const optIdx = i - optionStartIdx;
+      const isSelected = optIdx === selectedIdx;
+      const prefix = isSelected ? '▸ ' : '  ';
+      const optText = prefix + line;
+      if (isSelected) {
+        write(ansi.bold + ansi.cyan + padRight(optText, width - 6) + ansi.reset);
+      } else {
+        write(ansi.gray + padRight(optText, width - 6) + ansi.reset);
+      }
+    } else if (line === hints) {
+      // Keyboard hints — centered, dim
+      const lPadding = Math.floor((width - 6 - line.length) / 2);
+      write(ansi.dim + ' '.repeat(lPadding) + line + ' '.repeat(width - 6 - lPadding - line.length) + ansi.reset);
+    } else {
+      // Regular content
+      write(padRight(line, width - 6));
+    }
+    contentRow++;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // renderCleanupConfirm
 // ---------------------------------------------------------------------------
 
@@ -1733,6 +1850,7 @@ module.exports = {
   renderHelp,
   renderActionModal,
   renderStashConfirm,
+  renderDivergeConfirm,
   renderCleanupConfirm,
   renderUpdateModal,
   // Layout helpers — exported for unit testing

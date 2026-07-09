@@ -17,7 +17,10 @@ const {
   hasUncommittedChanges,
   hasUnresolvedConflicts,
   deleteLocalBranch,
+  resetHard,
+  getAheadBehind,
 } = require('../../../src/git/commands');
+const { isDivergentBranches } = require('../../../src/utils/errors');
 
 describe('commands.js integration tests', () => {
   let fixture;
@@ -416,6 +419,74 @@ describe('commands.js integration tests', () => {
         }
       );
       assert.strictEqual(fixture.getCurrentBranch(), 'master');
+    });
+  });
+
+  describe('divergent branch handling', () => {
+    /**
+     * Make local master and origin/master diverge: push commit A to the
+     * remote, then rewind local and create commit B. Local is 1 ahead /
+     * 1 behind — the same state as a rebased/force-pushed remote branch.
+     */
+    function createDivergence() {
+      remotePath = fixture.createRemote();
+      fixture.createFile('shared.txt', 'remote version\n', true, 'Commit A (on remote)');
+      fixture.push('master');
+      fixture.git('reset --hard HEAD~1');
+      fixture.createFile('local.txt', 'local version\n', true, 'Commit B (local only)');
+      fixture.git('fetch origin');
+    }
+
+    it('getAheadBehind reports divergence in both directions', async () => {
+      createDivergence();
+      const { ahead, behind } = await getAheadBehind('master', 'origin/master', { cwd: fixture.path });
+      assert.strictEqual(ahead, 1);
+      assert.strictEqual(behind, 1);
+    });
+
+    it('plain pull refuses on divergence with a message isDivergentBranches classifies', async () => {
+      createDivergence();
+      // Pin the refusal deterministically regardless of the host's git
+      // config: ff-only cannot resolve a divergence.
+      fixture.git('config pull.ff only');
+      await assert.rejects(
+        execGit(['pull', 'origin', 'master'], { cwd: fixture.path }),
+        (/** @type {any} */ err) => {
+          const msg = `${err.stderr || ''} ${err.message || ''}`;
+          assert.ok(isDivergentBranches(msg), `expected divergence classification for: ${msg}`);
+          return true;
+        }
+      );
+    });
+
+    it('resetHard resolves the divergence to match the remote', async () => {
+      createDivergence();
+      const result = await resetHard('origin/master', { cwd: fixture.path });
+      assert.strictEqual(result.success, true);
+      const localHead = fixture.git('rev-parse HEAD');
+      const remoteHead = fixture.git('rev-parse origin/master');
+      assert.strictEqual(localHead, remoteHead);
+      const { ahead, behind } = await getAheadBehind('master', 'origin/master', { cwd: fixture.path });
+      assert.strictEqual(ahead, 0);
+      assert.strictEqual(behind, 0);
+    });
+
+    it('pull --rebase --autostash resolves the divergence keeping local work', async () => {
+      createDivergence();
+      // Dirty file rides along via --autostash (the flow the dialog runs)
+      fixture.createFile('wip.txt', 'uncommitted\n', false);
+      await execGit(['pull', '--rebase', '--autostash', 'origin', 'master'], { cwd: fixture.path });
+      const { ahead, behind } = await getAheadBehind('master', 'origin/master', { cwd: fixture.path });
+      assert.strictEqual(behind, 0, 'should contain all remote commits');
+      assert.strictEqual(ahead, 1, 'local commit should be rebased on top');
+      const status = await execGit(['status', '--porcelain'], { cwd: fixture.path });
+      assert.ok(status.stdout.includes('wip.txt'), 'autostashed change should be restored');
+    });
+
+    it('resetHard returns failure for a missing ref', async () => {
+      const result = await resetHard('origin/does-not-exist', { cwd: fixture.path });
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error);
     });
   });
 
