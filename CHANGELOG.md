@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/drummel/git-watchtower/compare/v2.5.4...v2.6.0) (2026-07-09)
+
+
+### Features
+
+* divergence resolution dialog for rebased or force-pushed remotes ([#243](https://github.com/drummel/git-watchtower/issues/243)) ([e885487](https://github.com/drummel/git-watchtower/commit/e8854875c9e77c989f683c68e05b7000fad5a3d5))
+
 ## [2.5.4](https://github.com/drummel/git-watchtower/compare/v2.5.3...v2.5.4) (2026-07-07)
 
 
