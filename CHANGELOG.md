@@ -1,3 +1,10 @@
+## [2.6.1](https://github.com/drummel/git-watchtower/compare/v2.6.0...v2.6.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* make no-server the effective default server mode ([d2bc673](https://github.com/drummel/git-watchtower/commit/d2bc67315e37b560b07a4338db9f1932aa9967ce))
+
 # [2.6.0](https://github.com/drummel/git-watchtower/compare/v2.5.4...v2.6.0) (2026-07-09)
 
 
