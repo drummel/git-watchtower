@@ -157,9 +157,9 @@ async function runConfigurationWizard() {
   console.log('Server Mode Options:');
   console.log('  1. Static  - Serve static files with live reload (HTML/CSS/JS)');
   console.log('  2. Command - Run your own dev server (Next.js, Vite, etc.)');
-  console.log('  3. None    - Branch monitoring only (no server)\n');
+  console.log('  3. None    - Branch monitoring only (no server) [default]\n');
 
-  const modeAnswer = await promptUser('Server mode (1/2/3)', '1');
+  const modeAnswer = await promptUser('Server mode (1/2/3)', '3');
   if (modeAnswer === '2' || modeAnswer.toLowerCase() === 'command') {
     config.server.mode = 'command';
   } else if (modeAnswer === '3' || modeAnswer.toLowerCase() === 'none') {
@@ -431,7 +431,7 @@ let periodicUpdateCheck = null;
 
 function applyConfig(config) {
   // Server settings
-  SERVER_MODE = config.server?.mode || 'static';
+  SERVER_MODE = config.server?.mode || 'none';
   NO_SERVER = SERVER_MODE === 'none';
   SERVER_COMMAND = config.server?.command || '';
   RESTART_ON_SWITCH = config.server?.restartOnSwitch !== false;
