@@ -3,9 +3,23 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const https = require('https');
 
 let tmpDir;
 let originalHomedir;
+let httpsMock;
+
+// Tests must NEVER reach production PostHog. Every test run used to fire
+// real analytics_prompt_shown/analytics_decision events at the live
+// project, polluting the data. Stub https.request and assert against the
+// stub instead.
+function stubHttpsRequest() {
+  return mock.method(https, 'request', () => ({
+    on() { return this; },
+    end() {},
+    destroy() {},
+  }));
+}
 
 function freshAnalytics() {
   // Clear caches
@@ -23,11 +37,13 @@ describe('telemetry/analytics', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-analytics-test-'));
     originalHomedir = os.homedir;
     os.homedir = () => tmpDir;
+    httpsMock = stubHttpsRequest();
   });
 
   afterEach(() => {
     os.homedir = originalHomedir;
     delete process.env.GIT_WATCHTOWER_TELEMETRY;
+    httpsMock.mock.restore();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
@@ -87,13 +103,22 @@ describe('telemetry/analytics', () => {
   });
 
   describe('captureAlways', () => {
-    it('does not throw even when disabled', () => {
+    it('sends even when the enabled check is off (consent-flow events)', () => {
       const analytics = freshAnalytics();
       analytics.init({ version: '1.0.0' });
       assert.equal(analytics.isEnabled(), false);
-      // Should not throw — sends directly via HTTPS, bypasses enabled check
       analytics.captureAlways('analytics_prompt_shown', 'test-distinct-id');
       analytics.captureAlways('analytics_decision', 'test-distinct-id', { opted_in: false });
+      assert.equal(httpsMock.mock.callCount(), 2);
+    });
+
+    it('does not send when GIT_WATCHTOWER_TELEMETRY=false', () => {
+      process.env.GIT_WATCHTOWER_TELEMETRY = 'false';
+      const analytics = freshAnalytics();
+      analytics.init({ version: '1.0.0' });
+      analytics.captureAlways('analytics_prompt_shown', 'test-distinct-id');
+      analytics.captureAlways('analytics_decision', 'test-distinct-id', { opted_in: false });
+      assert.equal(httpsMock.mock.callCount(), 0);
     });
   });
 
@@ -110,11 +135,13 @@ describe('telemetry/index', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-telemetry-idx-test-'));
     originalHomedir = os.homedir;
     os.homedir = () => tmpDir;
+    httpsMock = stubHttpsRequest();
   });
 
   afterEach(() => {
     os.homedir = originalHomedir;
     delete process.env.GIT_WATCHTOWER_TELEMETRY;
+    httpsMock.mock.restore();
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     } catch {
@@ -172,6 +199,9 @@ describe('telemetry/index', () => {
       await telemetry.promptIfNeeded(async () => true);
 
       process.stdin.isTTY = origIsTTY;
+
+      // Consent events go to the stub, never the real network
+      assert.equal(httpsMock.mock.callCount(), 2);
 
       const configFile = path.join(tmpDir, '.git-watchtower', 'config.json');
       assert.ok(fs.existsSync(configFile));

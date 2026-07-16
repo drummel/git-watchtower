@@ -6,7 +6,7 @@
  */
 
 const https = require('https');
-const { isTelemetryEnabled, getOrCreateDistinctId } = require('./config');
+const { isTelemetryEnabled, isEnvDisabled, getOrCreateDistinctId } = require('./config');
 const { detectInstallSource } = require('../utils/install-source');
 
 const POSTHOG_API_KEY = 'phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG';
@@ -171,6 +171,10 @@ function captureError(error) {
  * @param {Record<string, any>} [properties] - Event properties
  */
 function captureAlways(event, userDistinctId, properties = {}) {
+  // GIT_WATCHTOWER_TELEMETRY=false is a hard opt-out (CI, corporate, tests):
+  // even consent-flow events must not leave the machine.
+  if (isEnvDisabled()) return;
+
   try {
     const payload = JSON.stringify({
       api_key: POSTHOG_API_KEY,
