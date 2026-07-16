@@ -6,7 +6,7 @@
  */
 
 const https = require('https');
-const { isTelemetryEnabled, getOrCreateDistinctId } = require('./config');
+const { isTelemetryEnabled, isEnvDisabled, getOrCreateDistinctId } = require('./config');
 const { detectInstallSource } = require('../utils/install-source');
 
 const POSTHOG_API_KEY = 'phc_fdGL8TVN5aFPXmQ4f1hI8y6sqnscD7dy9j5SM5gTylG';
@@ -23,6 +23,18 @@ const FLUSH_INTERVAL = 30000; // 30 seconds
 const FLUSH_AT = 10; // flush when 10 events accumulated
 
 /**
+ * True when analytics must never leave the machine:
+ * - GIT_WATCHTOWER_TELEMETRY=false is a hard opt-out (CI, corporate), or
+ * - the process is running under the node:test runner (NODE_TEST_CONTEXT
+ *   is set in every `node --test` child), so test suites can't emit
+ *   production events no matter how they're invoked.
+ * @returns {boolean}
+ */
+function isSendingSuppressed() {
+  return isEnvDisabled() || process.env.NODE_TEST_CONTEXT !== undefined;
+}
+
+/**
  * Send a batch of events to PostHog via HTTPS POST.
  * Returns a promise that resolves when the request completes (or fails).
  * Callers that don't need to wait can ignore the return value.
@@ -30,7 +42,7 @@ const FLUSH_AT = 10; // flush when 10 events accumulated
  * @returns {Promise<void>}
  */
 function sendBatch(events) {
-  if (events.length === 0) return Promise.resolve();
+  if (events.length === 0 || isSendingSuppressed()) return Promise.resolve();
 
   return new Promise((resolve) => {
     const payload = JSON.stringify({ api_key: POSTHOG_API_KEY, batch: events });
@@ -171,6 +183,8 @@ function captureError(error) {
  * @param {Record<string, any>} [properties] - Event properties
  */
 function captureAlways(event, userDistinctId, properties = {}) {
+  if (isSendingSuppressed()) return;
+
   try {
     const payload = JSON.stringify({
       api_key: POSTHOG_API_KEY,
