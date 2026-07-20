@@ -1030,6 +1030,14 @@ function renderInfo(state, write) {
   contentRow++;
 
   write(ansi.moveTo(contentRow, col + 3));
+  write(ansi.gray + 'Idle backoff: ' + ansi.reset
+    + (state.inactivityBackoffEnabled
+      ? ansi.green + 'On' + ansi.reset + ansi.gray + ' (eases off when quiet) [B]'
+      : ansi.yellow + 'Off' + ansi.reset + ansi.gray + ' [B]')
+    + ansi.reset);
+  contentRow++;
+
+  write(ansi.moveTo(contentRow, col + 3));
   write(ansi.gray + 'Status: ' + ansi.reset + (state.isOffline ? ansi.red + 'Offline' : ansi.green + 'Online') + ansi.reset);
   contentRow++;
 
@@ -1089,6 +1097,7 @@ function renderHelp(state, write) {
     { k: '1-9 0', d: 'Set list size' },
     { k: '+ -', d: 'Grow / shrink' },
     { k: 's', d: 'Toggle sound' },
+    { k: 'B', d: 'Idle poll backoff' },
     { k: 'c', d: 'Casino mode' },
     { k: 'i', d: 'Status info' },
     { k: 'S', d: 'Stash & retry' },

@@ -46,6 +46,7 @@
  *   b       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
+ *   B       - Toggle idle poll backoff (ease off polling when quiet)
  *   c       - Toggle casino mode (Vegas-style feedback)
  *   d       - Clean up stale (gone) branches
  *   S       - Stash changes and retry a blocked switch/pull
@@ -482,6 +483,9 @@ function applyConfig(config) {
     maxLogEntries: MAX_LOG_ENTRIES,
     projectName: path.basename(PROJECT_ROOT),
     adaptivePollInterval: GIT_POLL_INTERVAL,
+    // Store holds the runtime-authoritative enable flag (toggled from the UI);
+    // INACTIVITY_BACKOFF keeps the timing knobs.
+    inactivityBackoffEnabled: INACTIVITY_BACKOFF.enabled !== false,
   });
 
   // Casino mode
@@ -2551,8 +2555,11 @@ function updatePollBackoff(sawActivity) {
     }
   }
 
+  // Runtime-authoritative flag lives in the store so the 'B' key toggle and
+  // the info panel share one source of truth; timing knobs stay in INACTIVITY_BACKOFF.
+  const backoffEnabled = store.get('inactivityBackoffEnabled');
   const idleMs = Date.now() - lastActivityAt;
-  const inactivityInterval = INACTIVITY_BACKOFF.enabled
+  const inactivityInterval = backoffEnabled
     ? calculateInactivityInterval({
         idleMs,
         baseMs: base,
@@ -2566,7 +2573,7 @@ function updatePollBackoff(sawActivity) {
   // Announce the *transition* into backoff once per idle episode. Individual
   // escalations (every stepMs) aren't logged — that would spam the 10-entry
   // activity log; the live "Interval" readout in the info panel shows detail.
-  if (INACTIVITY_BACKOFF.enabled && !pollBackedOff && inactivityInterval > base) {
+  if (backoffEnabled && !pollBackedOff && inactivityInterval > base) {
     pollBackedOff = true;
     const quietMins = Math.max(1, Math.round(INACTIVITY_BACKOFF.activeWindowMs / 60000));
     addLog(`Quiet for ${quietMins}m — easing polling to give ${REMOTE_NAME} a break`, 'info');
@@ -2594,6 +2601,25 @@ function noteUserActivity() {
   const effective = Math.max(networkSlowdownInterval, GIT_POLL_INTERVAL);
   if (effective !== store.get('adaptivePollInterval')) {
     store.setState({ adaptivePollInterval: effective });
+  }
+}
+
+/**
+ * Persist the idle-backoff enable flag to the per-repo config file, but only
+ * when one already exists — we never create (and thereby dirty the working
+ * tree with) a new .watchtowerrc.json from a keypress. Best-effort: a failure
+ * here leaves the session toggle in place and is surfaced to the activity log.
+ * @param {boolean} enabled
+ */
+function persistInactivityBackoff(enabled) {
+  try {
+    if (!fs.existsSync(getConfigPath(PROJECT_ROOT))) return;
+    const current = loadConfig() || {};
+    current.inactivityBackoff = { ...(current.inactivityBackoff || {}), enabled };
+    saveConfig(current);
+    addLog(`Saved idle-backoff preference to ${CONFIG_FILE_NAME}`, 'info');
+  } catch (e) {
+    addLog(`Couldn't save idle-backoff preference: ${e.message || e}`, 'warning');
   }
 }
 
@@ -2860,6 +2886,12 @@ function setupKeyboardInput() {
   process.stdin.on('error', () => {});
 
   process.stdin.on('data', async (key) => {
+    // Any UI interaction counts as engagement: reset the idle clock so poll
+    // backoff lifts immediately and the user gets fresh data while they're
+    // actively driving the tool. Cheap and idempotent — only logs on the
+    // first keypress after backoff engaged, so it never spams the log.
+    noteUserActivity();
+
     // Handle search mode input via actions module
     if (store.get('searchMode')) {
       const searchResult = actions.handleSearchInput(getActionState(), key);
@@ -3497,9 +3529,8 @@ function setupKeyboardInput() {
 
       case 'f':
         addLog('Fetching all branches...', 'update');
-        // A manual fetch is user engagement — reset the idle clock so any
-        // inactivity backoff lifts immediately, before the poll runs.
-        noteUserActivity();
+        // (The keypress handler already called noteUserActivity() for this 'f',
+        // so any backoff has already lifted before the poll runs.)
         await pollGitChanges();
         // Refresh sparklines on manual fetch
         addLog('Refreshing activity sparklines...', 'info');
@@ -3514,6 +3545,29 @@ function setupKeyboardInput() {
         addLog(`Sound notifications ${soundNowEnabled ? 'enabled' : 'disabled'}`, 'info');
         telemetry.capture('sound_toggled', { enabled: soundNowEnabled });
         if (soundNowEnabled) playSound();
+        render();
+        break;
+      }
+
+      case 'B': { // Toggle idle poll backoff ("poll backdown")
+        applyUpdates(actions.toggleInactivityBackoff(actionState));
+        const backoffEnabled = store.get('inactivityBackoffEnabled');
+        INACTIVITY_BACKOFF = { ...INACTIVITY_BACKOFF, enabled: backoffEnabled };
+        addLog(`Idle poll backoff ${backoffEnabled ? 'enabled' : 'disabled'}`, 'info');
+        telemetry.capture('inactivity_backoff_toggled', { enabled: backoffEnabled });
+        // Recompute the interval right away: re-enabling applies backoff from
+        // the current idle time; disabling snaps straight back to the base rate.
+        if (backoffEnabled) {
+          updatePollBackoff(false);
+        } else {
+          pollBackedOff = false;
+          const effective = Math.max(networkSlowdownInterval, GIT_POLL_INTERVAL);
+          if (effective !== store.get('adaptivePollInterval')) {
+            store.setState({ adaptivePollInterval: effective });
+          }
+        }
+        // Save the preference to the repo config if one exists.
+        persistInactivityBackoff(backoffEnabled);
         render();
         break;
       }
