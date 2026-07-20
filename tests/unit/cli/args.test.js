@@ -14,6 +14,7 @@ describe('parseArgs', () => {
     assert.equal(result.remote, null);
     assert.equal(result.autoPull, null);
     assert.equal(result.pollInterval, null);
+    assert.equal(result.inactivityBackoff, null);
     assert.equal(result.sound, null);
     assert.equal(result.visibleBranches, null);
     assert.equal(result.init, false);
@@ -206,6 +207,25 @@ describe('parseArgs', () => {
       const result = parseArgs(['--poll-interval', '300000']);
       assert.equal(result.pollInterval, 300000);
       assert.equal(result.errors.length, 0);
+    });
+  });
+
+  describe('--inactivity-backoff', () => {
+    it('should enable inactivity backoff', () => {
+      const result = parseArgs(['--inactivity-backoff']);
+      assert.equal(result.inactivityBackoff, true);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should disable inactivity backoff', () => {
+      const result = parseArgs(['--no-inactivity-backoff']);
+      assert.equal(result.inactivityBackoff, false);
+      assert.equal(result.errors.length, 0);
+    });
+
+    it('should leave it null when neither flag is present', () => {
+      const result = parseArgs(['--casino']);
+      assert.equal(result.inactivityBackoff, null);
     });
   });
 
@@ -543,6 +563,25 @@ describe('applyCliArgsToConfig', () => {
   it('should apply pollInterval override', () => {
     const result = applyCliArgsToConfig(getBaseConfig(), parseArgs(['--poll-interval', '15000']));
     assert.equal(result.gitPollInterval, 15000);
+  });
+
+  it('should disable inactivity backoff via --no-inactivity-backoff', () => {
+    const result = applyCliArgsToConfig(getBaseConfig(), parseArgs(['--no-inactivity-backoff']));
+    assert.equal(result.inactivityBackoff.enabled, false);
+  });
+
+  it('should enable inactivity backoff via --inactivity-backoff', () => {
+    const base = { ...getBaseConfig(), inactivityBackoff: { enabled: false, factor: 3 } };
+    const result = applyCliArgsToConfig(base, parseArgs(['--inactivity-backoff']));
+    assert.equal(result.inactivityBackoff.enabled, true);
+    // Only `enabled` is overridden; other knobs are preserved.
+    assert.equal(result.inactivityBackoff.factor, 3);
+  });
+
+  it('should leave inactivityBackoff untouched when neither flag is present', () => {
+    const base = { ...getBaseConfig(), inactivityBackoff: { enabled: true, factor: 2 } };
+    const result = applyCliArgsToConfig(base, parseArgs(['--casino']));
+    assert.deepStrictEqual(result.inactivityBackoff, { enabled: true, factor: 2 });
   });
 
   it('should apply sound override', () => {

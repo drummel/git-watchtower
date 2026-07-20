@@ -54,6 +54,13 @@ describe('getDefaultConfig', () => {
     assert.strictEqual(config.gitPollInterval, 5000);
     assert.strictEqual(config.soundEnabled, true);
     assert.strictEqual(config.visibleBranches, 7);
+
+    assert.ok(config.inactivityBackoff);
+    assert.strictEqual(config.inactivityBackoff.enabled, true);
+    assert.strictEqual(config.inactivityBackoff.activeWindowMs, 120000);
+    assert.strictEqual(config.inactivityBackoff.stepMs, 120000);
+    assert.strictEqual(config.inactivityBackoff.maxIntervalMs, 300000);
+    assert.strictEqual(config.inactivityBackoff.factor, 2);
   });
 
   it('should return new object each time', () => {
@@ -62,6 +69,8 @@ describe('getDefaultConfig', () => {
 
     assert.notStrictEqual(config1, config2);
     assert.notStrictEqual(config1.server, config2.server);
+    // Nested backoff block must be a fresh copy too, not a shared reference.
+    assert.notStrictEqual(config1.inactivityBackoff, config2.inactivityBackoff);
   });
 });
 
@@ -296,5 +305,76 @@ describe('migrateConfig', () => {
     assert.strictEqual(result.server.mode, 'static');
     assert.strictEqual(result.remoteName, 'origin');
     assert.strictEqual(result.autoPull, true);
+  });
+
+  it('should backfill inactivityBackoff defaults for legacy configs', () => {
+    const result = migrateConfig({ port: 3000 });
+    assert.ok(result.inactivityBackoff);
+    assert.strictEqual(result.inactivityBackoff.enabled, true);
+    assert.strictEqual(result.inactivityBackoff.maxIntervalMs, 300000);
+  });
+});
+
+describe('inactivityBackoff validation', () => {
+  it('should apply defaults when the block is omitted', () => {
+    const result = validateConfig({ server: { mode: 'none' } });
+    assert.deepStrictEqual(result.inactivityBackoff, {
+      enabled: true,
+      activeWindowMs: 120000,
+      stepMs: 120000,
+      maxIntervalMs: 300000,
+      factor: 2,
+    });
+  });
+
+  it('should accept a partial block and fill the rest from defaults', () => {
+    const result = validateConfig({ inactivityBackoff: { enabled: false } });
+    assert.strictEqual(result.inactivityBackoff.enabled, false);
+    // Timing knobs remain at their defaults.
+    assert.strictEqual(result.inactivityBackoff.activeWindowMs, 120000);
+    assert.strictEqual(result.inactivityBackoff.factor, 2);
+  });
+
+  it('should accept a fully specified valid block', () => {
+    const result = validateConfig({
+      inactivityBackoff: {
+        enabled: true,
+        activeWindowMs: 300000,
+        stepMs: 60000,
+        maxIntervalMs: 600000,
+        factor: 1.5,
+      },
+    });
+    assert.strictEqual(result.inactivityBackoff.activeWindowMs, 300000);
+    assert.strictEqual(result.inactivityBackoff.stepMs, 60000);
+    assert.strictEqual(result.inactivityBackoff.maxIntervalMs, 600000);
+    assert.strictEqual(result.inactivityBackoff.factor, 1.5);
+  });
+
+  it('should coerce enabled to a boolean', () => {
+    const result = validateConfig({ inactivityBackoff: { enabled: 0 } });
+    assert.strictEqual(result.inactivityBackoff.enabled, false);
+  });
+
+  it('should allow a zero active window (ease off immediately)', () => {
+    const result = validateConfig({ inactivityBackoff: { activeWindowMs: 0 } });
+    assert.strictEqual(result.inactivityBackoff.activeWindowMs, 0);
+  });
+
+  it('should reject a non-object block', () => {
+    assert.throws(() => validateConfig({ inactivityBackoff: 'nope' }), ConfigError);
+    assert.throws(() => validateConfig({ inactivityBackoff: 42 }), ConfigError);
+  });
+
+  it('should reject a factor of 1 or less (would never grow)', () => {
+    assert.throws(() => validateConfig({ inactivityBackoff: { factor: 1 } }), ConfigError);
+    assert.throws(() => validateConfig({ inactivityBackoff: { factor: 0.5 } }), ConfigError);
+  });
+
+  it('should reject out-of-range timing values', () => {
+    assert.throws(() => validateConfig({ inactivityBackoff: { stepMs: 0 } }), ConfigError);
+    assert.throws(() => validateConfig({ inactivityBackoff: { activeWindowMs: -1 } }), ConfigError);
+    assert.throws(() => validateConfig({ inactivityBackoff: { maxIntervalMs: 99999999 } }), ConfigError);
+    assert.throws(() => validateConfig({ inactivityBackoff: { factor: 'big' } }), ConfigError);
   });
 });

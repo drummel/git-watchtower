@@ -17,6 +17,7 @@ const { LIMITS } = require('../config/schema');
  * @property {string|null} remote - Git remote name override
  * @property {boolean|null} autoPull - Auto-pull override
  * @property {number|null} pollInterval - Poll interval override in ms
+ * @property {boolean|null} inactivityBackoff - Idle poll-backoff enable override
  * @property {boolean|null} sound - Sound override
  * @property {number|null} visibleBranches - Visible branches override
  * @property {boolean} init - Run configuration wizard
@@ -49,6 +50,7 @@ function parseArgs(argv, options = {}) {
     remote: null,
     autoPull: null,
     pollInterval: null,
+    inactivityBackoff: null,
     // UI settings
     sound: null,
     visibleBranches: null,
@@ -127,6 +129,10 @@ function parseArgs(argv, options = {}) {
         result.errors.push(`Invalid value for ${args[i]}: "${args[i + 1] || ''}" (expected: ${LIMITS.gitPollInterval.min}-${LIMITS.gitPollInterval.max} ms)`);
       }
       i++;
+    } else if (args[i] === '--inactivity-backoff') {
+      result.inactivityBackoff = true;
+    } else if (args[i] === '--no-inactivity-backoff') {
+      result.inactivityBackoff = false;
     }
     // UI settings
     else if (args[i] === '--sound') {
@@ -240,6 +246,12 @@ function applyCliArgsToConfig(config, cliArgs) {
   if (cliArgs.pollInterval !== null) {
     merged.gitPollInterval = cliArgs.pollInterval;
   }
+  if (cliArgs.inactivityBackoff !== null) {
+    merged.inactivityBackoff = {
+      ...(merged.inactivityBackoff || {}),
+      enabled: cliArgs.inactivityBackoff,
+    };
+  }
 
   // UI settings
   if (cliArgs.sound !== null) {
@@ -289,6 +301,8 @@ Git Options:
   --auto-pull             Auto-pull on branch switch (default)
   --no-auto-pull          Don't auto-pull on branch switch
   --poll-interval <ms>    Git polling interval in ms (default: 5000, range: ${LIMITS.gitPollInterval.min}-${LIMITS.gitPollInterval.max})
+  --inactivity-backoff    Ease off polling when the repo is idle (default)
+  --no-inactivity-backoff Keep polling at the full rate even when idle
 
 UI Options:
   --sound                 Enable sound notifications (default)
