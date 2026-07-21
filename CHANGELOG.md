@@ -1,3 +1,17 @@
+# [2.7.0](https://github.com/drummel/git-watchtower/compare/v2.6.1...v2.7.0) (2026-07-21)
+
+
+### Bug Fixes
+
+* keep telemetry test events out of production PostHog ([e4e27ad](https://github.com/drummel/git-watchtower/commit/e4e27adab3b2c4ed5b34f75a83c3c3121700684b))
+* suppress all telemetry sends automatically under the node:test runner ([5d33a87](https://github.com/drummel/git-watchtower/commit/5d33a87361188779bb7d774defda1293a092ce0b))
+
+
+### Features
+
+* ease off git polling when the repo is idle ([8938c2b](https://github.com/drummel/git-watchtower/commit/8938c2bfe7cb3be5d360888aba46d7f7e2370318))
+* snap poll backoff back on UI interaction and add a live toggle ([4cde408](https://github.com/drummel/git-watchtower/commit/4cde408556662f6d47a43fd9e2b1282d56da08eb))
+
 ## [2.6.1](https://github.com/drummel/git-watchtower/compare/v2.6.0...v2.6.1) (2026-07-14)
 
 
