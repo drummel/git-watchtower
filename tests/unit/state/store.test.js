@@ -484,6 +484,10 @@ describe('getInitialState', () => {
     assert.deepStrictEqual(state1, state2);
     assert.notStrictEqual(state1, state2); // Should be different objects
   });
+
+  it('should default inactivity backoff to enabled', () => {
+    assert.strictEqual(getInitialState().inactivityBackoffEnabled, true);
+  });
 });
 
 describe('Store input validation', () => {

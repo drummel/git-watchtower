@@ -76,6 +76,9 @@ git-watchtower --port 8080 --web --web-port 9000
 # Re-run the configuration wizard
 git-watchtower --init
 
+# Keep polling at full speed even when the repo is idle
+git-watchtower --no-inactivity-backoff
+
 # Show help
 git-watchtower --help
 ```
@@ -127,10 +130,11 @@ Full docs at **[gitwatchtower.dev](https://gitwatchtower.dev)**.
 
 1. **Polling** — Runs `git fetch` periodically to check for updates
 2. **Detection** — Compares commit hashes to detect new commits, branches, and deletions
-3. **Auto-pull** — When your current branch has remote updates, pulls automatically (if enabled)
-4. **Server** — Depending on mode, serves static files, runs your command, or does nothing
-5. **Live Reload** — In static site mode, notifies connected browsers via SSE when files change
-6. **Web Dashboard** — Optional browser UI that mirrors and extends the TUI via SSE
+3. **Inactivity backoff** — When the repo goes quiet, polling eases off progressively (up to once every 5 minutes) to spare the remote; it snaps back to the full rate the moment a change is detected, you interact with the UI (any keypress), or you fetch manually. On by default (set in the per-repo config during onboarding). Tune or disable it via the `inactivityBackoff` config block, `--no-inactivity-backoff`, or toggle it live with the `B` key.
+4. **Auto-pull** — When your current branch has remote updates, pulls automatically (if enabled)
+5. **Server** — Depending on mode, serves static files, runs your command, or does nothing
+6. **Live Reload** — In static site mode, notifies connected browsers via SSE when files change
+7. **Web Dashboard** — Optional browser UI that mirrors and extends the TUI via SSE
 
 ## Contributing
 

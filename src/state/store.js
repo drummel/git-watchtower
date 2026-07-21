@@ -87,6 +87,7 @@
  * @property {number} lastFetchDuration - Last fetch duration in ms
  * @property {number} consecutiveNetworkFailures - Number of consecutive failures
  * @property {number} adaptivePollInterval - Current adaptive poll interval in ms
+ * @property {boolean} inactivityBackoffEnabled - Ease off polling when the repo is idle
  * @property {boolean} serverRunning - Server process is running
  * @property {boolean} serverCrashed - Server process crashed
  * @property {ServerLogEntry[]} serverLogs - Server log buffer (legacy)
@@ -165,6 +166,7 @@ function getInitialState() {
     lastFetchDuration: 0,
     consecutiveNetworkFailures: 0,
     adaptivePollInterval: 5000,
+    inactivityBackoffEnabled: true,
 
     // Server state
     serverRunning: false,

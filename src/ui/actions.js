@@ -253,6 +253,15 @@ function toggleSound(state) {
 }
 
 /**
+ * Toggle the idle poll backoff ("poll backdown") on or off.
+ * @param {object} state
+ * @returns {object} State updates.
+ */
+function toggleInactivityBackoff(state) {
+  return { inactivityBackoffEnabled: !state.inactivityBackoffEnabled };
+}
+
+/**
  * Set the number of visible branches to an exact value.
  * @param {object} state
  * @param {number} count
@@ -419,6 +428,7 @@ module.exports = {
 
   // settings
   toggleSound,
+  toggleInactivityBackoff,
   setVisibleBranchCount,
   increaseVisibleBranches,
   decreaseVisibleBranches,

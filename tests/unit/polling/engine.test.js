@@ -2,6 +2,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   pruneStaleEntries,
+  calculateInactivityInterval,
 } = require('../../../src/polling/engine');
 
 describe('pruneStaleEntries', () => {
@@ -138,5 +139,86 @@ describe('pruneStaleEntries', () => {
     assert.ok(pruned.includes('gone3'));
     assert.equal(opts.knownBranchNames.size, 1);
     assert.equal(opts.caches[0].size, 1);
+  });
+});
+
+describe('calculateInactivityInterval', () => {
+  // Defaults mirror the config: base 5s, active window 2m, step 2m, cap 5m, ×2.
+  const base = 5000;
+  const defaults = {
+    baseMs: base,
+    activeWindowMs: 120000,
+    stepMs: 120000,
+    maxIntervalMs: 300000,
+    factor: 2,
+  };
+  // Note the helper param is `maxMs`, while config/callers use `maxIntervalMs`.
+  const calc = (idleMs, over = {}) => {
+    const merged = { ...defaults, ...over };
+    return calculateInactivityInterval({
+      idleMs,
+      baseMs: merged.baseMs,
+      activeWindowMs: merged.activeWindowMs,
+      stepMs: merged.stepMs,
+      maxMs: merged.maxIntervalMs,
+      factor: merged.factor,
+    });
+  };
+
+  it('stays at the base rate within the active window', () => {
+    assert.equal(calc(0), base);
+    assert.equal(calc(60000), base);        // 1 min idle
+    assert.equal(calc(119999), base);       // just under 2 min
+  });
+
+  it('takes the first backoff step at the active-window boundary', () => {
+    // idle === activeWindowMs is step 1 → base × 2
+    assert.equal(calc(120000), base * 2);   // 10s
+  });
+
+  it('grows by the factor every step past the active window', () => {
+    assert.equal(calc(120000), 10000);      // step 1 → 10s
+    assert.equal(calc(240000), 20000);      // step 2 → 20s
+    assert.equal(calc(360000), 40000);      // step 3 → 40s
+    assert.equal(calc(480000), 80000);      // step 4 → 80s
+    assert.equal(calc(600000), 160000);     // step 5 → 160s
+  });
+
+  it('caps at maxMs and holds there', () => {
+    assert.equal(calc(720000), 300000);     // step 6 would be 320s → capped 300s
+    assert.equal(calc(3600000), 300000);    // an hour idle → still capped
+    assert.equal(calc(Number.MAX_SAFE_INTEGER), 300000);
+  });
+
+  it('honors a custom active window and step', () => {
+    // N = 5 min grace, M = 1 min step
+    const over = { activeWindowMs: 300000, stepMs: 60000 };
+    assert.equal(calc(299999, over), base);       // still in grace
+    assert.equal(calc(300000, over), base * 2);   // first step
+    assert.equal(calc(360000, over), base * 4);   // second step
+  });
+
+  it('respects a factor other than 2', () => {
+    assert.equal(calc(120000, { factor: 3 }), 15000);   // step 1 → base × 3
+    assert.equal(calc(240000, { factor: 3 }), 45000);   // step 2 → base × 9
+  });
+
+  it('never returns below the base rate', () => {
+    // A max below base is degenerate; backoff only ever slows polling, so the
+    // result is floored at base rather than dropping under it.
+    assert.equal(calc(600000, { maxIntervalMs: 3000 }), base);
+    assert.equal(calc(0, { maxIntervalMs: 3000 }), base);
+  });
+
+  it('treats degenerate params as "backoff off" (returns base)', () => {
+    assert.equal(calc(600000, { factor: 1 }), base);    // factor ≤ 1 never grows
+    assert.equal(calc(600000, { factor: 0.5 }), base);
+    assert.equal(calc(600000, { stepMs: 0 }), base);    // non-positive step
+    assert.equal(calc(NaN), base);                      // NaN idle → base
+  });
+
+  it('handles a zero active window (ease off as soon as idle)', () => {
+    assert.equal(calc(0, { activeWindowMs: 0 }), base * 2);   // step 1 right away
+    assert.equal(calc(120000, { activeWindowMs: 0 }), base * 4);
   });
 });

@@ -46,6 +46,7 @@
  *   b       - Branch actions (open on GitHub, Claude session, create/approve/merge PR, CI)
  *   f       - Fetch all branches + refresh sparklines
  *   s       - Toggle sound notifications
+ *   B       - Toggle idle poll backoff (ease off polling when quiet)
  *   c       - Toggle casino mode (Vegas-style feedback)
  *   d       - Clean up stale (gone) branches
  *   S       - Stash changes and retry a blocked switch/pull
@@ -88,7 +89,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
 const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
-const { pruneStaleEntries } = require('../src/polling/engine');
+const { pruneStaleEntries, calculateInactivityInterval } = require('../src/polling/engine');
 const { isGitAvailable: checkGitAvailable, execGit, execGitOptional, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
 // Session stats (always-on, non-casino stats)
@@ -203,6 +204,13 @@ async function runConfigurationWizard() {
   if (!isNaN(pollSec) && pollSec >= 1) {
     config.gitPollInterval = Math.round(pollSec * 1000);
   }
+
+  // Ask about inactivity backoff (ease off polling when the repo is quiet)
+  const backoffEnabled = await promptYesNo(
+    'Ease off polling when the repo is idle (to reduce remote requests)?',
+    true,
+  );
+  config.inactivityBackoff = { ...config.inactivityBackoff, enabled: backoffEnabled };
 
   // Ask about sound notifications
   config.soundEnabled = await promptYesNo('Enable sound notifications for updates?', true);
@@ -394,6 +402,17 @@ let GIT_POLL_INTERVAL = 5000;
 let STATIC_DIR = path.join(PROJECT_ROOT, 'public');
 let REMOTE_NAME = 'origin';
 let AUTO_PULL = true;
+// Inactivity backoff ("poll backdown") settings, populated from config in
+// applyConfig(). When enabled, the poll interval eases off the longer the repo
+// stays quiet (up to maxIntervalMs) and snaps back to GIT_POLL_INTERVAL the
+// moment a change is detected — see updatePollBackoff().
+let INACTIVITY_BACKOFF = {
+  enabled: true,
+  activeWindowMs: 120000,
+  stepMs: 120000,
+  maxIntervalMs: 300000,
+  factor: 2,
+};
 const MAX_LOG_ENTRIES = 10;
 const MAX_SERVER_LOG_LINES = 500;
 
@@ -443,6 +462,15 @@ function applyConfig(config) {
   AUTO_PULL = config.autoPull !== false;
   GIT_POLL_INTERVAL = config.gitPollInterval || parseInt(process.env.GIT_POLL_INTERVAL, 10) || 5000;
 
+  // Inactivity backoff — merge config over the built-in defaults so a partial
+  // block (e.g. just `{ enabled: false }`) keeps sensible timing knobs.
+  INACTIVITY_BACKOFF = { ...INACTIVITY_BACKOFF, ...(config.inactivityBackoff || {}) };
+  // Both slowdown sources start at the base rate. GIT_POLL_INTERVAL is only
+  // known here (not at module-eval time), so seed them now.
+  networkSlowdownInterval = GIT_POLL_INTERVAL;
+  lastActivityAt = Date.now();
+  pollBackedOff = false;
+
   // UI settings via store
   const casinoEnabled = config.casinoMode === true;
   store.setState({
@@ -455,6 +483,9 @@ function applyConfig(config) {
     maxLogEntries: MAX_LOG_ENTRIES,
     projectName: path.basename(PROJECT_ROOT),
     adaptivePollInterval: GIT_POLL_INTERVAL,
+    // Store holds the runtime-authoritative enable flag (toggled from the UI);
+    // INACTIVITY_BACKOFF keeps the timing knobs.
+    inactivityBackoffEnabled: INACTIVITY_BACKOFF.enabled !== false,
   });
 
   // Casino mode
@@ -861,6 +892,16 @@ async function restartServerProcess() {
 let slowFetchWarningShown = false;
 let verySlowFetchWarningShown = false;
 let pollIntervalId = null;
+
+// Poll-interval backoff state. Two independent slowdown sources feed the
+// effective interval; the scheduler polls at the SLOWER of the two (max):
+//   - networkSlowdownInterval: bumped when fetches get slow (network relief)
+//   - inactivity backoff:      derived from how long the repo has been quiet
+// Keeping them separate means a fast-but-idle repo can still ease off, and a
+// slow-network-but-active repo isn't dragged all the way to the idle ceiling.
+let networkSlowdownInterval = 5000;   // reset to GIT_POLL_INTERVAL in applyConfig
+let lastActivityAt = Date.now();      // last poll that detected a change / user fetch
+let pollBackedOff = false;            // whether inactivity backoff is currently engaged
 
 // ANSI escape codes and box drawing imported from src/ui/ansi.js
 const { ansi, box, truncate, sparkline: uiSparkline, visibleLength, stripAnsi, sanitizeForRender, padRight, padLeft, getMaxBranchesForScreen: calcMaxBranches, drawBox: renderBox, clearArea: renderClearArea } = require('../src/ui/ansi');
@@ -2120,24 +2161,26 @@ async function pollGitChanges() {
     const lastFetchDuration = Date.now() - fetchStartTime;
     store.setState({ lastFetchDuration });
 
-    // Check for slow fetches
+    // Check for slow fetches. This backs off the *network* component only;
+    // the effective interval (max of this and the inactivity component) is
+    // recomputed by updatePollBackoff() at the end of the cycle.
     if (lastFetchDuration > 30000 && !verySlowFetchWarningShown) {
       addLog(`⚠ Fetches taking ${Math.round(lastFetchDuration / 1000)}s - network may be slow`, 'warning');
       verySlowFetchWarningShown = true;
-      // Slow down polling
-      const newInterval = Math.min(store.get('adaptivePollInterval') * 2, 60000);
-      store.setState({ adaptivePollInterval: newInterval });
-      addLog(`Polling interval increased to ${newInterval / 1000}s`, 'info');
+      // Slow down polling to relieve the network (capped at 60s).
+      networkSlowdownInterval = Math.min(networkSlowdownInterval * 2, 60000);
+      addLog(`Polling eased to ${networkSlowdownInterval / 1000}s while the network is slow`, 'info');
     } else if (lastFetchDuration > 15000 && !slowFetchWarningShown) {
       addLog(`Fetches taking ${Math.round(lastFetchDuration / 1000)}s`, 'warning');
       slowFetchWarningShown = true;
     } else if (lastFetchDuration < 5000) {
-      // Reset warnings if fetches are fast again
+      // Reset warnings and the network slowdown if fetches are fast again.
+      // (Inactivity backoff is independent and may still hold the interval up.)
       slowFetchWarningShown = false;
       verySlowFetchWarningShown = false;
-      if (store.get('adaptivePollInterval') > GIT_POLL_INTERVAL) {
-        store.setState({ adaptivePollInterval: GIT_POLL_INTERVAL });
-        addLog(`Polling interval restored to ${GIT_POLL_INTERVAL / 1000}s`, 'info');
+      if (networkSlowdownInterval > GIT_POLL_INTERVAL) {
+        networkSlowdownInterval = GIT_POLL_INTERVAL;
+        addLog(`Network recovered — fetch speed no longer holding polling back`, 'info');
       }
     }
 
@@ -2286,6 +2329,14 @@ async function pollGitChanges() {
 
     // Session stats: always track polls (independent of casino mode)
     sessionStats.recordPoll(notifyBranches.length > 0);
+
+    // Inactivity backoff: any detected change counts as activity and snaps
+    // polling back to the base rate. "Change" = a new branch, an update on
+    // another branch (notifyBranches), or remote updates waiting on the
+    // current branch (captured here before auto-pull clears the flag).
+    const currentEntry = pollFilteredBranches.find(b => b.name === currentBranchName);
+    const sawActivity = notifyBranches.length > 0 || Boolean(currentEntry && currentEntry.hasUpdates);
+    updatePollBackoff(sawActivity);
 
     // Remember which branch was selected before updating the list
     const { selectedBranchName: prevSelName, selectedIndex: prevSelIdx } = store.getState();
@@ -2482,6 +2533,93 @@ async function pollGitChanges() {
     store.setState({ isPolling: false });
     pollMutex.release(pollToken);
     render();
+  }
+}
+
+/**
+ * Recompute the effective poll interval from the two independent slowdown
+ * sources (network slowness + repo inactivity) and publish it to the store so
+ * the self-rescheduling schedulePoll() and the info panel pick it up on the
+ * next tick. Called once per successful poll.
+ *
+ * @param {boolean} sawActivity - Whether this poll detected any change.
+ */
+function updatePollBackoff(sawActivity) {
+  const base = GIT_POLL_INTERVAL;
+
+  if (sawActivity) {
+    lastActivityAt = Date.now();
+    if (pollBackedOff) {
+      pollBackedOff = false;
+      addLog(`Activity detected — polling resumed at ${base / 1000}s`, 'success');
+    }
+  }
+
+  // Runtime-authoritative flag lives in the store so the 'B' key toggle and
+  // the info panel share one source of truth; timing knobs stay in INACTIVITY_BACKOFF.
+  const backoffEnabled = store.get('inactivityBackoffEnabled');
+  const idleMs = Date.now() - lastActivityAt;
+  const inactivityInterval = backoffEnabled
+    ? calculateInactivityInterval({
+        idleMs,
+        baseMs: base,
+        activeWindowMs: INACTIVITY_BACKOFF.activeWindowMs,
+        stepMs: INACTIVITY_BACKOFF.stepMs,
+        maxMs: INACTIVITY_BACKOFF.maxIntervalMs,
+        factor: INACTIVITY_BACKOFF.factor,
+      })
+    : base;
+
+  // Announce the *transition* into backoff once per idle episode. Individual
+  // escalations (every stepMs) aren't logged — that would spam the 10-entry
+  // activity log; the live "Interval" readout in the info panel shows detail.
+  if (backoffEnabled && !pollBackedOff && inactivityInterval > base) {
+    pollBackedOff = true;
+    const quietMins = Math.max(1, Math.round(INACTIVITY_BACKOFF.activeWindowMs / 60000));
+    addLog(`Quiet for ${quietMins}m — easing polling to give ${REMOTE_NAME} a break`, 'info');
+  }
+
+  // Poll at the slower of the two — whichever is asking for more relief wins.
+  const effective = Math.max(networkSlowdownInterval, inactivityInterval);
+  if (effective !== store.get('adaptivePollInterval')) {
+    store.setState({ adaptivePollInterval: effective });
+  }
+}
+
+/**
+ * Treat a deliberate user action (e.g. a manual fetch) as activity: reset the
+ * idle clock so polling returns to the base rate immediately, rather than
+ * waiting for the next change to arrive. Mirrors the sawActivity reset in
+ * updatePollBackoff() so both paths route through the same state.
+ */
+function noteUserActivity() {
+  lastActivityAt = Date.now();
+  if (pollBackedOff) {
+    pollBackedOff = false;
+    addLog(`Polling resumed at ${GIT_POLL_INTERVAL / 1000}s`, 'info');
+  }
+  const effective = Math.max(networkSlowdownInterval, GIT_POLL_INTERVAL);
+  if (effective !== store.get('adaptivePollInterval')) {
+    store.setState({ adaptivePollInterval: effective });
+  }
+}
+
+/**
+ * Persist the idle-backoff enable flag to the per-repo config file, but only
+ * when one already exists — we never create (and thereby dirty the working
+ * tree with) a new .watchtowerrc.json from a keypress. Best-effort: a failure
+ * here leaves the session toggle in place and is surfaced to the activity log.
+ * @param {boolean} enabled
+ */
+function persistInactivityBackoff(enabled) {
+  try {
+    if (!fs.existsSync(getConfigPath(PROJECT_ROOT))) return;
+    const current = loadConfig() || {};
+    current.inactivityBackoff = { ...(current.inactivityBackoff || {}), enabled };
+    saveConfig(current);
+    addLog(`Saved idle-backoff preference to ${CONFIG_FILE_NAME}`, 'info');
+  } catch (e) {
+    addLog(`Couldn't save idle-backoff preference: ${e.message || e}`, 'warning');
   }
 }
 
@@ -2748,6 +2886,12 @@ function setupKeyboardInput() {
   process.stdin.on('error', () => {});
 
   process.stdin.on('data', async (key) => {
+    // Any UI interaction counts as engagement: reset the idle clock so poll
+    // backoff lifts immediately and the user gets fresh data while they're
+    // actively driving the tool. Cheap and idempotent — only logs on the
+    // first keypress after backoff engaged, so it never spams the log.
+    noteUserActivity();
+
     // Handle search mode input via actions module
     if (store.get('searchMode')) {
       const searchResult = actions.handleSearchInput(getActionState(), key);
@@ -3385,6 +3529,8 @@ function setupKeyboardInput() {
 
       case 'f':
         addLog('Fetching all branches...', 'update');
+        // (The keypress handler already called noteUserActivity() for this 'f',
+        // so any backoff has already lifted before the poll runs.)
         await pollGitChanges();
         // Refresh sparklines on manual fetch
         addLog('Refreshing activity sparklines...', 'info');
@@ -3399,6 +3545,29 @@ function setupKeyboardInput() {
         addLog(`Sound notifications ${soundNowEnabled ? 'enabled' : 'disabled'}`, 'info');
         telemetry.capture('sound_toggled', { enabled: soundNowEnabled });
         if (soundNowEnabled) playSound();
+        render();
+        break;
+      }
+
+      case 'B': { // Toggle idle poll backoff ("poll backdown")
+        applyUpdates(actions.toggleInactivityBackoff(actionState));
+        const backoffEnabled = store.get('inactivityBackoffEnabled');
+        INACTIVITY_BACKOFF = { ...INACTIVITY_BACKOFF, enabled: backoffEnabled };
+        addLog(`Idle poll backoff ${backoffEnabled ? 'enabled' : 'disabled'}`, 'info');
+        telemetry.capture('inactivity_backoff_toggled', { enabled: backoffEnabled });
+        // Recompute the interval right away: re-enabling applies backoff from
+        // the current idle time; disabling snaps straight back to the base rate.
+        if (backoffEnabled) {
+          updatePollBackoff(false);
+        } else {
+          pollBackedOff = false;
+          const effective = Math.max(networkSlowdownInterval, GIT_POLL_INTERVAL);
+          if (effective !== store.get('adaptivePollInterval')) {
+            store.setState({ adaptivePollInterval: effective });
+          }
+        }
+        // Save the preference to the repo config if one exists.
+        persistInactivityBackoff(backoffEnabled);
         render();
         break;
       }
@@ -3537,6 +3706,7 @@ async function handleWebAction(action, payload) {
         break;
       case 'fetch':
         addLog('Fetching all branches (from web)...', 'info');
+        noteUserActivity();
         render();
         await pollGitChanges();
         await refreshAllSparklines();

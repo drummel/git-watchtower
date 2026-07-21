@@ -17,6 +17,7 @@ const {
   switchLogTab,
   scrollLog,
   toggleSound,
+  toggleInactivityBackoff,
   setVisibleBranchCount,
   increaseVisibleBranches,
   decreaseVisibleBranches,
@@ -583,6 +584,24 @@ describe('toggleSound', () => {
     const state = makeState({ soundEnabled: false });
     const result = toggleSound(state);
     assert.deepEqual(result, { soundEnabled: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toggleInactivityBackoff
+// ---------------------------------------------------------------------------
+
+describe('toggleInactivityBackoff', () => {
+  it('should toggle inactivityBackoffEnabled from true to false', () => {
+    const state = makeState({ inactivityBackoffEnabled: true });
+    const result = toggleInactivityBackoff(state);
+    assert.deepEqual(result, { inactivityBackoffEnabled: false });
+  });
+
+  it('should toggle inactivityBackoffEnabled from false to true', () => {
+    const state = makeState({ inactivityBackoffEnabled: false });
+    const result = toggleInactivityBackoff(state);
+    assert.deepEqual(result, { inactivityBackoffEnabled: true });
   });
 });
 

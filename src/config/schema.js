@@ -26,12 +26,22 @@ const { ConfigError, ValidationError } = require('../utils/errors');
  */
 
 /**
+ * @typedef {Object} InactivityBackoffConfig
+ * @property {boolean} enabled - Ease off polling when the repo goes quiet
+ * @property {number} activeWindowMs - Grace window kept at the base rate after activity (ms)
+ * @property {number} stepMs - How often the interval grows once past the grace window (ms)
+ * @property {number} maxIntervalMs - Ceiling for the eased poll interval (ms)
+ * @property {number} factor - Multiplier applied to the interval per step
+ */
+
+/**
  * @typedef {Object} Config
  * @property {ServerConfig} server - Server configuration
  * @property {WebConfig} web - Web dashboard configuration
  * @property {string} remoteName - Git remote name
  * @property {boolean} autoPull - Auto-pull enabled
  * @property {number} gitPollInterval - Polling interval in ms
+ * @property {InactivityBackoffConfig} inactivityBackoff - Idle poll backoff settings
  * @property {boolean} soundEnabled - Sound notifications enabled
  * @property {number} visibleBranches - Number of visible branches
  * @property {boolean} casinoMode - Casino mode enabled
@@ -61,6 +71,13 @@ const DEFAULTS = {
   remoteName: 'origin',
   autoPull: true,
   gitPollInterval: 5000,
+  inactivityBackoff: {
+    enabled: true,
+    activeWindowMs: 120000,  // hold the base rate for 2 min after activity
+    stepMs: 120000,          // then ease off another notch every 2 min
+    maxIntervalMs: 300000,   // never poll slower than once every 5 min
+    factor: 2,               // doubling each step
+  },
   soundEnabled: true,
   visibleBranches: 7,
   casinoMode: false,
@@ -73,6 +90,13 @@ const LIMITS = {
   port: { min: 1, max: 65535 },
   gitPollInterval: { min: 1000, max: 300000 }, // 1s to 5min
   visibleBranches: { min: 1, max: 50 },
+  // Inactivity backoff bounds. activeWindowMs may be 0 (start easing off
+  // immediately once idle). The intervals share the 1h ceiling; factor is
+  // strictly > 1 so the interval actually grows.
+  inactivityActiveWindow: { min: 0, max: 3600000 },
+  inactivityStep: { min: 1000, max: 3600000 },
+  inactivityMaxInterval: { min: 1000, max: 3600000 },
+  inactivityFactor: { min: 1.1, max: 10 },
 };
 
 /**
@@ -86,6 +110,7 @@ function getDefaultConfig() {
     remoteName: DEFAULTS.remoteName,
     autoPull: DEFAULTS.autoPull,
     gitPollInterval: DEFAULTS.gitPollInterval,
+    inactivityBackoff: { ...DEFAULTS.inactivityBackoff },
     soundEnabled: DEFAULTS.soundEnabled,
     visibleBranches: DEFAULTS.visibleBranches,
     casinoMode: DEFAULTS.casinoMode,
@@ -163,6 +188,59 @@ function validateVisibleBranches(count) {
     );
   }
   return num;
+}
+
+/**
+ * Validate a numeric field against a {min, max} bound.
+ * @param {*} value - Value to validate
+ * @param {{min: number, max: number}} bounds - Inclusive bounds
+ * @param {string} field - Field name for error messages
+ * @returns {number}
+ * @throws {ConfigError}
+ */
+function validateBoundedNumber(value, bounds, field) {
+  const num = Number(value);
+  if (isNaN(num) || num < bounds.min || num > bounds.max) {
+    throw ConfigError.invalid(
+      `Invalid ${field}: ${value}. Must be between ${bounds.min} and ${bounds.max}`,
+      { field, value }
+    );
+  }
+  return num;
+}
+
+/**
+ * Validate and normalize the inactivity-backoff config block. Unknown or
+ * omitted sub-keys fall back to the defaults, so a partial `{ enabled: false }`
+ * is valid and leaves the timing knobs at their defaults.
+ * @param {*} backoff - Raw inactivityBackoff config
+ * @returns {InactivityBackoffConfig}
+ * @throws {ConfigError}
+ */
+function validateInactivityBackoff(backoff) {
+  if (typeof backoff !== 'object' || backoff === null) {
+    throw ConfigError.invalid('inactivityBackoff must be an object', { field: 'inactivityBackoff', value: backoff });
+  }
+
+  const result = { ...DEFAULTS.inactivityBackoff };
+
+  if (backoff.enabled !== undefined) {
+    result.enabled = Boolean(backoff.enabled);
+  }
+  if (backoff.activeWindowMs !== undefined) {
+    result.activeWindowMs = validateBoundedNumber(backoff.activeWindowMs, LIMITS.inactivityActiveWindow, 'inactivityBackoff.activeWindowMs');
+  }
+  if (backoff.stepMs !== undefined) {
+    result.stepMs = validateBoundedNumber(backoff.stepMs, LIMITS.inactivityStep, 'inactivityBackoff.stepMs');
+  }
+  if (backoff.maxIntervalMs !== undefined) {
+    result.maxIntervalMs = validateBoundedNumber(backoff.maxIntervalMs, LIMITS.inactivityMaxInterval, 'inactivityBackoff.maxIntervalMs');
+  }
+  if (backoff.factor !== undefined) {
+    result.factor = validateBoundedNumber(backoff.factor, LIMITS.inactivityFactor, 'inactivityBackoff.factor');
+  }
+
+  return result;
 }
 
 /**
@@ -264,6 +342,10 @@ function validateConfig(config) {
     result.gitPollInterval = validatePollInterval(config.gitPollInterval);
   }
 
+  if (config.inactivityBackoff !== undefined) {
+    result.inactivityBackoff = validateInactivityBackoff(config.inactivityBackoff);
+  }
+
   // Validate UI settings
   if (config.soundEnabled !== undefined) {
     result.soundEnabled = Boolean(config.soundEnabled);
@@ -325,6 +407,8 @@ module.exports = {
   validateServerMode,
   validatePollInterval,
   validateVisibleBranches,
+  validateBoundedNumber,
+  validateInactivityBackoff,
   validateConfig,
   migrateConfig,
 };
