@@ -7,6 +7,7 @@ const assert = require('node:assert');
 const {
   isValidBranchName,
   sanitizeBranchName,
+  hasUpdatesFromCounts,
 } = require('../../../src/git/branch');
 const { ValidationError } = require('../../../src/utils/errors');
 
@@ -108,5 +109,33 @@ describe('sanitizeBranchName', () => {
       assert.strictEqual(error.field, 'branchName');
       assert.strictEqual(error.value, 'bad..name');
     }
+  });
+});
+
+describe('hasUpdatesFromCounts', () => {
+  it('is false when the branch is only ahead (unpushed local commits)', () => {
+    // The core fix: a purely-ahead branch has nothing to pull, so it must
+    // not be flagged as having updates (which drove the auto-pull/reload loop).
+    assert.strictEqual(hasUpdatesFromCounts(3, 0), false);
+    assert.strictEqual(hasUpdatesFromCounts(1, 0), false);
+  });
+
+  it('is true when the branch is behind the remote', () => {
+    assert.strictEqual(hasUpdatesFromCounts(0, 1), true);
+    assert.strictEqual(hasUpdatesFromCounts(0, 5), true);
+  });
+
+  it('is true when the branch has diverged (ahead and behind)', () => {
+    // There are still remote commits to pull; the divergence dialog handles
+    // the actual reconciliation safely.
+    assert.strictEqual(hasUpdatesFromCounts(2, 3), true);
+    assert.strictEqual(hasUpdatesFromCounts(1, 1), true);
+  });
+
+  it('falls back to true on an inconclusive 0/0 probe', () => {
+    // Callers only invoke this when the commit hashes already differ, so a
+    // successful probe can never be 0/0. A 0/0 therefore means the rev-list
+    // probe failed, and we must not hide a potentially-real update.
+    assert.strictEqual(hasUpdatesFromCounts(0, 0), true);
   });
 });
