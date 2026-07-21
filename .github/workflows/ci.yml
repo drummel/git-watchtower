@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20, 22, 24]
+        node-version: [20, 22, 24, 26]
       fail-fast: false
 
     steps:
@@ -41,6 +41,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # Pinned to Node 24: the c8 coverage toolchain (via its bundled yargs)
+      # is not yet compatible with Node 26. The test suite itself runs on 26
+      # in the matrix above.
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -71,7 +74,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
           cache: 'npm'
 
       - name: Check package.json syntax
@@ -95,7 +98,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
           cache: 'npm'
 
       - name: Install dependencies
