@@ -196,6 +196,83 @@ describe('branch.js integration tests', () => {
     });
   });
 
+  describe('getAllBranches direction-aware hasUpdates', () => {
+    // hasUpdates must reflect whether the remote has commits to PULL
+    // (behind > 0), not merely whether the local and remote hashes differ.
+    // A branch that differs only because it is ahead (unpushed local
+    // commits) previously flagged hasUpdates=true, which fired auto-pull
+    // ("already up to date") and reloaded browsers on every poll.
+
+    async function master(cwd) {
+      const branches = await getAllBranches({ fetch: false, remoteName: 'origin', cwd });
+      return branches.find((b) => b.name === 'master');
+    }
+
+    it('is false when the branch is only ahead of the remote (unpushed commits)', async () => {
+      fixture.createRemote('origin'); // master === origin/master
+      // Commit locally without pushing: local is ahead by 1, behind 0.
+      fixture.createFile('local-only.txt', 'wip', true, 'Unpushed local commit');
+
+      const b = await master(fixture.path);
+      assert.ok(b, 'master should be present');
+      assert.strictEqual(b.hasRemote, true);
+      assert.strictEqual(b.ahead, 1);
+      assert.strictEqual(b.behind, 0);
+      assert.strictEqual(b.hasUpdates, false, 'ahead-only branch has nothing to pull');
+    });
+
+    it('is true when the branch is behind the remote', async () => {
+      fixture.createRemote('origin');
+      // Push a second commit so origin/master advances, then rewind local.
+      fixture.createFile('pushed.txt', 'x', true, 'Second commit');
+      fixture.push('master');
+      fixture.git('reset --hard HEAD~1'); // local master back by 1; origin/master stays ahead
+
+      const b = await master(fixture.path);
+      assert.strictEqual(b.ahead, 0);
+      assert.strictEqual(b.behind, 1);
+      assert.strictEqual(b.hasUpdates, true, 'behind branch has commits to pull');
+    });
+
+    it('is true when the branch has diverged from the remote', async () => {
+      fixture.createRemote('origin'); // master === origin/master === I
+      // Build a divergent remote commit C on a side branch off I...
+      fixture.git('checkout -b _remote');
+      fixture.createFile('remote-side.txt', 'c', true, 'Remote-side commit C');
+      const cSha = fixture.git('rev-parse _remote');
+      // ...and a different local commit B off I.
+      fixture.checkout('master');
+      fixture.createFile('local-side.txt', 'b', true, 'Local commit B');
+      // Point the remote-tracking ref at C (what a fetch of a force-push does).
+      fixture.git(`update-ref refs/remotes/origin/master ${cSha}`);
+      fixture.git('branch -D _remote'); // C stays reachable via origin/master
+
+      const b = await master(fixture.path);
+      assert.strictEqual(b.ahead, 1);
+      assert.strictEqual(b.behind, 1);
+      assert.strictEqual(b.hasUpdates, true, 'diverged branch still has remote commits to pull');
+    });
+
+    it('is false when local and remote are in sync', async () => {
+      fixture.createRemote('origin'); // master === origin/master, identical hashes
+
+      const b = await master(fixture.path);
+      assert.strictEqual(b.hasRemote, true);
+      assert.strictEqual(b.hasUpdates, false);
+    });
+
+    it('keeps the local commit date for an ahead-only branch (no spurious re-sort)', async () => {
+      fixture.createRemote('origin');
+      fixture.createFile('local-only.txt', 'wip', true, 'Unpushed local commit');
+
+      const b = await master(fixture.path);
+      // date should reflect the local HEAD (the ahead commit), not be forced
+      // to the older remote date — the branch shouldn't jump around the list.
+      const localHeadIso = fixture.git('log -1 --format=%cI');
+      assert.strictEqual(b.date.getTime(), new Date(localHeadIso).getTime());
+    });
+  });
+
   describe('getPreviewData', () => {
     it('should return commits and files for a branch', async () => {
       fixture.createBranch('feature', true);

@@ -3,7 +3,7 @@
  * Provides branch management and parsing
  */
 
-const { execGit, fetch, hasRemoteChanges, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch } = require('./commands');
+const { execGit, fetch, hasRemoteChanges, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch, getAheadBehind } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
 
 // Valid git branch name pattern (conservative)
@@ -17,15 +17,38 @@ const VALID_BRANCH_PATTERN = /^[a-zA-Z0-9_\-./]+$/;
  * @property {Date} date - Commit date
  * @property {boolean} isLocal - Is a local branch
  * @property {boolean} hasRemote - Has a remote tracking branch
- * @property {boolean} hasUpdates - Has updates available from remote
+ * @property {boolean} hasUpdates - Remote has commits to pull (behind > 0)
  * @property {string} [remoteCommit] - Remote commit hash
  * @property {Date} [remoteDate] - Remote commit date
  * @property {string} [remoteSubject] - Remote commit subject
+ * @property {number} [ahead] - Local commits not on the remote tracking branch
+ * @property {number} [behind] - Remote commits not on the local branch
  * @property {boolean} [isNew] - Newly discovered branch
  * @property {boolean} [isDeleted] - Branch was deleted
  * @property {boolean} [justUpdated] - Was just updated
  * @property {string} [sparkline] - Activity sparkline
  */
+
+/**
+ * Decide whether a branch has updates to pull, given its ahead/behind
+ * counts relative to its own remote tracking branch.
+ *
+ * Precondition: only meaningful when the local and remote commits are
+ * known to differ (the caller checks this). Under that precondition a
+ * successful probe always yields ahead > 0 or behind > 0, so a 0/0 result
+ * can only mean the ahead/behind probe failed to resolve — in which case
+ * we fall back to "assume updates" rather than silently hiding a genuine
+ * remote change. Otherwise updates exist only when we are behind: a branch
+ * that is purely ahead (unpushed local commits) has nothing to pull.
+ *
+ * @param {number} ahead - Local commits not on the remote tracking branch
+ * @param {number} behind - Remote commits not on the local branch
+ * @returns {boolean}
+ */
+function hasUpdatesFromCounts(ahead, behind) {
+  if (ahead === 0 && behind === 0) return true; // inconclusive probe → don't hide
+  return behind > 0;
+}
 
 /**
  * Validate a branch name for safety
@@ -166,10 +189,28 @@ async function getAllBranches(options = {}) {
           existing.remoteDate = new Date(dateStr);
           existing.remoteSubject = subject || '';
           if (commit !== existing.commit) {
-            existing.hasUpdates = true;
-            // Use remote's date when it has updates (so it sorts to top)
-            existing.date = new Date(dateStr);
-            existing.subject = subject || existing.subject;
+            // Direction matters. hasUpdates must mean "the remote has commits
+            // we don't have yet" — i.e. something to pull (behind > 0). A
+            // branch that differs only because it is AHEAD (local commits not
+            // yet pushed) has nothing to pull; flagging it made auto-pull fire
+            // every poll ("already up to date"), spam the activity log, and
+            // reload every connected browser each cycle. It also pinned
+            // sawActivity true, defeating the inactivity poll backoff.
+            const { ahead, behind } = await getAheadBehind(
+              existing.name,
+              `${remoteName}/${existing.name}`,
+              { cwd }
+            );
+            existing.ahead = ahead;
+            existing.behind = behind;
+            existing.hasUpdates = hasUpdatesFromCounts(ahead, behind);
+            if (existing.hasUpdates) {
+              // Remote moved (or direction is unknown): surface it by sorting
+              // to the top with the remote's date/subject. For an ahead-only
+              // branch we intentionally keep the local date so it doesn't jump.
+              existing.date = new Date(dateStr);
+              existing.subject = subject || existing.subject;
+            }
           }
         } else {
           const branch = {
@@ -372,6 +413,7 @@ async function deleteGoneBranches(branchNames, options = {}) {
 module.exports = {
   isValidBranchName,
   sanitizeBranchName,
+  hasUpdatesFromCounts,
   getCurrentBranch,
   getAllBranches,
   getPreviewData,
