@@ -1,3 +1,10 @@
+## [2.7.1](https://github.com/drummel/git-watchtower/compare/v2.7.0...v2.7.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* only flag hasUpdates when the branch is behind its remote ([#251](https://github.com/drummel/git-watchtower/issues/251)) ([de97ff3](https://github.com/drummel/git-watchtower/commit/de97ff37d279500f725758976ae0fc8a4839718b))
+
 # [2.7.0](https://github.com/drummel/git-watchtower/compare/v2.6.1...v2.7.0) (2026-07-21)
 
 
