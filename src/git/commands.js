@@ -4,6 +4,8 @@
  */
 
 const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const { GitError } = require('../utils/errors');
 
 // Default timeout for git operations (30 seconds)
@@ -482,6 +484,76 @@ async function hasUnresolvedConflicts(cwd) {
 }
 
 /**
+ * Detect a sequencer/in-progress git operation that leaves HEAD in a
+ * transient state — a rebase, merge, cherry-pick, revert, bisect, or
+ * `git am`. During one of these, HEAD is often detached and a checkout
+ * or auto-pull would abort the operation or fail confusingly, so callers
+ * use this to pause auto-pull, block switching, and show a banner.
+ *
+ * This complements hasUnresolvedConflicts(): a rebase paused at an `edit`
+ * step (or an interactive rebase stopped between commits) has NO conflict
+ * markers and NO MERGE_HEAD, so the conflict probe misses it entirely —
+ * yet a branch switch there is still destructive.
+ *
+ * Resolves the current worktree's git dir once (`--absolute-git-dir`,
+ * which points at the per-worktree dir in a linked worktree, where these
+ * pseudo-refs and state dirs live) and checks for marker files. One
+ * subprocess plus a few cheap fs stats per poll.
+ *
+ * Detection order is specificity-first: a conflicted rebase step can also
+ * set CHERRY_PICK_HEAD, but the rebase dirs are the truer description.
+ *
+ * Returns null when no operation is in progress or the probe fails (not a
+ * repo, git broken) — callers treat unknown as "nothing in progress."
+ *
+ * @param {string} [cwd] - Working directory
+ * @returns {Promise<{type: string, label: string}|null>}
+ */
+async function getInProgressOperation(cwd) {
+  const result = await execGitOptional(['rev-parse', '--absolute-git-dir'], {
+    cwd,
+    timeout: SHORT_TIMEOUT,
+  });
+  if (!result || !result.stdout) return null;
+
+  const gitDir = result.stdout;
+  const marker = (rel) => {
+    try {
+      return fs.existsSync(path.join(gitDir, rel));
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Rebase: merge backend (rebase-merge, incl. interactive) or apply
+  // backend (rebase-apply, shared with `git am`).
+  if (marker('rebase-merge')) {
+    return { type: 'rebase', label: 'Rebase in progress' };
+  }
+  if (marker('rebase-apply')) {
+    // The apply backend is shared with `git am`; the `applying` marker file
+    // distinguishes a mailbox apply from a genuine rebase.
+    if (marker('rebase-apply/applying')) {
+      return { type: 'am', label: 'git am in progress' };
+    }
+    return { type: 'rebase', label: 'Rebase in progress' };
+  }
+  if (marker('CHERRY_PICK_HEAD')) {
+    return { type: 'cherry-pick', label: 'Cherry-pick in progress' };
+  }
+  if (marker('REVERT_HEAD')) {
+    return { type: 'revert', label: 'Revert in progress' };
+  }
+  if (marker('MERGE_HEAD')) {
+    return { type: 'merge', label: 'Merge in progress' };
+  }
+  if (marker('BISECT_LOG')) {
+    return { type: 'bisect', label: 'Bisect in progress' };
+  }
+  return null;
+}
+
+/**
  * Get changed files for a branch compared to another
  * @param {string} branchName - Branch to compare
  * @param {string} [baseBranch] - Base branch (defaults to current)
@@ -655,6 +727,7 @@ module.exports = {
   getCommitsByDay,
   hasUncommittedChanges,
   hasUnresolvedConflicts,
+  getInProgressOperation,
   stash,
   stashPop,
   getChangedFiles,

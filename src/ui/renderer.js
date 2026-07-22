@@ -120,6 +120,11 @@ function renderHeader(state, write) {
     badges += ' ' + ansi.bgRed + ansi.white + label + ansi.bgBlue + ansi.white;
     badgesVisibleLen += 1 + label.length;
   }
+  if (state.inProgressOperation) {
+    const label = ` ${state.inProgressOperation.label.toUpperCase()} `;
+    badges += ' ' + ansi.bgYellow + ansi.black + label + ansi.bgBlue + ansi.white;
+    badgesVisibleLen += 1 + label.length;
+  }
   if (state.updateAvailable) {
     const label = ` UPDATE v${state.updateAvailable} `;
     badges += ' ' + ansi.bgMagenta + ansi.white + label + ansi.bgBlue + ansi.white;

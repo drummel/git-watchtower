@@ -130,6 +130,18 @@ describe('renderHeader', () => {
     assert.ok(text.includes('MERGE CONFLICT'), 'Expected MERGE CONFLICT badge');
   });
 
+  it('should show an in-progress operation badge (uppercased label)', () => {
+    const { text } = collectState(renderHeader, {
+      inProgressOperation: { type: 'rebase', label: 'Rebase in progress' },
+    });
+    assert.ok(text.includes('REBASE IN PROGRESS'), 'Expected in-progress operation badge');
+  });
+
+  it('should show no operation badge when inProgressOperation is null', () => {
+    const { text } = collectState(renderHeader, { inProgressOperation: null });
+    assert.ok(!text.includes('IN PROGRESS'), 'Expected no operation badge');
+  });
+
   it('should show UPDATE badge when updateAvailable is set', () => {
     const { text } = collectState(renderHeader, { updateAvailable: '2.0.0' });
     assert.ok(text.includes('UPDATE v2.0.0'), 'Expected UPDATE badge with version');

@@ -115,6 +115,7 @@ module.exports = {
   getCommitsByDay: gitCommands.getCommitsByDay,
   hasUncommittedChanges: gitCommands.hasUncommittedChanges,
   hasUnresolvedConflicts: gitCommands.hasUnresolvedConflicts,
+  getInProgressOperation: gitCommands.getInProgressOperation,
   stash: gitCommands.stash,
   stashPop: gitCommands.stashPop,
   getChangedFiles: gitCommands.getChangedFiles,
