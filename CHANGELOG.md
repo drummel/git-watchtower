@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/drummel/git-watchtower/compare/v2.7.1...v2.8.0) (2026-07-22)
+
+
+### Features
+
+* detect in-progress git operations and pause switching/auto-pull ([#252](https://github.com/drummel/git-watchtower/issues/252)) ([8101a74](https://github.com/drummel/git-watchtower/commit/8101a74f7ebba36c927caac6514a20d3cfb4f1c0)), closes [#240](https://github.com/drummel/git-watchtower/issues/240)
+
 ## [2.7.1](https://github.com/drummel/git-watchtower/compare/v2.7.0...v2.7.1) (2026-07-21)
 
 
