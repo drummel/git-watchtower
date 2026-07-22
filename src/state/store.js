@@ -58,6 +58,7 @@
  * @property {Branch[]|null} filteredBranches - Filtered branch list (null = no filter)
  * @property {boolean} isDetachedHead - In detached HEAD state
  * @property {boolean} hasMergeConflict - Has merge conflicts
+ * @property {{type: string, label: string}|null} inProgressOperation - Sequencer op in progress (rebase/merge/cherry-pick/revert/bisect/am), or null
  * @property {UIMode} mode - Current UI mode (legacy)
  * @property {boolean} searchMode - Search mode active
  * @property {string} searchQuery - Current search query
@@ -127,6 +128,7 @@ function getInitialState() {
     filteredBranches: null,
     isDetachedHead: false,
     hasMergeConflict: false,
+    inProgressOperation: null,
 
     // UI mode (legacy — used by setMode/getFilteredBranches)
     mode: 'normal',

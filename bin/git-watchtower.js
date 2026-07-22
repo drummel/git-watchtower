@@ -918,7 +918,7 @@ const renderer = require('../src/ui/renderer');
 const actions = require('../src/ui/actions');
 
 // Diff stats parsing and stash imported from src/git/commands.js
-const { parseDiffStats, stash: gitStash, stashPop: gitStashPop, hasUnresolvedConflicts, resetHard } = require('../src/git/commands');
+const { parseDiffStats, stash: gitStash, stashPop: gitStashPop, hasUnresolvedConflicts, getInProgressOperation, resetHard } = require('../src/git/commands');
 
 // Server process command parsing and static server utilities
 const { parseCommand } = require('../src/server/process');
@@ -1792,6 +1792,24 @@ async function switchToBranch(branchName, recordHistory = true) {
     // Validate branch name for security
     const safeBranchName = sanitizeBranchName(branchName);
 
+    // Refuse to switch while a sequencer operation is in progress. A
+    // checkout mid-rebase/merge/cherry-pick would abort it (or git would
+    // refuse), losing the user's place — surface a clear message instead of
+    // attempting it. Re-probe live rather than trusting the last poll so a
+    // just-started operation is caught even between polls.
+    const inProgressOp = await getInProgressOperation(PROJECT_ROOT);
+    if (inProgressOp) {
+      store.setState({ inProgressOperation: inProgressOp });
+      // Bisect aborts with `git bisect reset`; the sequencer ops use
+      // `git <op> --abort` / `--continue`.
+      const hint = inProgressOp.type === 'bisect'
+        ? 'Run: git bisect reset'
+        : `Run: git ${inProgressOp.type} --abort (or --continue)`;
+      addLog(`Cannot switch: ${inProgressOp.label}. Finish or abort it first.`, 'error');
+      showErrorToast('Operation In Progress', `${inProgressOp.label} — finish or abort it before switching branches.`, hint);
+      return { success: false, reason: 'operation-in-progress' };
+    }
+
     // No dirty pre-check here: git itself carries untracked files and
     // non-conflicting tracked modifications across a checkout, so blocking
     // on `status --porcelain` being non-empty forced a stash for switches
@@ -2155,6 +2173,22 @@ async function pollGitChanges() {
       store.setState({ hasMergeConflict: conflictNow });
     }
 
+    // Detect a sequencer operation in progress (rebase/merge/cherry-pick/
+    // revert/bisect/am). A conflict-free rebase paused at an `edit` step has
+    // no conflict markers, so the check above misses it — yet a checkout or
+    // auto-pull there would abort the operation. Track it so auto-pull and
+    // branch switching pause and a banner shows until it finishes.
+    const opNow = await getInProgressOperation(PROJECT_ROOT);
+    const opPrev = store.get('inProgressOperation');
+    if ((opNow && opNow.type) !== (opPrev && opPrev.type)) {
+      if (opNow) {
+        addLog(`${opNow.label} — auto-pull and switching paused until it finishes`, 'warning');
+      } else {
+        addLog(`${opPrev.label} finished — auto-pull and switching re-enabled`, 'success');
+      }
+      store.setState({ inProgressOperation: opNow });
+    }
+
     const allBranches = await getAllBranches();
 
     // Track fetch duration
@@ -2403,6 +2437,7 @@ async function pollGitChanges() {
     const autoPullBranchName = store.get('currentBranch');
     const currentInfo = store.get('branches').find(b => b.name === autoPullBranchName);
     if (AUTO_PULL && currentInfo && currentInfo.hasUpdates && !store.get('hasMergeConflict')
+        && !store.get('inProgressOperation')
         && !(await checkDivergence(autoPullBranchName, currentInfo.remoteCommit || null, true))) {
       addLog(`Auto-pulling changes for ${autoPullBranchName}...`, 'update');
       render();

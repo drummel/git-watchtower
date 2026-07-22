@@ -16,6 +16,7 @@ const {
   getChangedFiles,
   hasUncommittedChanges,
   hasUnresolvedConflicts,
+  getInProgressOperation,
   deleteLocalBranch,
   resetHard,
   getAheadBehind,
@@ -369,6 +370,105 @@ describe('commands.js integration tests', () => {
       try {
         const result = await hasUnresolvedConflicts(tmp);
         assert.strictEqual(result, false);
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('getInProgressOperation', () => {
+    // Build a two-commit history so rebase/cherry-pick/revert have material.
+    function seedHistory() {
+      fixture.createFile('seq.txt', 'base\n', true, 'Base');
+      fixture.createFile('seq.txt', 'base\na\n', true, 'Commit A');
+      fixture.createFile('seq.txt', 'base\na\nb\n', true, 'Commit B');
+    }
+
+    it('returns null in a clean repository', async () => {
+      const op = await getInProgressOperation(fixture.path);
+      assert.strictEqual(op, null);
+    });
+
+    it('detects a conflict-free rebase that the conflict probe misses', async () => {
+      seedHistory();
+      // --exec false stops the rebase after the first pick with NO conflict
+      // and NO MERGE_HEAD — exactly the gap this probe fills.
+      try {
+        fixture.git('rebase --exec false HEAD~2');
+        assert.fail('rebase --exec false should stop non-zero');
+      } catch (e) {
+        // expected: rebase pauses
+      }
+      const op = await getInProgressOperation(fixture.path);
+      assert.ok(op, 'should detect an operation');
+      assert.strictEqual(op.type, 'rebase');
+      // The key point of #5: no conflict markers, so hasUnresolvedConflicts
+      // reports nothing, yet an operation IS in progress.
+      assert.strictEqual(await hasUnresolvedConflicts(fixture.path), false);
+    });
+
+    it('returns null again once the rebase is aborted', async () => {
+      seedHistory();
+      try { fixture.git('rebase --exec false HEAD~2'); } catch (e) { /* pauses */ }
+      fixture.git('rebase --abort');
+      assert.strictEqual(await getInProgressOperation(fixture.path), null);
+    });
+
+    it('detects a merge in progress (--no-commit)', async () => {
+      seedHistory();
+      fixture.git('checkout -b side HEAD~1');
+      fixture.createFile('side.txt', 'x\n', true, 'Side commit');
+      fixture.checkout('master');
+      fixture.git('merge --no-commit --no-ff side');
+      const op = await getInProgressOperation(fixture.path);
+      assert.ok(op);
+      assert.strictEqual(op.type, 'merge');
+    });
+
+    it('detects a revert in progress (--no-commit)', async () => {
+      seedHistory();
+      fixture.git('revert --no-commit HEAD');
+      const op = await getInProgressOperation(fixture.path);
+      assert.ok(op);
+      assert.strictEqual(op.type, 'revert');
+    });
+
+    it('detects a cherry-pick in progress', async () => {
+      seedHistory();
+      // Create a conflicting commit so the cherry-pick stops and writes
+      // CHERRY_PICK_HEAD.
+      fixture.git('checkout -b other HEAD~1');
+      fixture.createFile('seq.txt', 'totally different\n', true, 'Divergent B');
+      fixture.checkout('master');
+      try {
+        fixture.git('cherry-pick other');
+        assert.fail('cherry-pick should conflict and stop');
+      } catch (e) {
+        // expected: stops on conflict
+      }
+      const op = await getInProgressOperation(fixture.path);
+      assert.ok(op);
+      assert.strictEqual(op.type, 'cherry-pick');
+    });
+
+    it('detects a bisect in progress', async () => {
+      seedHistory();
+      fixture.git('bisect start');
+      fixture.git('bisect bad');
+      fixture.git('bisect good HEAD~2');
+      const op = await getInProgressOperation(fixture.path);
+      assert.ok(op);
+      assert.strictEqual(op.type, 'bisect');
+      fixture.git('bisect reset');
+    });
+
+    it('returns null for a non-repository directory', async () => {
+      const os = require('os');
+      const fs = require('fs');
+      const path = require('path');
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-no-repo-op-'));
+      try {
+        assert.strictEqual(await getInProgressOperation(tmp), null);
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
