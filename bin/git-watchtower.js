@@ -408,8 +408,8 @@ let AUTO_PULL = true;
 // moment a change is detected — see updatePollBackoff().
 let INACTIVITY_BACKOFF = {
   enabled: true,
-  activeWindowMs: 120000,
-  stepMs: 120000,
+  activeWindowMs: 900000,
+  stepMs: 300000,
   maxIntervalMs: 300000,
   factor: 2,
 };

@@ -143,12 +143,12 @@ describe('pruneStaleEntries', () => {
 });
 
 describe('calculateInactivityInterval', () => {
-  // Defaults mirror the config: base 5s, active window 2m, step 2m, cap 5m, ×2.
+  // Defaults mirror the config: base 5s, active window 15m, step 5m, cap 5m, ×2.
   const base = 5000;
   const defaults = {
     baseMs: base,
-    activeWindowMs: 120000,
-    stepMs: 120000,
+    activeWindowMs: 900000,
+    stepMs: 300000,
     maxIntervalMs: 300000,
     factor: 2,
   };
@@ -168,24 +168,25 @@ describe('calculateInactivityInterval', () => {
   it('stays at the base rate within the active window', () => {
     assert.equal(calc(0), base);
     assert.equal(calc(60000), base);        // 1 min idle
-    assert.equal(calc(119999), base);       // just under 2 min
+    assert.equal(calc(600000), base);       // 10 min idle
+    assert.equal(calc(899999), base);       // just under 15 min
   });
 
   it('takes the first backoff step at the active-window boundary', () => {
     // idle === activeWindowMs is step 1 → base × 2
-    assert.equal(calc(120000), base * 2);   // 10s
+    assert.equal(calc(900000), base * 2);   // 15 min idle → 10s
   });
 
   it('grows by the factor every step past the active window', () => {
-    assert.equal(calc(120000), 10000);      // step 1 → 10s
-    assert.equal(calc(240000), 20000);      // step 2 → 20s
-    assert.equal(calc(360000), 40000);      // step 3 → 40s
-    assert.equal(calc(480000), 80000);      // step 4 → 80s
-    assert.equal(calc(600000), 160000);     // step 5 → 160s
+    assert.equal(calc(900000), 10000);      // 15m, step 1 → 10s
+    assert.equal(calc(1200000), 20000);     // 20m, step 2 → 20s
+    assert.equal(calc(1500000), 40000);     // 25m, step 3 → 40s
+    assert.equal(calc(1800000), 80000);     // 30m, step 4 → 80s
+    assert.equal(calc(2100000), 160000);    // 35m, step 5 → 160s
   });
 
   it('caps at maxMs and holds there', () => {
-    assert.equal(calc(720000), 300000);     // step 6 would be 320s → capped 300s
+    assert.equal(calc(2400000), 300000);    // 40m, step 6 would be 320s → capped 300s
     assert.equal(calc(3600000), 300000);    // an hour idle → still capped
     assert.equal(calc(Number.MAX_SAFE_INTEGER), 300000);
   });
@@ -199,26 +200,28 @@ describe('calculateInactivityInterval', () => {
   });
 
   it('respects a factor other than 2', () => {
-    assert.equal(calc(120000, { factor: 3 }), 15000);   // step 1 → base × 3
-    assert.equal(calc(240000, { factor: 3 }), 45000);   // step 2 → base × 9
+    assert.equal(calc(900000, { factor: 3 }), 15000);    // step 1 → base × 3
+    assert.equal(calc(1200000, { factor: 3 }), 45000);   // step 2 → base × 9
   });
 
   it('never returns below the base rate', () => {
     // A max below base is degenerate; backoff only ever slows polling, so the
     // result is floored at base rather than dropping under it.
-    assert.equal(calc(600000, { maxIntervalMs: 3000 }), base);
+    assert.equal(calc(1800000, { maxIntervalMs: 3000 }), base);
     assert.equal(calc(0, { maxIntervalMs: 3000 }), base);
   });
 
   it('treats degenerate params as "backoff off" (returns base)', () => {
-    assert.equal(calc(600000, { factor: 1 }), base);    // factor ≤ 1 never grows
-    assert.equal(calc(600000, { factor: 0.5 }), base);
-    assert.equal(calc(600000, { stepMs: 0 }), base);    // non-positive step
-    assert.equal(calc(NaN), base);                      // NaN idle → base
+    // Idle values here sit past the active window, so base is returned because
+    // of the degenerate param — not because we're still inside the grace window.
+    assert.equal(calc(1800000, { factor: 1 }), base);    // factor ≤ 1 never grows
+    assert.equal(calc(1800000, { factor: 0.5 }), base);
+    assert.equal(calc(1800000, { stepMs: 0 }), base);    // non-positive step
+    assert.equal(calc(NaN), base);                       // NaN idle → base
   });
 
   it('handles a zero active window (ease off as soon as idle)', () => {
-    assert.equal(calc(0, { activeWindowMs: 0 }), base * 2);   // step 1 right away
-    assert.equal(calc(120000, { activeWindowMs: 0 }), base * 4);
+    assert.equal(calc(0, { activeWindowMs: 0 }), base * 2);        // step 1 right away
+    assert.equal(calc(300000, { activeWindowMs: 0 }), base * 4);   // one step later
   });
 });
