@@ -8,6 +8,13 @@ const fs = require('fs');
 const path = require('path');
 const { GitError } = require('../utils/errors');
 
+/**
+ * Instance type of the GitError class. TypeScript resolves the destructured
+ * `require` above to a value only, so JSDoc needs the instance type spelled out
+ * to reference GitError as a type.
+ * @typedef {InstanceType<typeof GitError>} GitErrorInstance
+ */
+
 // Default timeout for git operations (30 seconds)
 const DEFAULT_TIMEOUT = 30000;
 
@@ -179,7 +186,7 @@ async function remoteExists(remoteName, cwd) {
  * @param {boolean} [options.prune=true] - Prune deleted branches
  * @param {boolean} [options.all=true] - Fetch all branches
  * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function fetch(remoteName = 'origin', options = {}) {
   const { prune = true, all = true, cwd } = options;
@@ -280,7 +287,7 @@ async function hasRemoteChanges(remoteName, options = {}) {
  * @param {string} remoteName - Remote name
  * @param {string} branchName - Branch to pull
  * @param {string} [cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function pull(remoteName, branchName, cwd) {
   try {
@@ -380,7 +387,7 @@ async function getCommitsByDay(branchName, days = 7, cwd) {
  * @param {string} [options.message] - Optional stash message
  * @param {boolean} [options.includeUntracked=true] - Include untracked files
  * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function stash(options = {}) {
   const { message, includeUntracked = true, cwd } = options;
@@ -410,7 +417,7 @@ async function stash(options = {}) {
  * Pop the most recent stash entry
  * @param {Object} [options] - Options
  * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function stashPop(options = {}) {
   const { cwd } = options;
@@ -625,7 +632,7 @@ async function getDiffStats(fromCommit, toCommit = 'HEAD', options = {}) {
  * @param {string} ref - Ref to reset to
  * @param {Object} [options] - Options
  * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function resetHard(ref, options = {}) {
   const { cwd } = options;
@@ -646,7 +653,7 @@ async function resetHard(ref, options = {}) {
  * @param {Object} [options] - Options
  * @param {boolean} [options.force=false] - Force delete (git branch -D) even if not fully merged
  * @param {string} [options.cwd] - Working directory
- * @returns {Promise<{success: boolean, error?: GitError}>}
+ * @returns {Promise<{success: boolean, error?: GitErrorInstance}>}
  */
 async function deleteLocalBranch(branchName, options = {}) {
   const { force = false, cwd } = options;

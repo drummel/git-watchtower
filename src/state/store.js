@@ -29,10 +29,30 @@
  */
 
 /**
+ * Activity log entry. Two producers write these with slightly different shapes:
+ * the TUI's addLog() in bin/git-watchtower.js stores a locale time string plus a
+ * type-derived icon and colour, while Store.addLog() below stores a Date and no
+ * presentation fields. Renderers must tolerate both.
+ *
  * @typedef {Object} ActivityLogEntry
  * @property {string} message - Log message
  * @property {'info' | 'success' | 'warning' | 'error' | 'update'} type - Entry type
- * @property {Date} timestamp - When the entry was added
+ * @property {string|Date} timestamp - When the entry was added
+ * @property {string} [icon] - Glyph rendered beside the message, derived from `type`
+ * @property {string} [color] - `ansi` colour key used to style the icon, derived from `type`
+ */
+
+/**
+ * Session counters surfaced in the casino-mode stats bar. Mirrors the shape
+ * returned by `src/stats/session.js` getStats().
+ * @typedef {Object} SessionStats
+ * @property {string} sessionDuration - Human-readable session length
+ * @property {number} linesAdded - Lines added across the session
+ * @property {number} linesDeleted - Lines deleted across the session
+ * @property {number} totalPolls - Number of git polls performed
+ * @property {number} pollsWithUpdates - Polls that found new activity
+ * @property {number} hitRate - pollsWithUpdates as a percentage of totalPolls
+ * @property {string|null} lastUpdate - Time since the last update, or null if none yet
  */
 
 /**
@@ -72,11 +92,16 @@
  * @property {boolean} actionMode - Action modal active
  * @property {Object|null} actionData - Action modal data
  * @property {boolean} actionLoading - Action modal loading state
- * @property {FlashMessage|null} flashMessage - Current flash message
+ * @property {FlashMessage|string|null} flashMessage - Current flash message. The TUI's
+ *   showFlash() stores a bare string; Store.flash() (used by the web dashboard) stores
+ *   a FlashMessage. Consumers must handle both forms.
  * @property {Object|null} errorToast - Current error toast
  * @property {boolean} stashConfirmMode - Stash confirmation dialog active
  * @property {number} stashConfirmSelectedIndex - Selected option in stash confirm dialog
  * @property {string|null} pendingDirtyOperationLabel - Label for the pending dirty operation
+ * @property {boolean} cleanupConfirmMode - Stale-branch cleanup dialog active
+ * @property {string[]|null} cleanupBranches - Branch names offered for cleanup (null when closed)
+ * @property {number} cleanupSelectedIndex - Selected option in the cleanup dialog
  * @property {boolean} divergeConfirmMode - Divergence resolution dialog active
  * @property {number} divergeConfirmSelectedIndex - Selected option in divergence dialog
  * @property {{branch: string, ahead: number, behind: number, remoteCommit: string|null}|null} divergeData - Divergence dialog data
@@ -99,6 +124,7 @@
  * @property {number} visibleBranchCount - Number of branches to show
  * @property {boolean} soundEnabled - Sound notifications enabled
  * @property {boolean} casinoModeEnabled - Casino mode enabled
+ * @property {SessionStats} [sessionStats] - Session counters for the casino-mode stats bar
  * @property {Map<string, string>} sparklineCache - Branch sparkline cache
  * @property {Map<string, Object>} branchPrStatusMap - Branch PR status cache
  * @property {Map<string, Object>} aheadBehindCache - Branch ahead/behind cache
@@ -153,6 +179,9 @@ function getInitialState() {
     stashConfirmMode: false,
     stashConfirmSelectedIndex: 0,
     pendingDirtyOperationLabel: null,
+    cleanupConfirmMode: false,
+    cleanupBranches: null,
+    cleanupSelectedIndex: 0,
     divergeConfirmMode: false,
     divergeConfirmSelectedIndex: 0,
     divergeData: null,

@@ -8,7 +8,7 @@ const { LIMITS } = require('../config/schema');
 
 /**
  * @typedef {object} CliArgs
- * @property {string|null} mode - Server mode override
+ * @property {import('../config/schema').ServerMode|null} mode - Server mode override
  * @property {boolean} noServer - Shorthand for --mode none
  * @property {number|null} port - Port override
  * @property {string|null} staticDir - Static directory override
@@ -70,7 +70,9 @@ function parseArgs(argv, options = {}) {
     if (args[i] === '--mode' || args[i] === '-m') {
       const mode = args[i + 1];
       if (['static', 'command', 'none'].includes(mode)) {
-        result.mode = mode;
+        // Array.includes() doesn't narrow the string, but the guard above
+        // establishes that `mode` is one of the three valid ServerMode values.
+        result.mode = /** @type {import('../config/schema').ServerMode} */ (mode);
       } else {
         result.errors.push(`Invalid value for ${args[i]}: "${mode || ''}" (expected: static, command, none)`);
       }
@@ -201,7 +203,7 @@ function parseArgs(argv, options = {}) {
 
 /**
  * Apply CLI args on top of a config object. CLI takes precedence.
- * @param {object} config - Base configuration
+ * @param {import('../config/schema').Config} config - Base configuration
  * @param {CliArgs} cliArgs - Parsed CLI args
  * @returns {object} Merged config
  */
@@ -247,10 +249,13 @@ function applyCliArgsToConfig(config, cliArgs) {
     merged.gitPollInterval = cliArgs.pollInterval;
   }
   if (cliArgs.inactivityBackoff !== null) {
-    merged.inactivityBackoff = {
+    // The `|| {}` is a defensive guard for callers that hand us a partial
+    // config; a well-formed Config always carries inactivityBackoff, so the
+    // spread result is complete in practice.
+    merged.inactivityBackoff = /** @type {import('../config/schema').InactivityBackoffConfig} */ ({
       ...(merged.inactivityBackoff || {}),
       enabled: cliArgs.inactivityBackoff,
-    };
+    });
   }
 
   // UI settings

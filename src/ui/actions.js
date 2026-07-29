@@ -18,13 +18,15 @@ const {
   filterBranches,
 } = require('./keybindings');
 
+/** @typedef {import('../state/store').State} State */
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 /**
  * Return the branch list that is currently visible (filtered or full).
- * @param {object} state
+ * @param {State} state
  * @returns {Array<{name: string}>}
  */
 function getDisplayBranches(state) {
@@ -37,7 +39,7 @@ function getDisplayBranches(state) {
 
 /**
  * Move the selection cursor up by one row.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if already at the top.
  */
 function moveUp(state) {
@@ -54,7 +56,7 @@ function moveUp(state) {
 
 /**
  * Move the selection cursor down by one row.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if already at the bottom.
  */
 function moveDown(state) {
@@ -75,7 +77,7 @@ function moveDown(state) {
 
 /**
  * Enter search (filter) mode, resetting the query and cursor.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function enterSearchMode(state) {
@@ -94,7 +96,7 @@ function enterSearchMode(state) {
  * - Backspace removes the last character from the query.
  * - Printable characters are appended to the query.
  *
- * @param {object} state
+ * @param {State} state
  * @param {string} key - The raw key string from stdin.
  * @returns {object|null} State updates, or null if the key was not handled.
  */
@@ -147,7 +149,7 @@ function handleSearchInput(state, key) {
  * Toggle the diff/preview panel.
  * When opening, the caller is responsible for loading preview data
  * asynchronously after applying the returned state updates.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function togglePreview(state) {
@@ -160,7 +162,7 @@ function togglePreview(state) {
 
 /**
  * Toggle the commit history panel.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function toggleHistory(state) {
@@ -169,7 +171,7 @@ function toggleHistory(state) {
 
 /**
  * Toggle the info/help panel.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function toggleInfo(state) {
@@ -178,7 +180,7 @@ function toggleInfo(state) {
 
 /**
  * Toggle the keyboard-shortcuts help overlay.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function toggleHelp(state) {
@@ -188,7 +190,7 @@ function toggleHelp(state) {
 /**
  * Toggle the log viewer panel.
  * No-ops when running without a server (`state.noServer`).
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if no server is configured.
  */
 function toggleLogView(state) {
@@ -201,7 +203,7 @@ function toggleLogView(state) {
 
 /**
  * Close the action confirmation modal, clearing its data and loading flag.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function closeActionModal(state) {
@@ -214,7 +216,7 @@ function closeActionModal(state) {
 
 /**
  * Switch the active tab inside the log viewer.
- * @param {object} state
+ * @param {State} state
  * @param {string} tab - The tab identifier (e.g. 'server' or 'activity').
  * @returns {object} State updates.
  */
@@ -224,7 +226,7 @@ function switchLogTab(state, tab) {
 
 /**
  * Scroll the log viewer up or down by one line.
- * @param {object} state
+ * @param {State} state
  * @param {'up'|'down'} direction
  * @returns {object} State updates.
  */
@@ -245,7 +247,7 @@ function scrollLog(state, direction) {
 
 /**
  * Toggle the notification sound on or off.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function toggleSound(state) {
@@ -254,7 +256,7 @@ function toggleSound(state) {
 
 /**
  * Toggle the idle poll backoff ("poll backdown") on or off.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function toggleInactivityBackoff(state) {
@@ -263,7 +265,7 @@ function toggleInactivityBackoff(state) {
 
 /**
  * Set the number of visible branches to an exact value.
- * @param {object} state
+ * @param {State} state
  * @param {number} count
  * @returns {object} State updates.
  */
@@ -273,7 +275,7 @@ function setVisibleBranchCount(state, count) {
 
 /**
  * Increase the visible branch count by one, up to a screen-imposed maximum.
- * @param {object} state
+ * @param {State} state
  * @param {number} maxForScreen - Maximum branches that fit on the current terminal.
  * @returns {object|null} State updates, or null if already at max.
  */
@@ -286,7 +288,7 @@ function increaseVisibleBranches(state, maxForScreen) {
 
 /**
  * Decrease the visible branch count by one, with a minimum of 1.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if already at minimum.
  */
 function decreaseVisibleBranches(state) {
@@ -302,7 +304,7 @@ function decreaseVisibleBranches(state) {
 
 /**
  * Open the cleanup confirmation modal.
- * @param {object} state
+ * @param {State} state
  * @param {string[]} goneBranches - Branch names to be cleaned up
  * @returns {object} State updates.
  */
@@ -316,7 +318,7 @@ function openCleanupConfirm(state, goneBranches) {
 
 /**
  * Close the cleanup confirmation modal.
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates.
  */
 function closeCleanupConfirm(state) {
@@ -333,7 +335,7 @@ function closeCleanupConfirm(state) {
 
 /**
  * Dismiss the current flash message.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if there is no flash message.
  */
 function dismissFlash(state) {
@@ -345,7 +347,7 @@ function dismissFlash(state) {
 
 /**
  * Dismiss the current error toast.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} State updates, or null if there is no error toast.
  */
 function dismissErrorToast(state) {
@@ -365,7 +367,7 @@ function dismissErrorToast(state) {
  * If a search filter is active, clears it. Otherwise signals a quit by
  * returning `{ _quit: true }`.
  *
- * @param {object} state
+ * @param {State} state
  * @returns {object} State updates (may include `_quit: true`).
  */
 function handleEscape(state) {
@@ -383,7 +385,7 @@ function handleEscape(state) {
 /**
  * Return the branch object that is currently highlighted, or null if the
  * selection is out of range or the list is empty.
- * @param {object} state
+ * @param {State} state
  * @returns {object|null} The selected branch, or null.
  */
 function getSelectedBranch(state) {
