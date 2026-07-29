@@ -1,3 +1,10 @@
+## [2.8.1](https://github.com/drummel/git-watchtower/compare/v2.8.0...v2.8.1) (2026-07-29)
+
+
+### Bug Fixes
+
+* hold poll rate for 15m before backoff, then step every 5m ([57b7772](https://github.com/drummel/git-watchtower/commit/57b777224034b112574cce2a88351e05821c512c))
+
 # [2.8.0](https://github.com/drummel/git-watchtower/compare/v2.7.1...v2.8.0) (2026-07-22)
 
 
