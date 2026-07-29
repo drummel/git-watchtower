@@ -73,8 +73,8 @@ const DEFAULTS = {
   gitPollInterval: 5000,
   inactivityBackoff: {
     enabled: true,
-    activeWindowMs: 120000,  // hold the base rate for 2 min after activity
-    stepMs: 120000,          // then ease off another notch every 2 min
+    activeWindowMs: 900000,  // hold the base rate for 15 min after activity
+    stepMs: 300000,          // then ease off another notch every 5 min
     maxIntervalMs: 300000,   // never poll slower than once every 5 min
     factor: 2,               // doubling each step
   },

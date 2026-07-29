@@ -23,9 +23,11 @@
  *   - every `stepMs` of continued idleness → multiply the interval by `factor`
  *   - never exceed `maxMs`                 → the ceiling (e.g. every 5 minutes)
  *
- * With the defaults (base 5s, active window 2m, step 2m, factor 2, max 5m) an
- * idle repo eases 5s → 10s → 20s → 40s → 80s → 160s → 300s over ~12 minutes,
- * then holds at the 5-minute ceiling until something changes.
+ * With the defaults (base 5s, active window 15m, step 5m, factor 2, max 5m) an
+ * idle repo holds the base rate for the first 15 minutes, then eases
+ * 5s → 10s → 20s → 40s → 80s → 160s → 300s over the following ~25 minutes,
+ * reaching the 5-minute ceiling at ~40m idle and holding there until something
+ * changes.
  *
  * Pure and deterministic: given the same inputs it always returns the same
  * interval, which is what makes it unit-testable in isolation.
@@ -33,8 +35,8 @@
  * @param {Object} opts
  * @param {number} opts.idleMs - Time since the last detected activity, in ms.
  * @param {number} opts.baseMs - Normal (fast) poll interval, in ms.
- * @param {number} [opts.activeWindowMs=120000] - Grace window kept at baseMs after activity.
- * @param {number} [opts.stepMs=120000] - How often the interval grows past the grace window.
+ * @param {number} [opts.activeWindowMs=900000] - Grace window kept at baseMs after activity.
+ * @param {number} [opts.stepMs=300000] - How often the interval grows past the grace window.
  * @param {number} [opts.maxMs=300000] - Ceiling for the returned interval.
  * @param {number} [opts.factor=2] - Multiplier applied to the interval per step.
  * @returns {number} Poll interval in ms, clamped to the range [baseMs, maxMs].
@@ -42,8 +44,8 @@
 function calculateInactivityInterval({
   idleMs,
   baseMs,
-  activeWindowMs = 120000,
-  stepMs = 120000,
+  activeWindowMs = 900000,
+  stepMs = 300000,
   maxMs = 300000,
   factor = 2,
 }) {

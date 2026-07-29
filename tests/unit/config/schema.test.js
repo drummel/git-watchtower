@@ -57,8 +57,8 @@ describe('getDefaultConfig', () => {
 
     assert.ok(config.inactivityBackoff);
     assert.strictEqual(config.inactivityBackoff.enabled, true);
-    assert.strictEqual(config.inactivityBackoff.activeWindowMs, 120000);
-    assert.strictEqual(config.inactivityBackoff.stepMs, 120000);
+    assert.strictEqual(config.inactivityBackoff.activeWindowMs, 900000);
+    assert.strictEqual(config.inactivityBackoff.stepMs, 300000);
     assert.strictEqual(config.inactivityBackoff.maxIntervalMs, 300000);
     assert.strictEqual(config.inactivityBackoff.factor, 2);
   });
@@ -320,8 +320,8 @@ describe('inactivityBackoff validation', () => {
     const result = validateConfig({ server: { mode: 'none' } });
     assert.deepStrictEqual(result.inactivityBackoff, {
       enabled: true,
-      activeWindowMs: 120000,
-      stepMs: 120000,
+      activeWindowMs: 900000,
+      stepMs: 300000,
       maxIntervalMs: 300000,
       factor: 2,
     });
@@ -331,7 +331,7 @@ describe('inactivityBackoff validation', () => {
     const result = validateConfig({ inactivityBackoff: { enabled: false } });
     assert.strictEqual(result.inactivityBackoff.enabled, false);
     // Timing knobs remain at their defaults.
-    assert.strictEqual(result.inactivityBackoff.activeWindowMs, 120000);
+    assert.strictEqual(result.inactivityBackoff.activeWindowMs, 900000);
     assert.strictEqual(result.inactivityBackoff.factor, 2);
   });
 
