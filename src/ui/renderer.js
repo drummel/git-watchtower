@@ -26,6 +26,8 @@ const { isBaseBranch } = require('../git/pr');
 const { detectInstallSource, getUpdateCommand } = require('../utils/install-source');
 const { version: PACKAGE_VERSION } = require('../../package.json');
 
+/** @typedef {import('../state/store').State} State */
+
 // ---------------------------------------------------------------------------
 // Branch-row layout helpers
 // ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ function fmtCompact(n) {
 /**
  * Render the top header bar.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderHeader(state, write) {
@@ -175,7 +177,7 @@ function renderHeader(state, write) {
  * Render the branch list box.  Returns the row number at the bottom of the
  * box so that subsequent sections know where to start.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  * @returns {number} The row immediately after the branch list box.
  */
@@ -370,7 +372,7 @@ function renderBranchList(state, write) {
 /**
  * Render the activity log box below the branch list.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  * @param {number} startRow - Row where the box should begin.
  * @returns {number} The row immediately after the activity log box.
@@ -412,7 +414,7 @@ function renderActivityLog(state, write, startRow) {
 /**
  * Render the session statistics panel (always visible in normal mode).
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  * @param {number} startRow - Row where the box should begin.
  * @returns {number} The row immediately after the session stats box.
@@ -517,7 +519,7 @@ function renderSessionStats(state, write, startRow) {
  * Placeholder for casino stats rendering.  The actual casino rendering
  * depends on the casino module and stays in bin/ for now.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  * @param {number} startRow
  * @returns {number} The unchanged startRow (no-op).
@@ -535,7 +537,7 @@ function renderCasinoStats(state, write, startRow) {
 /**
  * Render the bottom footer/key-binding bar.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderFooter(state, write) {
@@ -583,7 +585,7 @@ function renderFooter(state, write) {
 /**
  * Render a centered flash notification overlay (e.g. "NEW UPDATE").
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderFlash(state, write) {
@@ -613,7 +615,13 @@ function renderFlash(state, write) {
   write(ansi.yellow + ansi.bold + '\u26A1 NEW UPDATE \u26A1' + ansi.reset);
 
   write(ansi.moveTo(row + 2, col + 2));
-  const truncMsg = truncate(state.flashMessage, width - 4);
+  // showFlash() in the TUI stores a bare string, while Store.flash() stores a
+  // {text, type} object. Accept either so the object form can't render as
+  // "[object Object]".
+  const flashText = typeof state.flashMessage === 'string'
+    ? state.flashMessage
+    : state.flashMessage.text;
+  const truncMsg = truncate(flashText, width - 4);
   write(ansi.white + truncMsg + ansi.reset);
 
   write(ansi.moveTo(row + 3, col + Math.floor((width - 22) / 2)));
@@ -627,7 +635,7 @@ function renderFlash(state, write) {
 /**
  * Render a centered error toast overlay.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderErrorToast(state, write) {
@@ -713,7 +721,7 @@ function renderErrorToast(state, write) {
 /**
  * Render the branch preview overlay showing recent commits and changed files.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderPreview(state, write) {
@@ -798,7 +806,7 @@ function renderPreview(state, write) {
 /**
  * Render the branch-switch history overlay.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderHistory(state, write) {
@@ -864,7 +872,7 @@ function renderHistory(state, write) {
  * to return one in the future.  For now we treat `logScrollOffset` as
  * already clamped.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderLogView(state, write) {
@@ -976,7 +984,7 @@ function renderLogView(state, write) {
 /**
  * Render the server/status info overlay.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderInfo(state, write) {
@@ -1069,7 +1077,7 @@ function renderInfo(state, write) {
  * (`{}`). Descriptions are truncated to the available cell width so the layout
  * degrades gracefully on narrow terminals rather than wrapping.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderHelp(state, write) {
@@ -1171,7 +1179,7 @@ function renderHelp(state, write) {
 /**
  * Render the branch-actions modal with PR/CI/Claude integration.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderActionModal(state, write) {
@@ -1404,7 +1412,7 @@ function renderActionModal(state, write) {
  *   stashConfirmSelectedIndex: number (0 or 1)
  *   pendingDirtyOperationLabel: string (e.g. "switch to main", "pull")
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderStashConfirm(state, write) {
@@ -1520,7 +1528,7 @@ function renderStashConfirm(state, write) {
  *   divergeConfirmSelectedIndex: number (0..2)
  *   divergeData: { branch, ahead, behind }
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderDivergeConfirm(state, write) {
@@ -1628,7 +1636,7 @@ function renderDivergeConfirm(state, write) {
  * Render the cleanup confirmation modal.
  * Lists branches whose remote tracking branch is gone and asks for confirmation.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderCleanupConfirm(state, write) {
@@ -1740,7 +1748,7 @@ function renderCleanupConfirm(state, write) {
 /**
  * Render a prominent update-available notification modal.
  *
- * @param {object} state
+ * @param {State} state
  * @param {function} write
  */
 function renderUpdateModal(state, write) {

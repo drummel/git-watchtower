@@ -94,7 +94,7 @@ const ALLOWED_ACTIONS = Object.freeze([
 /**
  * @typedef {Object} WebDashboardOptions
  * @property {number} [port=4000] - Port to listen on
- * @property {import('../state/store').Store} store - State store instance
+ * @property {InstanceType<typeof import('../state/store').Store>} store - State store instance
  * @property {function} [onAction] - Callback for actions targeting the local project
  * @property {function} [sendCommand] - Routes (projectId, action, payload) to a remote
  *   project's worker. When omitted, every action is dispatched locally — preserves
