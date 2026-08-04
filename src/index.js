@@ -131,6 +131,7 @@ module.exports = {
   generateSparkline: gitBranch.generateSparkline,
   getLocalBranches: gitBranch.getLocalBranches,
   localBranchExists: gitBranch.localBranchExists,
+  getWorktreeBranchMap: gitBranch.getWorktreeBranchMap,
   getGoneBranches: gitBranch.getGoneBranches,
   deleteGoneBranches: gitBranch.deleteGoneBranches,
 

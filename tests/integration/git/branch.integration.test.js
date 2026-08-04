@@ -6,6 +6,9 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
 const { createGitFixture } = require('./git-fixture');
 const {
   getCurrentBranch,
@@ -14,6 +17,7 @@ const {
   generateSparkline,
   getLocalBranches,
   localBranchExists,
+  getWorktreeBranchMap,
   getGoneBranches,
   deleteGoneBranches,
 } = require('../../../src/git/branch');
@@ -466,6 +470,92 @@ describe('branch.js integration tests', () => {
 
       const result = await localBranchExists('remote-only', fixture.path);
       assert.strictEqual(result, false);
+    });
+  });
+
+  describe('worktree-aware branch detection', () => {
+    // Track worktree base dirs created per test so we can remove them; the
+    // fixture only cleans its own repo dir, not worktrees living elsewhere.
+    let worktreeBases;
+
+    beforeEach(() => {
+      worktreeBases = [];
+    });
+
+    afterEach(() => {
+      for (const base of worktreeBases) {
+        try { fs.rmSync(base, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+      }
+    });
+
+    // Create a linked worktree checking out `branchName`; returns its path.
+    function addWorktree(branchName) {
+      const base = fs.mkdtempSync(path.join(os.tmpdir(), 'gw-worktree-'));
+      worktreeBases.push(base);
+      const wtPath = path.join(base, 'wt'); // must not pre-exist; git creates it
+      fixture.git(`worktree add ${wtPath} ${branchName}`);
+      return wtPath;
+    }
+
+    it('getLocalBranches lists a worktree branch cleanly (no + marker)', async () => {
+      fixture.createBranch('wt-feature'); // created, not checked out in main
+      addWorktree('wt-feature');
+      const branches = await getLocalBranches(fixture.path);
+      assert.ok(branches.includes('wt-feature'), 'worktree branch should be listed');
+      assert.ok(branches.every((b) => !b.startsWith('+')), 'no + marker should leak in');
+    });
+
+    it('getLocalBranches emits no pseudo-entry in detached HEAD', async () => {
+      const sha = fixture.getHeadHash();
+      fixture.git(`checkout ${sha}`); // detach
+      const branches = await getLocalBranches(fixture.path);
+      assert.ok(branches.includes('master'), 'real branches still listed');
+      assert.ok(branches.every((b) => !b.includes('detached')), 'no "(HEAD detached at …)" row');
+    });
+
+    it('localBranchExists is true for a branch checked out in another worktree', async () => {
+      // The core #6 bug: previously `+ wt-feature` failed the `=== name`
+      // test, so switchToBranch mis-classified it as a missing local branch.
+      fixture.createBranch('wt-feature');
+      addWorktree('wt-feature');
+      assert.strictEqual(await localBranchExists('wt-feature', fixture.path), true);
+    });
+
+    it('getWorktreeBranchMap is empty with no other worktrees', async () => {
+      const map = await getWorktreeBranchMap(fixture.path);
+      assert.strictEqual(map.size, 0);
+    });
+
+    it('getWorktreeBranchMap maps a branch checked out in another worktree', async () => {
+      fixture.createBranch('wt-feature');
+      const wtPath = addWorktree('wt-feature');
+      const map = await getWorktreeBranchMap(fixture.path);
+      assert.strictEqual(map.has('wt-feature'), true);
+      // Path is realpath-normalized; compare through realpath to be robust.
+      assert.strictEqual(fs.realpathSync(map.get('wt-feature')), fs.realpathSync(wtPath));
+    });
+
+    it('getWorktreeBranchMap excludes the current worktree branch', async () => {
+      fixture.createBranch('wt-feature');
+      addWorktree('wt-feature');
+      // From the main worktree (on master), master must not be reported.
+      const map = await getWorktreeBranchMap(fixture.path);
+      assert.strictEqual(map.has('master'), false);
+    });
+
+    it('getWorktreeBranchMap excludes self when queried from the linked worktree', async () => {
+      fixture.createBranch('wt-feature');
+      const wtPath = addWorktree('wt-feature');
+      // From the linked worktree, its own branch is excluded but the main
+      // worktree's branch (master) is reported.
+      const map = await getWorktreeBranchMap(wtPath);
+      assert.strictEqual(map.has('wt-feature'), false);
+      assert.strictEqual(map.has('master'), true);
+    });
+
+    it('getWorktreeBranchMap returns an empty map for a non-repository directory', async () => {
+      const map = await getWorktreeBranchMap('/tmp');
+      assert.strictEqual(map.size, 0);
     });
   });
 
