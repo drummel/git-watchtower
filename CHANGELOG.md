@@ -1,3 +1,10 @@
+## [2.8.2](https://github.com/drummel/git-watchtower/compare/v2.8.1...v2.8.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* worktree-aware local-branch detection and switch guard ([#259](https://github.com/drummel/git-watchtower/issues/259)) ([31bb42f](https://github.com/drummel/git-watchtower/commit/31bb42f6682bbd617282aeb39323fd6f6c92eb88))
+
 ## [2.8.1](https://github.com/drummel/git-watchtower/compare/v2.8.0...v2.8.1) (2026-07-29)
 
 
