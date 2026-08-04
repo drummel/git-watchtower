@@ -88,7 +88,7 @@ const { parseGitHubPr, parseGitLabMr, parseGitHubPrList, parseGitLabMrList, isBa
 // ============================================================================
 // Security & Validation (imported from src/git/branch.js and src/git/commands.js)
 // ============================================================================
-const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
+const { isValidBranchName, sanitizeBranchName, getGoneBranches, deleteGoneBranches, localBranchExists, getWorktreeBranchMap, getCurrentBranch: getCurrentBranchRaw, getAllBranches: getAllBranchesRaw } = require('../src/git/branch');
 const { pruneStaleEntries, calculateInactivityInterval } = require('../src/polling/engine');
 const { isGitAvailable: checkGitAvailable, execGit, execGitOptional, getDiffStats: getDiffStatsSafe, getAheadBehind, getDiffShortstat, hasUncommittedChanges: checkUncommittedChanges } = require('../src/git/commands');
 
@@ -1818,13 +1818,33 @@ async function switchToBranch(branchName, recordHistory = true) {
     // catch below shows the stash dialog only when git actually refuses
     // with "would be overwritten by checkout".
 
+    // A branch checked out in another worktree can't be checked out here —
+    // git refuses with "already used by worktree at …". Detect it up front
+    // and refuse with a clear message and the worktree path, rather than
+    // letting the raw git error surface (or, worse, mis-detecting it as a
+    // missing local branch and trying `checkout -b`).
+    const worktreeBranches = await getWorktreeBranchMap(PROJECT_ROOT);
+    if (worktreeBranches.has(safeBranchName)) {
+      const wtPath = worktreeBranches.get(safeBranchName);
+      addLog(`Cannot switch: ${safeBranchName} is checked out in another worktree (${wtPath})`, 'error');
+      showErrorToast(
+        'Checked Out Elsewhere',
+        `${safeBranchName} is already checked out in another worktree at ${wtPath}.`,
+        'Switch there, or remove that worktree first'
+      );
+      return { success: false, reason: 'worktree' };
+    }
+
     const previousBranch = store.get('currentBranch');
 
     addLog(`Switching to ${safeBranchName}...`, 'update');
     render();
 
-    const { stdout: localBranches } = await execGit(['branch', '--list'], { cwd: PROJECT_ROOT });
-    const hasLocal = localBranches.split('\n').some(b => b.trim().replace(/^\* /, '') === safeBranchName);
+    // Detect an existing local branch via for-each-ref (see getLocalBranches):
+    // parsing `git branch --list` mis-handled the `+ ` worktree marker and the
+    // detached-HEAD pseudo-row, which could send an existing branch down the
+    // `checkout -b` path and fail with "branch already exists".
+    const hasLocal = await localBranchExists(safeBranchName, PROJECT_ROOT);
 
     if (hasLocal) {
       await execGit(['checkout', safeBranchName], { cwd: PROJECT_ROOT });
@@ -1881,6 +1901,17 @@ async function switchToBranch(branchName, recordHistory = true) {
       }
       telemetry.capture('dirty_repo_encountered');
       return { success: false, reason: 'dirty' };
+    } else if (errMsg.includes('used by worktree') || errMsg.includes('already checked out')) {
+      // Fallback for the race (or an old git where the pre-check's
+      // `worktree list --porcelain` probe returned nothing): git itself
+      // refused because the branch is checked out in another worktree.
+      addLog(`Cannot switch: ${branchName} is checked out in another worktree`, 'error');
+      showErrorToast(
+        'Checked Out Elsewhere',
+        truncate(errMsg, 120),
+        'Switch there, or remove that worktree first'
+      );
+      return { success: false, reason: 'worktree' };
     } else {
       addLog(`Failed to switch: ${errMsg}`, 'error');
       showErrorToast(

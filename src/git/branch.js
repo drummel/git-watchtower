@@ -3,8 +3,28 @@
  * Provides branch management and parsing
  */
 
-const { execGit, fetch, hasRemoteChanges, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch, getAheadBehind } = require('./commands');
+const fs = require('fs');
+const { execGit, execGitOptional, fetch, hasRemoteChanges, hasUncommittedChanges, getCommitsByDay, log, deleteLocalBranch, getAheadBehind } = require('./commands');
 const { GitError, ValidationError } = require('../utils/errors');
+
+// Short timeout for quick local git queries (worktree list, show-toplevel).
+const WORKTREE_QUERY_TIMEOUT = 5000;
+
+/**
+ * Resolve a path through symlinks, falling back to the input on failure.
+ * Worktree paths from `git worktree list` and `git rev-parse --show-toplevel`
+ * can differ by symlink (e.g. /tmp vs /private/tmp on macOS); normalizing
+ * both lets us compare them reliably.
+ * @param {string} p
+ * @returns {string}
+ */
+function realpathOrSelf(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch (e) {
+    return p;
+  }
+}
 
 // Valid git branch name pattern (conservative)
 const VALID_BRANCH_PATTERN = /^[a-zA-Z0-9_\-./]+$/;
@@ -328,15 +348,79 @@ async function generateSparkline(branchName, options = {}) {
  */
 async function getLocalBranches(cwd) {
   try {
-    const { stdout } = await execGit(['branch', '--list'], { cwd });
-    return stdout
-      .split('\n')
-      .map((b) => b.trim().replace(/^\* /, ''))
-      .filter(Boolean);
+    // Use for-each-ref rather than `git branch --list`: the latter prefixes
+    // rows with a marker column (`* ` current, `+ ` checked out in another
+    // worktree) and, in detached HEAD, emits a `* (HEAD detached at …)`
+    // pseudo-row. Stripping only `* ` left `+ `-prefixed worktree branches
+    // and the detached pseudo-row mis-parsed. for-each-ref yields clean ref
+    // names with no markers at all.
+    const { stdout } = await execGit(
+      ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'],
+      { cwd }
+    );
+    return stdout.split('\n').filter(Boolean);
   } catch (error) {
     // Not in a git repo or git unavailable — treat as "no local branches".
     return [];
   }
+}
+
+/**
+ * Map branches that are checked out in a worktree OTHER than the current
+ * one to that worktree's path. A branch checked out elsewhere cannot be
+ * checked out here — git refuses with "already used by worktree at …" — so
+ * callers use this to refuse a switch with a clear message up front.
+ *
+ * The current worktree is excluded (switching to the already-current
+ * branch is a harmless no-op and shouldn't be reported as a conflict).
+ *
+ * Returns an empty Map when the probe fails (not a repo, git too old to
+ * support `worktree list --porcelain`, etc.).
+ *
+ * @param {string} [cwd] - Working directory
+ * @returns {Promise<Map<string, string>>} branch name → worktree path
+ */
+async function getWorktreeBranchMap(cwd) {
+  const result = await execGitOptional(['worktree', 'list', '--porcelain'], {
+    cwd,
+    timeout: WORKTREE_QUERY_TIMEOUT,
+  });
+  if (!result) return new Map();
+
+  // Current worktree root, normalized, so we can exclude it.
+  const topResult = await execGitOptional(['rev-parse', '--show-toplevel'], {
+    cwd,
+    timeout: WORKTREE_QUERY_TIMEOUT,
+  });
+  const currentTop = topResult && topResult.stdout ? realpathOrSelf(topResult.stdout) : null;
+
+  const map = new Map();
+  let curPath = null;
+  let curBranch = null;
+  const flush = () => {
+    if (curPath && curBranch) {
+      const isCurrent = currentTop && realpathOrSelf(curPath) === currentTop;
+      if (!isCurrent) map.set(curBranch, curPath);
+    }
+    curPath = null;
+    curBranch = null;
+  };
+
+  // Porcelain format: blank-line-separated blocks, each starting with a
+  // `worktree <path>` line, optionally followed by `branch refs/heads/<name>`
+  // (absent for detached-HEAD or bare worktrees).
+  for (const line of result.stdout.split('\n')) {
+    if (line.startsWith('worktree ')) {
+      flush();
+      curPath = line.slice('worktree '.length);
+    } else if (line.startsWith('branch ')) {
+      curBranch = line.slice('branch '.length).replace(/^refs\/heads\//, '');
+    } else if (line === '') {
+      flush();
+    }
+  }
+  flush();
+  return map;
 }
 
 /**
@@ -420,6 +504,7 @@ module.exports = {
   generateSparkline,
   getLocalBranches,
   localBranchExists,
+  getWorktreeBranchMap,
   getGoneBranches,
   deleteGoneBranches,
   VALID_BRANCH_PATTERN,
