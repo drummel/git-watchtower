@@ -22,6 +22,23 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
 
+      # The release event can fire before the npm registry serves the new
+      # tarball, which makes the bump action fail with HTTP 404. Wait for it.
+      - name: Wait for npm tarball
+        env:
+          URL: https://registry.npmjs.org/git-watchtower/-/git-watchtower-${{ steps.v.outputs.version }}.tgz
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsSIL -o /dev/null "$URL"; then
+              echo "Tarball available: $URL"
+              exit 0
+            fi
+            echo "Attempt $i: tarball not available yet, retrying in 20s"
+            sleep 20
+          done
+          echo "::error::Tarball still unavailable after 10 minutes: $URL"
+          exit 1
+
       - name: Bump formula
         uses: mislav/bump-homebrew-formula-action@v4
         with:
