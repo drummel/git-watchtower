@@ -1,3 +1,10 @@
+## [2.8.3](https://github.com/drummel/git-watchtower/compare/v2.8.2...v2.8.3) (2026-10-24)
+
+
+### Bug Fixes
+
+* bump Starlight to 0.42 and release patched lockfiles ([#265](https://github.com/drummel/git-watchtower/issues/265)) ([8cd2b1b](https://github.com/drummel/git-watchtower/commit/8cd2b1b58f94a05d6db063190305560828d862b2))
+
 ## [2.8.2](https://github.com/drummel/git-watchtower/compare/v2.8.1...v2.8.2) (2026-08-04)
 
 
